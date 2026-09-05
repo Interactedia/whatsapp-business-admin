@@ -28,14 +28,14 @@ type ScreenNodeData = { title: string; screenId: string; terminal?: boolean; act
 type RoutingEdgeData = { onDelete: () => void };
 
 function ScreenNode({ data }: { data: ScreenNodeData }) {
-  return <div className={cn("min-w-[150px] rounded-md border bg-card px-3 py-2 text-xs shadow-sm", data.active && "border-primary ring-1 ring-primary/30")}>
-    <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-none !bg-primary" />
+  return <div className={cn("min-w-[150px] rounded-md border bg-card px-3 py-2 text-xs shadow-xs", data.active && "border-primary ring-1 ring-primary/30")}>
+    <Handle type="target" position={Position.Left} className="h-2! w-2! border-none! bg-primary!" />
     <div className="truncate font-medium">{data.title}</div>
     <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
       <span className="truncate">{data.screenId}</span>
-      {data.terminal && <span className="shrink-0 rounded bg-emerald-100 px-1 text-emerald-700">terminal</span>}
+      {data.terminal && <span className="shrink-0 rounded-sm bg-emerald-100 px-1 text-emerald-700">terminal</span>}
     </div>
-    <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-none !bg-primary" />
+    <Handle type="source" position={Position.Right} className="h-2! w-2! border-none! bg-primary!" />
   </div>;
 }
 
@@ -50,7 +50,7 @@ function RoutingEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
         title="Remove this route"
         onClick={(event) => { event.stopPropagation(); onDelete?.(); }}
         style={{ position: "absolute", transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: "all" }}
-        className="flex h-4 w-4 items-center justify-center rounded-full border bg-background text-[10px] leading-none text-destructive shadow-sm hover:bg-destructive hover:text-white"
+        className="flex h-4 w-4 items-center justify-center rounded-full border bg-background text-[10px] leading-none text-destructive shadow-xs hover:bg-destructive hover:text-white"
       >×</button>
     </EdgeLabelRenderer>
   </>;

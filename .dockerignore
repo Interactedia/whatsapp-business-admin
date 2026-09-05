@@ -1,10 +1,16 @@
 node_modules
 .next
+.next-dev
+.next-prod
+out
+build
+dist
 .git
 storage
 *.log
 .env
 .env*.local
 coverage
+src/generated/prisma
 test
 docs

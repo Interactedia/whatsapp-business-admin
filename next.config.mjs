@@ -6,7 +6,6 @@ const nextConfig = {
   distDir: process.env.NODE_ENV === "development" ? ".next-dev" : ".next-prod",
   reactStrictMode: true,
   // Media is streamed through an authenticated route, so no remote image config needed.
-  eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: false },
 };
 

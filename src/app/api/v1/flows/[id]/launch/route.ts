@@ -10,7 +10,7 @@ const schema = z.object({
   header: z.string().max(60).optional(),
   footer: z.string().max(60).optional(),
   entry_screen: z.string().optional(),
-  data: z.record(z.unknown()).optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const POST = v1Handle(async (req, { params }) => {

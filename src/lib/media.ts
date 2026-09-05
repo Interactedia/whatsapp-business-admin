@@ -13,17 +13,17 @@ export interface MediaStore {
   read(relPath: string): Promise<Buffer>;
 }
 
-const MEDIA_DIR = path.resolve(process.env.MEDIA_DIR || "./storage/media");
+const MEDIA_DIR = path.resolve(/* turbopackIgnore: true */ process.env.MEDIA_DIR || "./storage/media");
 
 class LocalMediaStore implements MediaStore {
   async save(data: Buffer, ext: string): Promise<string> {
     const now = new Date();
     const sub = path.join(String(now.getFullYear()), String(now.getMonth() + 1).padStart(2, "0"));
-    const dir = path.join(MEDIA_DIR, sub);
+    const dir = path.join(/* turbopackIgnore: true */ MEDIA_DIR, sub);
     await fs.mkdir(dir, { recursive: true });
     const name = `${crypto.randomBytes(12).toString("hex")}${ext ? `.${ext.replace(/^\./, "")}` : ""}`;
     const rel = path.join(sub, name);
-    await fs.writeFile(path.join(MEDIA_DIR, rel), data);
+    await fs.writeFile(path.join(/* turbopackIgnore: true */ MEDIA_DIR, rel), data);
     return rel;
   }
 
@@ -31,7 +31,7 @@ class LocalMediaStore implements MediaStore {
     // Guard against path traversal — resolved path must stay under MEDIA_DIR.
     const full = path.resolve(MEDIA_DIR, relPath);
     if (!full.startsWith(MEDIA_DIR + path.sep)) throw new Error("Invalid media path");
-    return fs.readFile(full);
+    return fs.readFile(/* turbopackIgnore: true */ full);
   }
 }
 

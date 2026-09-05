@@ -62,7 +62,7 @@ export function SubmissionsClient() {
             {items.map((item) => <TableRow key={item.id}>
               <TableCell data-label="Flow" className="font-medium">{item.flow.name}</TableCell>
               <TableCell data-label="Contact"><div>{item.contact.name || item.contact.profileName || `+${item.contact.waId}`}</div><div className="text-[11px] text-muted-foreground">+{item.contact.waId}</div></TableCell>
-              <TableCell data-label="Fields">{item.purgedAt ? <Badge variant="secondary">Purged</Badge> : <span className="break-words text-xs text-muted-foreground">{item.responseKeys.join(", ")}</span>}</TableCell>
+              <TableCell data-label="Fields">{item.purgedAt ? <Badge variant="secondary">Purged</Badge> : <span className="wrap-break-word text-xs text-muted-foreground">{item.responseKeys.join(", ")}</span>}</TableCell>
               <TableCell data-label="Delivery">{item.delivery ? <Badge variant={item.delivery.status === "DELIVERED" ? "success" : item.delivery.status === "FAILED" ? "destructive" : "warning"}>{item.delivery.status}</Badge> : <span className="text-xs text-muted-foreground">Not configured</span>}</TableCell>
               <TableCell data-label="Completed" className="text-xs text-muted-foreground">{formatDateTime(item.completedAt)}</TableCell>
               <TableCell data-label="Actions"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" title="View" onClick={() => setSelected(item)}><Eye className="h-4 w-4" /></Button>{item.delivery?.status === "FAILED" && <Button variant="ghost" size="icon" title="Retry webhook" onClick={() => retry.mutate(item.id)}><RefreshCw className="h-4 w-4" /></Button>}</div></TableCell>
@@ -76,7 +76,7 @@ export function SubmissionsClient() {
         <DialogHeader><DialogTitle>{selected.flow.name}</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="flex flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><span>Completed {formatDateTime(selected.completedAt)}</span><Link href={`/inbox?c=${selected.conversationId}`} className="text-primary hover:underline">Open conversation</Link></div>
-          {selected.response ? <dl className="divide-y rounded-md border">{Object.entries(selected.response).map(([key, value]) => <div key={key} className="grid grid-cols-1 gap-1 p-2 text-sm sm:grid-cols-[150px_1fr] sm:gap-3"><dt className="font-medium">{key}</dt><dd className="break-words text-muted-foreground">{typeof value === "object" ? JSON.stringify(value) : String(value)}</dd></div>)}</dl> : <div className="rounded border p-4 text-sm text-muted-foreground">Response data was purged under this Flow’s retention policy.</div>}
+          {selected.response ? <dl className="divide-y rounded-md border">{Object.entries(selected.response).map(([key, value]) => <div key={key} className="grid grid-cols-1 gap-1 p-2 text-sm sm:grid-cols-[150px_1fr] sm:gap-3"><dt className="font-medium">{key}</dt><dd className="wrap-break-word text-muted-foreground">{typeof value === "object" ? JSON.stringify(value) : String(value)}</dd></div>)}</dl> : <div className="rounded-sm border p-4 text-sm text-muted-foreground">Response data was purged under this Flow’s retention policy.</div>}
         </div>
       </DialogContent>}
     </Dialog>

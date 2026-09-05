@@ -148,7 +148,8 @@ export function FlowBuilder({ flowId }: { flowId?: string }) {
     const node = getNodeAtPath(currentScreen.layout.children, itemPath);
     if (!node) return;
     const cases = (node.cases && typeof node.cases === "object" ? node.cases : {}) as Record<string, unknown>;
-    const { [key]: _removed, ...rest } = cases;
+    const rest = { ...cases };
+    delete rest[key];
     setComponents(setNodeAtPath(currentScreen.layout.children, itemPath, (current) => ({ ...current, cases: rest })));
     select(null);
   }
@@ -176,13 +177,13 @@ export function FlowBuilder({ flowId }: { flowId?: string }) {
     </div>
     {mode === "visual" && <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[220px_minmax(360px,1fr)_320px]">
       <div className="grid shrink-0 grid-cols-4 gap-1 border-b bg-card p-1.5 lg:hidden">
-        {(["screens", "editor", "inspector", "preview"] as MobileVisualPanel[]).map((panel) => <button key={panel} onClick={() => { setMobileVisualPanel(panel); if (panel === "preview") setInspectorMode("preview"); if (panel === "inspector") setInspectorMode("component"); }} className={cn("min-h-10 rounded px-1 text-[11px] font-medium capitalize", mobileVisualPanel === panel ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent")}>{panel}</button>)}
+        {(["screens", "editor", "inspector", "preview"] as MobileVisualPanel[]).map((panel) => <button key={panel} onClick={() => { setMobileVisualPanel(panel); if (panel === "preview") setInspectorMode("preview"); if (panel === "inspector") setInspectorMode("component"); }} className={cn("min-h-10 rounded-sm px-1 text-[11px] font-medium capitalize", mobileVisualPanel === panel ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent")}>{panel}</button>)}
       </div>
       <aside className={cn("min-h-0 flex-1 overflow-auto border-r p-3 scroll-thin lg:block", mobileVisualPanel === "screens" ? "block" : "hidden")}>
         <div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold uppercase text-muted-foreground">Screens</span><Button size="icon" variant="ghost" onClick={addScreen}><Plus className="h-4 w-4" /></Button></div>
         <div className="space-y-1">{flowJson.screens.map((screen, index) => <button key={screen.id} onClick={() => selectScreen(index)} className={cn("w-full rounded-md border px-2 py-2 text-left text-xs", screenIndex === index && "border-primary bg-primary/5")}><div className="font-medium">{screen.title || screen.id}</div><div className="text-[10px] text-muted-foreground">{screen.id}{screen.terminal ? " · terminal" : ""}</div></button>)}</div>
         <div className="mt-5 text-xs font-semibold uppercase text-muted-foreground">Components</div>
-        <div className="mt-2 grid grid-cols-1 gap-1">{FLOW_COMPONENTS.map((type) => <button key={type} onClick={() => addToContainer(ROOT_ADDRESS, type)} className="rounded border px-2 py-1.5 text-left text-[11px] hover:border-primary hover:bg-primary/5">+ {componentLabel(type)}</button>)}</div>
+        <div className="mt-2 grid grid-cols-1 gap-1">{FLOW_COMPONENTS.map((type) => <button key={type} onClick={() => addToContainer(ROOT_ADDRESS, type)} className="rounded-sm border px-2 py-1.5 text-left text-[11px] hover:border-primary hover:bg-primary/5">+ {componentLabel(type)}</button>)}</div>
       </aside>
       <main className={cn("min-h-0 flex-1 overflow-auto p-3 scroll-thin sm:p-4 lg:block", mobileVisualPanel === "editor" ? "block" : "hidden")}>
         <div className="mx-auto max-w-2xl space-y-3">
@@ -223,8 +224,8 @@ export function FlowBuilder({ flowId }: { flowId?: string }) {
       </main>
       <aside className={cn("min-h-0 flex-1 overflow-auto border-l bg-muted/20 p-3 scroll-thin lg:block", mobileVisualPanel === "preview" || mobileVisualPanel === "inspector" ? "block" : "hidden")}>
         <div className="mb-3 grid grid-cols-2 rounded-lg border bg-background p-1">
-          <button type="button" onClick={() => setInspectorMode("preview")} className={cn("flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors", inspectorMode === "preview" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}><Eye className="h-3.5 w-3.5" /> Preview</button>
-          <button type="button" disabled={!selected} onClick={() => setInspectorMode("component")} className={cn("flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40", inspectorMode === "component" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}><Braces className="h-3.5 w-3.5" /> JSON</button>
+          <button type="button" onClick={() => setInspectorMode("preview")} className={cn("flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors", inspectorMode === "preview" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground")}><Eye className="h-3.5 w-3.5" /> Preview</button>
+          <button type="button" disabled={!selected} onClick={() => setInspectorMode("component")} className={cn("flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40", inspectorMode === "component" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground")}><Braces className="h-3.5 w-3.5" /> JSON</button>
         </div>
         {inspectorMode === "preview" ? <FlowPhonePreview screen={currentScreen} /> : selected ? <ComponentEditor component={selected} update={updateComponent} rawUpdate={rawUpdateComponent} /> : <div className="rounded-lg border border-dashed bg-background p-6 text-center text-sm text-muted-foreground">Select a component to edit its settings and JSON.</div>}
       </aside>
@@ -242,7 +243,7 @@ function splitCsv(value: string) { return value.split(",").map((item) => item.tr
 
 function AddComponentMenu({ onAdd, label = "+ Add" }: { onAdd: (type: string) => void; label?: string }) {
   return <DropdownMenu>
-    <DropdownMenuTrigger asChild><button type="button" className="rounded border px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/5">{label}</button></DropdownMenuTrigger>
+    <DropdownMenuTrigger asChild><button type="button" className="rounded-sm border px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/5">{label}</button></DropdownMenuTrigger>
     <DropdownMenuContent align="start" className="max-h-64 overflow-auto">
       {FLOW_COMPONENTS.map((type) => <DropdownMenuItem key={type} onSelect={() => onAdd(type)}>{componentLabel(type)}</DropdownMenuItem>)}
     </DropdownMenuContent>
@@ -326,8 +327,8 @@ function ComponentList({ root, address, selectedPath, onSelect, onRemove, onMove
               <span>{container.label}</span>
               <div className="flex items-center gap-1">
                 {component.type === "Switch" && container.key !== "default" && <>
-                  <button type="button" title="Rename case" onClick={() => onRenameCase(itemPath, caseKeyOf(container.key) as string)} className="rounded p-0.5 hover:bg-muted"><Pencil className="h-3 w-3" /></button>
-                  <button type="button" title="Delete case" onClick={() => onDeleteCase(itemPath, caseKeyOf(container.key) as string)} className="rounded p-0.5 hover:bg-muted"><X className="h-3 w-3" /></button>
+                  <button type="button" title="Rename case" onClick={() => onRenameCase(itemPath, caseKeyOf(container.key) as string)} className="rounded-sm p-0.5 hover:bg-muted"><Pencil className="h-3 w-3" /></button>
+                  <button type="button" title="Delete case" onClick={() => onDeleteCase(itemPath, caseKeyOf(container.key) as string)} className="rounded-sm p-0.5 hover:bg-muted"><X className="h-3 w-3" /></button>
                 </>}
                 <AddComponentMenu onAdd={(type) => onAdd({ parentPath: itemPath, containerKey: container.key }, type)} />
               </div>
@@ -403,7 +404,7 @@ function PreviewComponent({ component }: { component: FlowComponent }) {
     </div>;
   }
   if (["OptIn"].includes(component.type)) return <label className="flex gap-2 text-xs"><input type="checkbox" />{String(component.label || "I agree")}</label>;
-  if (["Image"].includes(component.type)) return <div className="flex h-24 items-center justify-center rounded bg-zinc-200 text-xs text-zinc-500">Image</div>;
+  if (["Image"].includes(component.type)) return <div className="flex h-24 items-center justify-center rounded-sm bg-zinc-200 text-xs text-zinc-500">Image</div>;
   if (component.type === "If") return <IfPreview component={component} />;
   if (component.type === "Switch") return <SwitchPreview component={component} />;
   return <div><div className="mb-1 text-[11px] font-medium">{String(component.label || component.name || componentLabel(component.type))}</div><div className="rounded-md border bg-white px-2 py-2 text-xs text-zinc-400">Enter response</div></div>;
@@ -412,10 +413,10 @@ function PreviewComponent({ component }: { component: FlowComponent }) {
 function IfPreview({ component }: { component: FlowComponent }) {
   const [branch, setBranch] = useState<"then" | "else">("then");
   const items = (branch === "then" ? component.then : component.else) as FlowComponent[] | undefined;
-  return <div className="rounded border border-dashed p-2">
+  return <div className="rounded-sm border border-dashed p-2">
     <div className="mb-2 flex gap-1 text-[10px]">
-      <button type="button" onClick={() => setBranch("then")} className={cn("rounded px-1.5 py-0.5", branch === "then" ? "bg-primary text-primary-foreground" : "bg-zinc-200 text-zinc-600")}>Then</button>
-      <button type="button" onClick={() => setBranch("else")} className={cn("rounded px-1.5 py-0.5", branch === "else" ? "bg-primary text-primary-foreground" : "bg-zinc-200 text-zinc-600")}>Else</button>
+      <button type="button" onClick={() => setBranch("then")} className={cn("rounded-sm px-1.5 py-0.5", branch === "then" ? "bg-primary text-primary-foreground" : "bg-zinc-200 text-zinc-600")}>Then</button>
+      <button type="button" onClick={() => setBranch("else")} className={cn("rounded-sm px-1.5 py-0.5", branch === "else" ? "bg-primary text-primary-foreground" : "bg-zinc-200 text-zinc-600")}>Else</button>
     </div>
     <div className="space-y-2">{items && items.length ? items.map((child, index) => <PreviewComponent key={index} component={child} />) : <span className="text-[11px] text-zinc-500">No components in this branch.</span>}</div>
   </div>;
@@ -425,8 +426,8 @@ function SwitchPreview({ component }: { component: FlowComponent }) {
   const keys = Object.keys(cases);
   const [selected, setSelected] = useState<string>(keys[0] || "default");
   const items = selected === "default" ? (component.default as FlowComponent[] | undefined) : cases[selected];
-  return <div className="rounded border border-dashed p-2">
-    <select value={selected} onChange={(event) => setSelected(event.target.value)} className="mb-2 w-full rounded border bg-white px-1 py-0.5 text-[10px]">
+  return <div className="rounded-sm border border-dashed p-2">
+    <select value={selected} onChange={(event) => setSelected(event.target.value)} className="mb-2 w-full rounded-sm border bg-white px-1 py-0.5 text-[10px]">
       {keys.map((key) => <option key={key} value={key}>{key}</option>)}
       <option value="default">Default</option>
     </select>
@@ -457,6 +458,6 @@ function BindingsEditor({ flowId, screens, connectors, bindings }: { flowId?: st
       <Button onClick={() => save.mutate()} disabled={!connectorId || save.isPending}>Save binding</Button>
       {!connectors.length && <p className="text-xs text-amber-600">Create an approved connector in Settings first.</p>}
     </div>
-    <aside className="min-w-0 border-t pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0"><div className="text-xs font-semibold uppercase text-muted-foreground">Current bindings</div><div className="mt-2 space-y-2">{bindings.map((binding) => <div key={binding.id} className="rounded border p-2 text-xs"><div className="font-medium">{binding.screen}</div><div className="break-all text-muted-foreground">{binding.action} · {connectors.find((item) => item.id === binding.connectorId)?.name || binding.connectorId}</div></div>)}{!bindings.length && <p className="text-xs text-muted-foreground">No bindings configured.</p>}</div></aside>
+    <aside className="min-w-0 border-t pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0"><div className="text-xs font-semibold uppercase text-muted-foreground">Current bindings</div><div className="mt-2 space-y-2">{bindings.map((binding) => <div key={binding.id} className="rounded-sm border p-2 text-xs"><div className="font-medium">{binding.screen}</div><div className="break-all text-muted-foreground">{binding.action} · {connectors.find((item) => item.id === binding.connectorId)?.name || binding.connectorId}</div></div>)}{!bindings.length && <p className="text-xs text-muted-foreground">No bindings configured.</p>}</div></aside>
   </div>;
 }

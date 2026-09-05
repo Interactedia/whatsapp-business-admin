@@ -40,7 +40,7 @@ function LoginForm() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-muted/30 p-3 safe-bottom sm:p-4">
-      <div className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-sm sm:p-6">
+      <div className="w-full max-w-sm rounded-lg border bg-card p-5 shadow-xs sm:p-6">
         <div className="mb-5 flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <MessageCircle className="h-5 w-5" />

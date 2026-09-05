@@ -51,7 +51,7 @@ const templateSchema = z.object({
   templateId: z.string(),
   bodyVariables: z.union([
     z.array(z.string().trim().min(1)),
-    z.record(z.string().trim().min(1)),
+    z.record(z.string(), z.string().trim().min(1)),
   ]).optional(),
 });
 const flowSchema = z.object({
@@ -62,7 +62,7 @@ const flowSchema = z.object({
   header: z.string().trim().max(60).optional(),
   footer: z.string().trim().max(60).optional(),
   entryScreen: z.string().optional(),
-  initialData: z.record(z.unknown()).optional(),
+  initialData: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**

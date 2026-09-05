@@ -3,7 +3,7 @@ import { getWabaConfig } from "@/lib/settings";
 import { graphFetch, WhatsAppApiError } from "./client";
 import { emptyFlowJson, type FlowCategory, type FlowComponent, type FlowJson } from "./flow-types";
 import { flowUsesEndpoint, parseFlowJson, validateFlowJson } from "./flow-validate";
-import type { FlowVersionStatus, Prisma } from "@prisma/client";
+import type { FlowVersionStatus, Prisma } from "@/generated/prisma/client";
 
 type MetaFlow = {
   id: string;

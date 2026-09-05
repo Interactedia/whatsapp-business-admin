@@ -10,7 +10,7 @@ import {
   type TemplateCategory,
 } from "@/lib/whatsapp/template-types";
 import { validateTemplate } from "@/lib/whatsapp/template-validate";
-import type { TemplateStatus } from "@prisma/client";
+import type { TemplateStatus } from "@/generated/prisma/client";
 
 function mapMetaStatus(status: string): TemplateStatus {
   switch (status?.toUpperCase()) {

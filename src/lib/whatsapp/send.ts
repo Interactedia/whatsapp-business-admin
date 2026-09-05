@@ -3,7 +3,7 @@ import { getWabaConfig, type WabaConfig } from "@/lib/settings";
 import { graphFetch, WhatsAppApiError } from "@/lib/whatsapp/client";
 import { publish } from "@/server/realtime";
 import { serializeMessage } from "@/lib/whatsapp/webhook";
-import type { MessageType } from "@prisma/client";
+import type { MessageType } from "@/generated/prisma/client";
 
 export { isWithinSessionWindow } from "@/lib/whatsapp/window";
 

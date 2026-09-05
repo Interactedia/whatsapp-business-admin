@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { handle, HttpError, ok, requireAdmin } from "@/lib/api";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/generated/prisma/client";
 import type { FlowComponent, FlowJson } from "@/lib/whatsapp/flow-types";
 import { FLOW_DATA_API_VERSION } from "@/lib/whatsapp/flow-types";
 
@@ -10,7 +10,7 @@ const schema = z.object({
   screen: z.string().min(1),
   action: z.string().min(1).default("data_exchange"),
   connectorId: z.string().min(1),
-  requestMapping: z.object({ path: z.string().optional(), body: z.record(mappingSource).optional() }),
+  requestMapping: z.object({ path: z.string().optional(), body: z.record(z.string(), mappingSource).optional() }),
   responseMapping: z.object({ screen: z.string().optional(), data: z.string().optional(), error: z.string().optional() }),
 });
 

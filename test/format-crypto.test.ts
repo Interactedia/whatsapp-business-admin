@@ -31,7 +31,7 @@ describe("renderTemplateText", () => {
   });
   it("renders a missing variable as a highlighted placeholder", () => {
     const html = renderTemplateText("Hi {{1}}", {});
-    expect(html).toContain('class="rounded bg-amber-200/70 px-1 text-amber-900"');
+    expect(html).toContain('class="rounded-sm bg-amber-200/70 px-1 text-amber-900"');
     expect(html).toContain(">{{1}}</span>");
   });
   it("renders a missing named variable as a highlighted placeholder", () => {

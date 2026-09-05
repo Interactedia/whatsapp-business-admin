@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getWabaConfig } from "@/lib/settings";
 import { downloadInboundMedia } from "@/lib/whatsapp/media";
 import { publish } from "@/server/realtime";
-import type { MessageStatus, MessageType, TemplateStatus } from "@prisma/client";
+import type { MessageStatus, MessageType, TemplateStatus } from "@/generated/prisma/client";
 import { recordFlowSubmission, redactFlowWebhookPayload } from "@/lib/whatsapp/flow-submission";
 
 export { verifySignature } from "@/lib/whatsapp/signature";

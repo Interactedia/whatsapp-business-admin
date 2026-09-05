@@ -363,10 +363,10 @@ export function ApiDocs({ baseUrl }: { baseUrl: string }) {
         <h2 className="text-sm font-semibold">Authentication</h2>
         <p className="text-xs text-muted-foreground">
           Every request must include your API key. Preferred: the{" "}
-          <code className="rounded bg-muted px-1">X-API-Key</code> header. Also accepted:{" "}
-          <code className="rounded bg-muted px-1">Authorization: Bearer &lt;key&gt;</code>, a{" "}
-          <code className="rounded bg-muted px-1">?apikey=</code> query parameter, or an{" "}
-          <code className="rounded bg-muted px-1">apikey</code> field in the JSON body. Create keys in
+          <code className="rounded-sm bg-muted px-1">X-API-Key</code> header. Also accepted:{" "}
+          <code className="rounded-sm bg-muted px-1">Authorization: Bearer &lt;key&gt;</code>, a{" "}
+          <code className="rounded-sm bg-muted px-1">?apikey=</code> query parameter, or an{" "}
+          <code className="rounded-sm bg-muted px-1">apikey</code> field in the JSON body. Create keys in
           the <strong>API Keys</strong> tab.
         </p>
         <CodeBlock code={`X-API-Key: ${KEY}`} />
@@ -377,18 +377,18 @@ export function ApiDocs({ baseUrl }: { baseUrl: string }) {
         <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
           <li>
             <strong>Phone numbers:</strong> full international format, digits only — no{" "}
-            <code className="rounded bg-muted px-1">+</code>, spaces or dashes. e.g.{" "}
-            <code className="rounded bg-muted px-1">919812345678</code>.
+            <code className="rounded-sm bg-muted px-1">+</code>, spaces or dashes. e.g.{" "}
+            <code className="rounded-sm bg-muted px-1">919812345678</code>.
           </li>
           <li>
             <strong>24-hour window:</strong> plain <strong>text and media</strong> can only be sent
-            within 24 h of the customer's last message. Outside that window you must send an{" "}
+            within 24 h of the customer’s last message. Outside that window you must send an{" "}
             <strong>approved template</strong> (templates have no time limit).
           </li>
           <li>
             <strong>Media by link:</strong> the URL must be publicly reachable — Meta downloads it.
-            Alternatively pass a Meta media <code className="rounded bg-muted px-1">id</code>. Captions
-            apply to image/video/document; documents take a <code className="rounded bg-muted px-1">filename</code>.
+            Alternatively pass a Meta media <code className="rounded-sm bg-muted px-1">id</code>. Captions
+            apply to image/video/document; documents take a <code className="rounded-sm bg-muted px-1">filename</code>.
           </li>
         </ul>
       </section>
@@ -409,10 +409,10 @@ export function ApiDocs({ baseUrl }: { baseUrl: string }) {
       <section className="space-y-4">
         <h2 className="text-sm font-semibold">Send templates</h2>
         <p className="text-xs text-muted-foreground">
-          One endpoint, many shapes. Mix and match <code className="rounded bg-muted px-1">header_text</code>,{" "}
-          <code className="rounded bg-muted px-1">header_media</code>,{" "}
-          <code className="rounded bg-muted px-1">body_variables</code> and{" "}
-          <code className="rounded bg-muted px-1">buttons</code> to match your template's structure.
+          One endpoint, many shapes. Mix and match <code className="rounded-sm bg-muted px-1">header_text</code>,{" "}
+          <code className="rounded-sm bg-muted px-1">header_media</code>,{" "}
+          <code className="rounded-sm bg-muted px-1">body_variables</code> and{" "}
+          <code className="rounded-sm bg-muted px-1">buttons</code> to match your template’s structure.
         </p>
         {templates.map((ep, i) => <EndpointCard key={i} ep={ep} />)}
       </section>

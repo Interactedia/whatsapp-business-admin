@@ -17,7 +17,7 @@ export function TemplatePreview({ builder }: { builder: TemplateBuilder }) {
   return (
     <div className="wa-wallpaper flex h-full flex-col rounded-lg border p-4">
       <div className="mx-auto w-full max-w-[320px]">
-        <div className="rounded-lg rounded-tl-none bg-white p-2 shadow-sm dark:bg-[#202c33] dark:text-zinc-100">
+        <div className="rounded-lg rounded-tl-none bg-white p-2 shadow-xs dark:bg-[#202c33] dark:text-zinc-100">
           {/* Header */}
           {builder.header.type === "TEXT" && builder.header.text && (
             <div
@@ -28,7 +28,7 @@ export function TemplatePreview({ builder }: { builder: TemplateBuilder }) {
           {builder.header.type === "IMAGE" && <MediaBox icon={<ImageIcon className="h-6 w-6" />} label="Image" />}
           {builder.header.type === "VIDEO" && <MediaBox icon={<Film className="h-6 w-6" />} label="Video" />}
           {builder.header.type === "DOCUMENT" && (
-            <div className="mb-2 flex items-center gap-2 rounded bg-black/5 p-2 dark:bg-white/10">
+            <div className="mb-2 flex items-center gap-2 rounded-sm bg-black/5 p-2 dark:bg-white/10">
               <FileText className="h-5 w-5 text-muted-foreground" />
               <span className="truncate text-xs">{builder.header.mediaFilename || "document.pdf"}</span>
             </div>
@@ -37,7 +37,7 @@ export function TemplatePreview({ builder }: { builder: TemplateBuilder }) {
           {/* Body */}
           {builder.body.text ? (
             <div
-              className="whitespace-pre-wrap break-words text-sm leading-snug"
+              className="whitespace-pre-wrap wrap-break-word text-sm leading-snug"
               dangerouslySetInnerHTML={{ __html: renderTemplateText(builder.body.text, builder.body.examples) }}
             />
           ) : (
@@ -58,7 +58,7 @@ export function TemplatePreview({ builder }: { builder: TemplateBuilder }) {
             {builder.buttons.map((btn, i) => (
               <div
                 key={i}
-                className="flex items-center justify-center gap-1.5 rounded-lg bg-white py-2 text-[13px] font-medium text-[#00a5f4] shadow-sm dark:bg-[#202c33]"
+                className="flex items-center justify-center gap-1.5 rounded-lg bg-white py-2 text-[13px] font-medium text-[#00a5f4] shadow-xs dark:bg-[#202c33]"
               >
                 {btn.type === "QUICK_REPLY" && <Reply className="h-3.5 w-3.5" />}
                 {btn.type === "URL" && <ExternalLink className="h-3.5 w-3.5" />}
@@ -78,7 +78,7 @@ export function TemplatePreview({ builder }: { builder: TemplateBuilder }) {
 
 function MediaBox({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <div className="mb-2 flex h-28 flex-col items-center justify-center gap-1 rounded bg-black/5 text-muted-foreground dark:bg-white/10">
+    <div className="mb-2 flex h-28 flex-col items-center justify-center gap-1 rounded-sm bg-black/5 text-muted-foreground dark:bg-white/10">
       {icon}
       <span className="text-[11px]">{label} header</span>
     </div>

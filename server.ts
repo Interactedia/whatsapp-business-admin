@@ -9,7 +9,6 @@
  */
 import { createServer } from "node:http";
 import next from "next";
-import { parse } from "node:url";
 import { attachRealtime } from "./src/server/realtime";
 import { runFlowMaintenance } from "./src/lib/whatsapp/flow-submission";
 
@@ -22,8 +21,7 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
   const server = createServer((req, res) => {
-    const parsedUrl = parse(req.url || "", true);
-    handle(req, res, parsedUrl).catch((err) => {
+    handle(req, res).catch((err) => {
       console.error("Request handler error:", err);
       res.statusCode = 500;
       res.end("Internal Server Error");

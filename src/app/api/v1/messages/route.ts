@@ -39,13 +39,13 @@ const schema = z.object({
   // template
   template: z.string().optional(),
   language: z.string().optional(),
-  variables: z.union([z.array(z.union([z.string(), z.number()])), z.record(z.union([z.string(), z.number()]))]).optional(),
-  body_variables: z.union([z.array(z.union([z.string(), z.number()])), z.record(z.union([z.string(), z.number()]))]).optional(),
+  variables: z.union([z.array(z.union([z.string(), z.number()])), z.record(z.string(), z.union([z.string(), z.number()]))]).optional(),
+  body_variables: z.union([z.array(z.union([z.string(), z.number()])), z.record(z.string(), z.union([z.string(), z.number()]))]).optional(),
   header_text: z.string().optional(),
   header_media: headerMediaSchema.optional(),
   buttons: z.array(buttonSchema).optional(),
   components: z.array(z.unknown()).optional(),
-  flow_data: z.record(z.unknown()).optional(),
+  flow_data: z.record(z.string(), z.unknown()).optional(),
 });
 
 const MEDIA_TYPES = ["image", "video", "audio", "document"] as const;

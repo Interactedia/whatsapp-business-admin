@@ -64,7 +64,7 @@ function ApiKeys() {
     <div className="max-w-3xl space-y-3">
       <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
-          Use these keys to authenticate requests to <code className="rounded bg-muted px-1">/api/v1</code>.
+          Use these keys to authenticate requests to <code className="rounded-sm bg-muted px-1">/api/v1</code>.
           Keep them secret — treat a key like a password.
         </p>
         <Dialog open={open} onOpenChange={setOpen}>

@@ -191,7 +191,7 @@ export function whatsappToHtml(text: string): string {
   // Style unresolved variable placeholders.
   html = html.replace(
     RE_VARIABLE_MARKER,
-    (_m, n) => `<span class="rounded bg-amber-200/70 px-1 text-amber-900">{{${n}}}</span>`,
+    (_m, n) => `<span class="rounded-sm bg-amber-200/70 px-1 text-amber-900">{{${n}}}</span>`,
   );
   return html;
 }

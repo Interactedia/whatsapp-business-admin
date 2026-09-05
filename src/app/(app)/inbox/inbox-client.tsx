@@ -311,7 +311,7 @@ function ThreadPane({ conversationId, onBack }: { conversationId: string; onBack
 }
 
 function FlowSubmissionCard({ submission }: { submission: FlowSubmission }) {
-  return <div className="ml-2 mt-1 max-w-md rounded-lg border border-emerald-200 bg-white p-3 text-zinc-900 shadow-sm dark:border-emerald-900 dark:bg-[#202c33] dark:text-zinc-50"><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400"><Workflow className="h-4 w-4" /> {submission.flow.name} submitted</div>{submission.response ? <div className="space-y-1">{Object.entries(submission.response).map(([key, value]) => <div key={key} className="grid grid-cols-1 gap-0.5 text-xs min-[430px]:grid-cols-[110px_1fr] min-[430px]:gap-2"><span className="font-medium">{key}</span><span className="break-words text-muted-foreground">{typeof value === "object" ? JSON.stringify(value) : String(value)}</span></div>)}</div> : <div className="text-xs text-muted-foreground">Response data has been purged.</div>}</div>;
+  return <div className="ml-2 mt-1 max-w-md rounded-lg border border-emerald-200 bg-white p-3 text-zinc-900 shadow-xs dark:border-emerald-900 dark:bg-[#202c33] dark:text-zinc-50"><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400"><Workflow className="h-4 w-4" /> {submission.flow.name} submitted</div>{submission.response ? <div className="space-y-1">{Object.entries(submission.response).map(([key, value]) => <div key={key} className="grid grid-cols-1 gap-0.5 text-xs min-[430px]:grid-cols-[110px_1fr] min-[430px]:gap-2"><span className="font-medium">{key}</span><span className="wrap-break-word text-muted-foreground">{typeof value === "object" ? JSON.stringify(value) : String(value)}</span></div>)}</div> : <div className="text-xs text-muted-foreground">Response data has been purged.</div>}</div>;
 }
 
 function MessageBubble({ m }: { m: Msg }) {
@@ -320,13 +320,13 @@ function MessageBubble({ m }: { m: Msg }) {
     <div className={cn("flex", out ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "max-w-[88%] rounded-lg px-2.5 py-1.5 text-sm shadow-sm sm:max-w-[70%]",
+          "max-w-[88%] rounded-lg px-2.5 py-1.5 text-sm shadow-xs sm:max-w-[70%]",
           out ? "rounded-tr-none bg-[#d9fdd3] text-zinc-900 dark:bg-[#005c4b] dark:text-zinc-50" : "rounded-tl-none bg-white text-zinc-900 dark:bg-[#202c33] dark:text-zinc-50",
         )}
       >
         {m.hasMedia && <MediaContent m={m} />}
-        {m.text && <div className="whitespace-pre-wrap break-words">{m.text}</div>}
-        {m.caption && <div className="whitespace-pre-wrap break-words">{m.caption}</div>}
+        {m.text && <div className="whitespace-pre-wrap wrap-break-word">{m.text}</div>}
+        {m.caption && <div className="whitespace-pre-wrap wrap-break-word">{m.caption}</div>}
         <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px]", out ? "text-zinc-600 dark:text-zinc-300" : "text-muted-foreground")}>
           {formatTime(m.timestamp)}
           {out && <StatusTick status={m.status} />}
@@ -341,12 +341,12 @@ function MediaContent({ m }: { m: Msg }) {
   const mime = m.mediaMime || "";
   if (mime.startsWith("image/")) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt="" className="mb-1 max-h-64 rounded" />;
+    return <img src={url} alt="" className="mb-1 max-h-64 rounded-sm" />;
   }
-  if (mime.startsWith("video/")) return <video src={url} controls className="mb-1 max-h-64 rounded" />;
+  if (mime.startsWith("video/")) return <video src={url} controls className="mb-1 max-h-64 rounded-sm" />;
   if (mime.startsWith("audio/")) return <audio src={url} controls className="mb-1 w-56" />;
   return (
-    <a href={url} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-2 rounded bg-black/5 p-2 dark:bg-white/10">
+    <a href={url} target="_blank" rel="noreferrer" className="mb-1 flex items-center gap-2 rounded-sm bg-black/5 p-2 dark:bg-white/10">
       <FileText className="h-5 w-5" />
       <span className="truncate text-xs">{m.mediaFilename || "Document"}</span>
     </a>

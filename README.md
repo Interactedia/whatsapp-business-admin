@@ -29,6 +29,8 @@ server hosting a **WebSocket** feed for realtime inbox updates, Tailwind + shadc
 
 ## Quick start (development)
 
+Node.js 24 is required. If you use `nvm`, run `nvm use` from the project root.
+
 ```bash
 # 1. Start Postgres (Docker). Exposed on host port 5434.
 docker compose up -d db
@@ -42,6 +44,7 @@ cp .env.example .env
 
 # 3. Install deps, run migrations, seed an admin user
 npm install
+npm run db:generate
 npm run db:migrate
 npm run db:seed          # prints the seeded admin email/password
 

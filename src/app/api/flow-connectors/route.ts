@@ -15,7 +15,7 @@ const schema = z.object({
   baseUrl: z.string().url(),
   allowedHosts: z.array(z.string().trim().min(1)).min(1),
   authType: z.enum(["NONE", "BEARER", "BASIC", "HEADER"]).default("NONE"),
-  authConfig: z.record(z.string()).optional(),
+  authConfig: z.record(z.string(), z.string()).optional(),
   timeoutMs: z.number().int().min(500).max(10000).default(5000),
 }).superRefine((value, ctx) => {
   if (value.authType !== "NONE" && !value.authConfig) ctx.addIssue({ code: "custom", path: ["authConfig"], message: "Credentials are required for the selected authentication type." });

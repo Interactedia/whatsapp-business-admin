@@ -13,7 +13,8 @@ export async function recordFlowSubmission(input: { waMessageId: string; respons
   if (!token) throw new Error("WhatsApp Flow completion did not include a flow_token.");
   const launch = await prisma.flowLaunch.findUnique({ where: { tokenHash: flowTokenHash(token) }, include: { flow: true } });
   if (!launch) throw new Error("WhatsApp Flow completion used an unknown token.");
-  const { flow_token: _removed, ...answers } = parsed;
+  const answers = { ...parsed };
+  delete answers.flow_token;
   const completedAt = new Date();
   const submission = await prisma.$transaction(async (tx) => {
     const existing = await tx.flowSubmission.findUnique({ where: { launchId: launch.id } });

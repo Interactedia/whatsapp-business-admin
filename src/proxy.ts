@@ -1,8 +1,8 @@
 import NextAuth from "next-auth";
 import { authConfig } from "@/auth.config";
 
-// Edge middleware uses the DB-free config; it only reads the JWT.
-export const { auth: middleware } = NextAuth(authConfig);
+// The proxy uses the DB-free config and only reads the session JWT.
+export const proxy = NextAuth(authConfig).auth;
 
 export const config = {
   // Protect everything except Next internals, the auth API, the webhook, the
