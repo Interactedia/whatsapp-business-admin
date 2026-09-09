@@ -7,7 +7,7 @@ import {
   Search, Send, Paperclip, Check, CheckCheck, Clock, AlertCircle, MessageSquare, FileText, LayoutTemplate, Workflow, ArrowLeft,
 } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
-import { cn, formatTime } from "@/lib/utils";
+import { cn, formatInboxTimestamp } from "@/lib/utils";
 import { useRealtime } from "@/hooks/use-realtime";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -107,10 +107,10 @@ export function InboxClient() {
                 <AvatarFallback>{initials(c.contact)}</AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
                   <span className="truncate text-sm font-medium">{displayName(c.contact)}</span>
                   {c.lastMessageAt && (
-                    <span className="shrink-0 text-[10px] text-muted-foreground">{formatTime(c.lastMessageAt)}</span>
+                    <span className="ml-auto max-w-full text-right text-[10px] text-muted-foreground">{formatInboxTimestamp(c.lastMessageAt)}</span>
                   )}
                 </div>
                 <div className="flex items-center justify-between gap-2">
@@ -327,8 +327,8 @@ function MessageBubble({ m }: { m: Msg }) {
         {m.hasMedia && <MediaContent m={m} />}
         {m.text && <div className="whitespace-pre-wrap wrap-break-word">{m.text}</div>}
         {m.caption && <div className="whitespace-pre-wrap wrap-break-word">{m.caption}</div>}
-        <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px]", out ? "text-zinc-600 dark:text-zinc-300" : "text-muted-foreground")}>
-          {formatTime(m.timestamp)}
+        <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px] [&>svg]:shrink-0", out ? "text-zinc-600 dark:text-zinc-300" : "text-muted-foreground")}>
+          <span className="min-w-0 text-right">{formatInboxTimestamp(m.timestamp)}</span>
           {out && <StatusTick status={m.status} />}
         </div>
       </div>
