@@ -16,8 +16,8 @@ export function TemplatePreview({ builder }: { builder: TemplateBuilder }) {
 
   return (
     <div className="wa-wallpaper flex h-full flex-col rounded-lg border p-4">
-      <div className="mx-auto w-full max-w-[320px]">
-        <div className="rounded-lg rounded-tl-none bg-white p-2 shadow-xs dark:bg-[#202c33] dark:text-zinc-100">
+      <div className="mx-auto min-w-0 w-full max-w-[320px]">
+        <div className="wrap-break-word rounded-lg rounded-tl-none bg-white p-2 shadow-xs dark:bg-[#202c33] dark:text-zinc-100">
           {/* Header */}
           {builder.header.type === "TEXT" && builder.header.text && (
             <div
@@ -64,8 +64,8 @@ export function TemplatePreview({ builder }: { builder: TemplateBuilder }) {
                 {btn.type === "URL" && <ExternalLink className="h-3.5 w-3.5" />}
                 {btn.type === "PHONE_NUMBER" && <Phone className="h-3.5 w-3.5" />}
                 {btn.type === "COPY_CODE" && <Copy className="h-3.5 w-3.5" />}
-                <span className="truncate">
-                  {btn.type === "COPY_CODE" ? "Copy offer code" : btn.text || "Button"}
+                <span className="min-w-0 wrap-break-word text-center">
+                  {btn.type === "COPY_CODE" ? builder.category === "AUTHENTICATION" ? "Copy code" : "Copy offer code" : btn.text || "Button"}
                 </span>
               </div>
             ))}
