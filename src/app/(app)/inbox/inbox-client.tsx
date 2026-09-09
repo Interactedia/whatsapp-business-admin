@@ -15,6 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
+import { TemplateMessage } from "@/components/whatsapp/template-message";
+import type { TemplateContent } from "@/lib/whatsapp/template-content";
 
 type Contact = { id: string; waId: string; name: string | null; profileName: string | null };
 type Conversation = {
@@ -37,6 +39,7 @@ type Msg = {
   mediaFilename: string | null;
   timestamp: string;
   waMessageId: string | null;
+  templateContent?: TemplateContent;
 };
 type FlowSubmission = { id: string; waMessageId: string | null; flow: { name: string }; response: Record<string, unknown> | null; purgedAt: string | null; completedAt: string };
 type Thread = {
@@ -324,9 +327,11 @@ function MessageBubble({ m }: { m: Msg }) {
           out ? "rounded-tr-none bg-[#d9fdd3] text-zinc-900 dark:bg-[#005c4b] dark:text-zinc-50" : "rounded-tl-none bg-white text-zinc-900 dark:bg-[#202c33] dark:text-zinc-50",
         )}
       >
-        {m.hasMedia && <MediaContent m={m} />}
-        {m.text && <div className="whitespace-pre-wrap wrap-break-word">{m.text}</div>}
-        {m.caption && <div className="whitespace-pre-wrap wrap-break-word">{m.caption}</div>}
+        {m.type === "TEMPLATE" && m.templateContent ? <TemplateMessage content={m.templateContent} messageId={m.id} hasMedia={m.hasMedia} /> : <>
+          {m.hasMedia && <MediaContent m={m} />}
+          {m.text && <div className="whitespace-pre-wrap wrap-break-word">{m.text}</div>}
+          {m.caption && <div className="whitespace-pre-wrap wrap-break-word">{m.caption}</div>}
+        </>}
         <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px] [&>svg]:shrink-0", out ? "text-zinc-600 dark:text-zinc-300" : "text-muted-foreground")}>
           <span className="min-w-0 text-right">{formatInboxTimestamp(m.timestamp)}</span>
           {out && <StatusTick status={m.status} />}

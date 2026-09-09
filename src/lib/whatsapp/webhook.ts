@@ -4,6 +4,7 @@ import { downloadInboundMedia } from "@/lib/whatsapp/media";
 import { publish } from "@/server/realtime";
 import type { MessageStatus, MessageType, TemplateStatus } from "@/generated/prisma/client";
 import { recordFlowSubmission, redactFlowWebhookPayload } from "@/lib/whatsapp/flow-submission";
+import { readTemplateContent, templateContentText } from "@/lib/whatsapp/template-content";
 
 export { verifySignature } from "@/lib/whatsapp/signature";
 
@@ -285,14 +286,17 @@ export function serializeMessage(m: {
   mediaFilename: string | null;
   timestamp: Date;
   waMessageId?: string | null;
+  payload?: unknown;
 }) {
+  const templateContent = m.type === "TEMPLATE" ? readTemplateContent(m.payload) : null;
   return {
     id: m.id,
     conversationId: m.conversationId,
     direction: m.direction,
     type: m.type,
     status: m.status,
-    text: m.text,
+    text: templateContent ? templateContentText(templateContent) : m.text,
+    ...(templateContent ? { templateContent } : {}),
     caption: m.caption,
     hasMedia: Boolean(m.mediaPath),
     mediaMime: m.mediaMime,

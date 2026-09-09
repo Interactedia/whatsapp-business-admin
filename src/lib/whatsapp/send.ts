@@ -4,6 +4,7 @@ import { graphFetch, WhatsAppApiError } from "@/lib/whatsapp/client";
 import { publish } from "@/server/realtime";
 import { serializeMessage } from "@/lib/whatsapp/webhook";
 import type { MessageType } from "@/generated/prisma/client";
+import { buildTemplateContent, templateContentText, templateContentPreview } from "./template-content";
 
 export { isWithinSessionWindow } from "@/lib/whatsapp/window";
 
@@ -35,7 +36,7 @@ export type OutboundContent =
       mediaMime?: string;
       filename?: string;
     }
-  | { kind: "template"; templateId?: string; templateName: string; language: string; components?: unknown[]; preview?: string }
+  | { kind: "template"; templateId?: string; templateName: string; language: string; components?: unknown[]; templateComponents?: unknown; preview?: string }
   | {
       kind: "flow";
       flowId: string;
@@ -135,6 +136,17 @@ export async function sendMessage(opts: {
   const cfg = opts.config ?? (await getWabaConfig());
   if (!cfg.phoneNumberId) throw new WhatsAppApiError(400, "WhatsApp is not connected.");
 
+  let templateContent;
+  if (opts.content.kind === "template") {
+    const content = opts.content;
+    const definition = content.templateComponents ?? (await prisma.template.findUnique({
+      where: content.templateId ? { id: content.templateId } : { name_language: { name: content.templateName, language: content.language } },
+      select: { components: true },
+    }))?.components;
+    templateContent = buildTemplateContent({ name: content.templateName, language: content.language, definition, parameters: content.components });
+  }
+  const preview = templateContent ? templateContentPreview(templateContent) : previewFor(opts.content);
+
   const type: MessageType =
     opts.content.kind === "text"
       ? "TEXT"
@@ -151,13 +163,13 @@ export async function sendMessage(opts: {
       direction: "OUT",
       type,
       status: "PENDING",
-      text: opts.content.kind === "text" ? opts.content.text : previewFor(opts.content),
+      text: templateContent ? templateContentText(templateContent) : opts.content.kind === "text" ? opts.content.text : preview,
       caption: opts.content.kind === "media" ? opts.content.caption : undefined,
       mediaPath: opts.content.kind === "media" ? opts.content.mediaPath : undefined,
       mediaMime: opts.content.kind === "media" ? opts.content.mediaMime : undefined,
       mediaFilename: opts.content.kind === "media" ? opts.content.filename : undefined,
       templateId: opts.content.kind === "template" ? opts.content.templateId : undefined,
-      payload: opts.content.kind === "flow" ? { flowId: opts.content.flowId, cta: opts.content.cta } : undefined,
+      payload: templateContent ? { templateContent } : opts.content.kind === "flow" ? { flowId: opts.content.flowId, cta: opts.content.cta } : undefined,
       sentById: opts.sentById,
     },
   });
@@ -177,7 +189,7 @@ export async function sendMessage(opts: {
     });
     await prisma.conversation.update({
       where: { id: opts.conversationId },
-      data: { lastMessageAt: new Date(), lastPreview: previewFor(opts.content).slice(0, 140) },
+      data: { lastMessageAt: new Date(), lastPreview: preview.slice(0, 140) },
     });
     publish({ type: "message:new", payload: { conversationId: opts.conversationId, message: serializeMessage(updated) } });
     return updated;

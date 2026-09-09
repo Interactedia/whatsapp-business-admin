@@ -9,6 +9,7 @@ import { templateExampleComponents, templateRuntimeComponents } from "@/lib/what
 import { extractVariables, isNamedToken, type ApiComponent } from "@/lib/whatsapp/template-types";
 import { presentFlowSubmission } from "@/lib/whatsapp/flow-present";
 import { finishPreparedFlowLaunch, launchFlow, prepareTemplateFlowLaunch } from "@/lib/whatsapp/flow-launch";
+import { resolveTemplateContents } from "@/lib/whatsapp/template-history";
 
 /** Fetch the thread (oldest → newest) and mark it read. */
 export const GET = handle(async (_req, { params }) => {
@@ -27,6 +28,7 @@ export const GET = handle(async (_req, { params }) => {
     include: { launch: { include: { flow: true } } },
     orderBy: { completedAt: "asc" },
   });
+  const templateContents = await resolveTemplateContents(messages);
 
   // Mark read.
   if (conversation.unreadCount > 0) {
@@ -40,7 +42,9 @@ export const GET = handle(async (_req, { params }) => {
       windowOpen: isWithinSessionWindow(conversation.lastInboundAt),
       lastInboundAt: conversation.lastInboundAt,
     },
-    messages: messages.map(serializeMessage),
+    messages: messages.map((message) => serializeMessage(templateContents.has(message.id)
+      ? { ...message, payload: { templateContent: templateContents.get(message.id) } }
+      : message)),
     flowSubmissions: flowSubmissions.map((submission) => presentFlowSubmission(submission, session.user.role === "ADMIN")),
   });
 });
@@ -171,7 +175,7 @@ export const POST = handle(async (req, { params }) => {
         ...sendComponents,
         ...(prepared ? [prepared.sendComponent] : []),
       ],
-      preview: `Template: ${template.name}`,
+      templateComponents,
     };
     try {
       const message = await sendMessage({ conversationId: id, to, sentById: session.user.id, content });

@@ -190,7 +190,7 @@ export const POST = v1Handle(async (req) => {
         templateName: template.name,
         language: template.language,
         components,
-        preview: `Template: ${template.name}`,
+        templateComponents: template.components,
       },
     });
     if (prepared) await finishPreparedFlowLaunch(prepared.launchId, msg.id);

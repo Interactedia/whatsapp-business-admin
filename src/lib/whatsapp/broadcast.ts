@@ -62,7 +62,7 @@ export async function runBroadcast(broadcastId: string): Promise<void> {
             templateName: broadcast.template.name,
             language: broadcast.template.language,
             components: [...components, ...(prepared ? [prepared.sendComponent] : [])],
-            preview: `Broadcast: ${broadcast.name}`,
+            templateComponents: broadcast.template.components,
           },
         });
         if (prepared) await finishPreparedFlowLaunch(prepared.launchId, message.id);
