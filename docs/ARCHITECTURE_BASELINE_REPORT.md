@@ -213,6 +213,8 @@
 
 **WA-01-01 persistence foundation:** added additive Prisma models `Tenant`, `WabaAccount`, and `PhoneNumber` with `Tenant` 1:N `WabaAccount` and `WabaAccount` 1:N `PhoneNumber`. Meta identifiers are stored as `metaWabaId` and `metaPhoneNumberId` with per-parent uniqueness constraints. The migration creates only these new tables, indexes, and foreign keys. Legacy `WabaSettings` remains the credential source and is not replaced or migrated. Multi-tenancy is not operational in WA-01-01.
 
+**WA-01-02 messaging ownership foundation:** added nullable `tenantId` ownership fields to `Contact`, `Conversation`, and `Message`, with non-unique tenant lookup indexes and restrictive foreign keys to `Tenant`. Existing records remain unassigned, no default tenant is introduced, and existing uniqueness semantics are unchanged. Tenant authorization, tenant isolation, cross-entity ownership consistency, and historical ownership backfill remain deferred. Legacy `WabaSettings` remains operational.
+
 ---
 
 ## K. Recommended Next Development Task
