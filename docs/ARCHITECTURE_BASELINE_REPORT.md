@@ -207,9 +207,11 @@
 | None at this time | All documentation discrepancies resolved | N/A |
 
 **Open questions from ADRs** (NOT blocking):
-- ADR-0004: Tenant schema design, membership roles, WABA-to-tenant cardinality
+- ADR-0004: Membership roles, tenant signup/switching, existing-record ownership backfill, tenant-scoped authorization, and whether DB RLS adds value in this stack
 - ADR-0005: Redis vs PostgreSQL-backed queue comparison
 - ADR-0006: Canonical event catalog, subscription lifecycle
+
+**WA-01-01 persistence foundation:** added additive Prisma models `Tenant`, `WabaAccount`, and `PhoneNumber` with `Tenant` 1:N `WabaAccount` and `WabaAccount` 1:N `PhoneNumber`. Meta identifiers are stored as `metaWabaId` and `metaPhoneNumberId` with per-parent uniqueness constraints. The migration creates only these new tables, indexes, and foreign keys. Legacy `WabaSettings` remains the credential source and is not replaced or migrated. Multi-tenancy is not operational in WA-01-01.
 
 ---
 

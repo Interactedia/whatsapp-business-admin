@@ -67,6 +67,51 @@ model WabaSettings {
 }
 
 // ---------------------------------------------------------------------------
+// Tenant and WhatsApp Business Account foundation
+// ---------------------------------------------------------------------------
+
+// Persistence foundation only. Multi-tenancy is not operational in WA-01-01.
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  wabaAccounts WabaAccount[]
+}
+
+// A Meta WhatsApp Business Account owned by a logical tenant.
+model WabaAccount {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  metaWabaId String
+  name       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  phoneNumbers PhoneNumber[]
+
+  @@unique([tenantId, metaWabaId])
+  @@index([tenantId])
+}
+
+// A Meta phone number belonging to a WABA account.
+model PhoneNumber {
+  id                String      @id @default(cuid())
+  wabaAccountId     String
+  wabaAccount       WabaAccount @relation(fields: [wabaAccountId], references: [id], onDelete: Restrict)
+  metaPhoneNumberId String
+  displayPhone      String?
+  verifiedName      String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([wabaAccountId, metaPhoneNumberId])
+  @@index([wabaAccountId])
+}
+
+// ---------------------------------------------------------------------------
 // Templates
 // ---------------------------------------------------------------------------
 
