@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { getWabaConfig, type WabaConfig } from "@/lib/settings";
+import type { WabaConfig } from "@/lib/settings";
 import { graphFetch, WhatsAppApiError } from "@/lib/whatsapp/client";
+import { phoneNumberConfig } from "@/lib/tenant/waba";
 import { publish } from "@/server/realtime";
 import { serializeMessage } from "@/lib/whatsapp/webhook";
 import type { MessageType } from "@/generated/prisma/client";
@@ -126,6 +127,15 @@ function previewFor(content: OutboundContent): string {
  * Send an outbound message. Records a Message row (SENT or FAILED), updates the
  * conversation, and emits a realtime event. Callers enforce the 24h window.
  */
+export async function resolveConversationSenderConfig(conversationId: string): Promise<WabaConfig> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    include: { phoneNumber: { include: { wabaAccount: true } } },
+  });
+  if (!conversation?.phoneNumber) throw new WhatsAppApiError(403, "Conversation has no authorized sender phone number.");
+  return phoneNumberConfig(conversation.phoneNumber);
+}
+
 export async function sendMessage(opts: {
   conversationId: string;
   to: string;
@@ -133,7 +143,13 @@ export async function sendMessage(opts: {
   sentById?: string;
   config?: WabaConfig;
 }) {
-  const cfg = opts.config ?? (await getWabaConfig());
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: opts.conversationId },
+    include: { phoneNumber: { include: { wabaAccount: true } } },
+  });
+  if (!conversation) throw new WhatsAppApiError(404, "Conversation not found.");
+  if (!conversation.phoneNumber) throw new WhatsAppApiError(403, "Conversation has no authorized sender phone number.");
+  const cfg = opts.config ?? phoneNumberConfig(conversation.phoneNumber);
   if (!cfg.phoneNumberId) throw new WhatsAppApiError(400, "WhatsApp is not connected.");
 
   let templateContent;
@@ -159,6 +175,7 @@ export async function sendMessage(opts: {
   // Create a PENDING row first so a failure is still recorded.
   const message = await prisma.message.create({
     data: {
+      tenantId: conversation.tenantId,
       conversationId: opts.conversationId,
       direction: "OUT",
       type,

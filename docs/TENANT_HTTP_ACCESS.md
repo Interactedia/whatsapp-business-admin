@@ -4,6 +4,23 @@ WA-01-05C introduced the first bounded tenant-aware HTTP read surface using cent
 
 **These routes do not activate tenant isolation across legacy application routes.**
 
+## Conversation sender binding
+
+ERA1-BATCH-B requires `phoneNumberId` when starting a tenant conversation:
+
+```json
+{
+  "waId": "919812345678",
+  "name": "Contact Name",
+  "phoneNumberId": "owned-phone-number-id"
+}
+```
+
+The server verifies membership, contact ownership, `PhoneNumber` ownership, and the owning `WabaAccount` before creating the conversation. Existing unbound historical conversations are not silently rebound; they fail closed for outbound sends. Message payloads do not accept sender credentials or sender reassignment.
+
+Outbound send routes resolve provider credentials from the conversation's bound phone/WABA and do not use a global `WabaSettings` fallback. API responses include `phoneNumberId` where relevant but never include access tokens or app secrets.
+
+
 ## Tenant Contact Write Routes
 
 ### Create Contact

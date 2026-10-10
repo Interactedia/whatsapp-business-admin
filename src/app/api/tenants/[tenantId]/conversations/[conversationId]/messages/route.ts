@@ -5,8 +5,7 @@ import { resolveTenantContext, TenantAuthorizationError } from "@/lib/tenant";
 import { tenantMessagingRepository, type MessageListPagination } from "@/lib/tenant/repository";
 import { serializeMessage } from "@/lib/whatsapp/webhook";
 import { resolveTemplateContents } from "@/lib/whatsapp/template-history";
-import { isWithinSessionWindow } from "@/lib/whatsapp/send";
-import { sendMessage } from "@/lib/whatsapp/send";
+import { isWithinSessionWindow, resolveConversationSenderConfig, sendMessage } from "@/lib/whatsapp/send";
 import { uploadOutboundMedia } from "@/lib/whatsapp/media";
 import { mediaStore, extFromMime } from "@/lib/media";
 import { templateExampleComponents, templateRuntimeComponents } from "@/lib/whatsapp/template-service";
@@ -209,9 +208,8 @@ const flowSchema = z.object({
  *  3. findConversation enforces conversation ownership via tenant-scoped query predicate.
  *     A cross-tenant conversation returns 404 (not an authorization leak).
  *  4. Contact.waId is extracted from the owned conversation's contact.
- *  5. sendMessage uses the system WabaConfig (singleton, single-WABA deployment).
- *     In single-WABA mode the same phone number is authorized for all tenants.
- *     Multi-WABA per-tenant account binding requires a separate approved architecture.
+ *  5. sendMessage resolves provider credentials from the bound tenant-owned PhoneNumber/WABA.
+ *     Unbound historical conversations fail closed before provider invocation.
  *
  * Security predicates enforced:
  *  - No unauthenticated request reaches sendMessage.
@@ -271,7 +269,8 @@ export const POST = handle(async (req, { params }) => {
           ? "audio"
           : "document";
 
-    const mediaId = await uploadOutboundMedia({ data: buffer, mimeType: mime, fileName: file.name });
+    const senderConfig = await resolveConversationSenderConfig(conversationId);
+    const mediaId = await uploadOutboundMedia({ data: buffer, mimeType: mime, fileName: file.name, config: senderConfig });
     const localPath = await mediaStore.save(buffer, extFromMime(mime));
 
     const message = await sendMessage({

@@ -5,11 +5,12 @@ const mocks = vi.hoisted(() => ({
   template: { findMany: vi.fn(), findUnique: vi.fn() },
   apiLog: { findMany: vi.fn() },
   message: { create: vi.fn(), update: vi.fn() },
-  conversation: { update: vi.fn() },
+  conversation: { findUnique: vi.fn(), update: vi.fn() },
   graphFetch: vi.fn(), publish: vi.fn(), storeFromLink: vi.fn(), downloadInboundMedia: vi.fn(),
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: mocks }));
 vi.mock("@/lib/settings", () => ({ getWabaConfig: vi.fn(async () => ({ phoneNumberId: "123" })) }));
+vi.mock("@/lib/crypto", () => ({ decrypt: (value: string) => value, encrypt: (value: string) => value }));
 vi.mock("@/server/realtime", () => ({ publish: mocks.publish }));
 vi.mock("@/lib/whatsapp/client", () => ({ graphFetch: mocks.graphFetch, WhatsAppApiError: class extends Error {} }));
 vi.mock("@/lib/whatsapp/media", () => ({ storeFromLink: mocks.storeFromLink, downloadInboundMedia: mocks.downloadInboundMedia }));
@@ -39,6 +40,17 @@ beforeEach(() => {
   mocks.template.findUnique.mockResolvedValue(template);
   mocks.apiLog.findMany.mockResolvedValue([log]);
   mocks.graphFetch.mockResolvedValue({ messages: [{ id: "wamid.1" }] });
+  mocks.conversation.findUnique.mockResolvedValue({
+    id: "c1",
+    tenantId: "tenant-1",
+    phoneNumber: {
+      id: "phone-1",
+      metaPhoneNumberId: "123",
+      displayPhone: null,
+      verifiedName: null,
+      wabaAccount: { id: "waba-1", tenantId: "tenant-1", metaWabaId: "waba-1", accessTokenEnc: "token", apiVersion: "v21.0" },
+    },
+  });
   mocks.conversation.update.mockResolvedValue({});
 });
 

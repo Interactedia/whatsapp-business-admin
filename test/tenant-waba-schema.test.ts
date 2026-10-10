@@ -7,6 +7,10 @@ const migration = readFileSync(
   join(process.cwd(), "prisma/migrations/20261009172000_add_tenant_waba_foundation/migration.sql"),
   "utf8",
 );
+const bindingMigration = readFileSync(
+  join(process.cwd(), "prisma/migrations/20261010120000_bind_conversations_to_phone_numbers/migration.sql"),
+  "utf8",
+);
 
 function modelBlock(name: string) {
   const match = schema.match(new RegExp(`model ${name} \\{([\\s\\S]*?)\\n\\}`));
@@ -26,8 +30,8 @@ describe("WA-01-01 tenant and WABA persistence foundation", () => {
     const waba = modelBlock("WabaAccount");
 
     expect(tenant).toContain("wabaAccounts WabaAccount[]");
-    expect(waba).toContain("tenantId   String");
-    expect(waba).toContain("tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)");
+    expect(waba).toContain("tenantId       String");
+    expect(waba).toContain("tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)");
     expect(waba).toContain("@@unique([tenantId, metaWabaId])");
   });
 
@@ -36,11 +40,26 @@ describe("WA-01-01 tenant and WABA persistence foundation", () => {
     const phone = modelBlock("PhoneNumber");
 
     expect(waba).toContain("phoneNumbers PhoneNumber[]");
+    expect(waba).toContain("accessTokenEnc String?");
     expect(phone).toContain("wabaAccountId     String");
     expect(phone).toContain(
       "wabaAccount       WabaAccount @relation(fields: [wabaAccountId], references: [id], onDelete: Restrict)",
     );
     expect(phone).toContain("@@unique([wabaAccountId, metaPhoneNumberId])");
+    expect(phone).toContain("@@index([wabaAccountId])");
+  });
+
+  it("binds conversations to nullable tenant-owned phone numbers additively", () => {
+    const conversation = modelBlock("Conversation");
+    const phone = modelBlock("PhoneNumber");
+
+    expect(conversation).toContain("phoneNumberId  String?");
+    expect(conversation).toContain("phoneNumber    PhoneNumber?       @relation(fields: [phoneNumberId], references: [id], onDelete: Restrict)");
+    expect(conversation).toContain("@@index([phoneNumberId])");
+    expect(phone).toContain("conversations Conversation[]");
+    expect(bindingMigration).toContain('ALTER TABLE "Conversation" ADD COLUMN "phoneNumberId" TEXT');
+    expect(bindingMigration).not.toMatch(/UPDATE\s+"Conversation"/i);
+    expect(bindingMigration).toContain('ON DELETE RESTRICT');
   });
 
   it("keeps existing legacy WabaSettings structurally compatible", () => {

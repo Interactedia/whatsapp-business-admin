@@ -45,14 +45,29 @@ Historical messaging rows may have `tenantId = null`. Tenant-scoped repositories
 
 `listConversationMessages` is bounded. `take` must be an integer from `1` through `200`; invalid values are rejected. Results are ordered by `timestamp ASC, id ASC`. Optional `cursor` uses a message id and skips the cursor row.
 
+## Sender binding and WABA ownership
+
+ERA1-BATCH-B adds nullable `Conversation.phoneNumberId` as the explicit business sender binding. New tenant-owned conversations require a verified `PhoneNumber` that belongs to a `WabaAccount` owned by the trusted tenant. Historical conversations with `phoneNumberId = null` are not backfilled and cannot send outbound messages.
+
+Outbound provider credentials resolve through:
+
+1. trusted `TenantContext`;
+2. owned `Conversation` and `Contact`;
+3. bound `PhoneNumber`;
+4. owning `WabaAccount` credential fields.
+
+The send path does not fall back to singleton `WabaSettings` for tenant-scoped outbound messages. It also rejects sender reassignment by message payload; sends never change `Conversation.phoneNumberId`.
+
+Inbound webhook binding uses Meta `metadata.phone_number_id` as the verified business phone identifier. Unknown, foreign, ambiguous, or historical unbound conversations fail closed instead of guessing from the customer phone number.
+
 ## Security limitations
 
-These repositories verify tenant membership and ownership only. They do not grant permission to send, delete, assign, mutate or otherwise act on messaging resources. Action authorization remains separate and must be added by future scoped tasks.
+These repositories verify tenant membership and ownership only. They do not grant permission to send, delete, assign, mutate or otherwise act on messaging resources outside the bounded tenant routes.
 
 ## Legacy compatibility
 
-Existing API routes and Inbox behavior are unchanged. Legacy single-WABA runtime reads still use their existing direct Prisma queries until a future approved integration task adopts these repositories.
+Existing tenant read routes and Inbox reads are preserved. Historical unbound rows remain readable where already tenant-owned, but outbound sends require sender binding. Singleton `WabaSettings` remains for legacy non-tenant provider surfaces such as template and flow administration until those surfaces receive separate scoped tenant routing.
 
 ## Deferred work
 
-Deferred work includes runtime integration, service authorization for non-human actors, route-level tenant enforcement, historical backfill, multi-WABA routing and PostgreSQL RLS.
+Deferred work includes service authorization for non-human actors, tenant isolation of remaining webhook/realtime surfaces, historical binding management UI, send idempotency/retry redesign, and PostgreSQL RLS.

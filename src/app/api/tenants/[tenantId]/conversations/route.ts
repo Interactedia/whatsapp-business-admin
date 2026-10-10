@@ -3,6 +3,7 @@ import { handle, ok, fail } from "@/lib/api";
 import { auth } from "@/auth";
 import { resolveTenantContext, TenantAuthorizationError } from "@/lib/tenant";
 import { tenantMessagingRepository } from "@/lib/tenant/repository";
+import { startTenantConversation } from "@/lib/tenant/conversations";
 import { isWithinSessionWindow } from "@/lib/whatsapp/send";
 
 type ConversationRead = {
@@ -86,6 +87,7 @@ export const GET = handle(async (_req, { params }) => {
 const startSchema = z.object({
   waId: z.string().trim().regex(/^\d{7,15}$/, "Enter digits only, no + (e.g. 919812345678)"),
   name: z.string().trim().optional(),
+  phoneNumberId: z.string().trim().min(1).max(191),
 });
 
 /** Start (or resume) a conversation for a phone number, owned by the verified tenant. */
@@ -115,13 +117,12 @@ export const POST = handle(async (req, { params }) => {
 
   let result;
   try {
-    result = await tenantMessagingRepository.createConversation(context, body);
+    result = await startTenantConversation({ context, ...body });
   } catch (err) {
     if (err instanceof TenantAuthorizationError) return fail(403, "Tenant access denied");
     throw err;
   }
 
-  const conv = result.conversation as { id: string };
-  const contact = result.contact as { id: string };
-  return ok({ id: conv.id, contactId: contact.id }, 201);
+  const conv = result as { id: string; contactId: string; phoneNumberId: string | null };
+  return ok({ id: conv.id, contactId: conv.contactId, phoneNumberId: conv.phoneNumberId }, 201);
 });

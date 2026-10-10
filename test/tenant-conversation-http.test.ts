@@ -99,11 +99,14 @@ vi.mock("@/lib/tenant/repository", () => ({
   tenantMessagingRepository: {
     findConversation: hoistedMockFindConversation,
     listConversations: hoistedMockListConversations,
-    createConversation: hoistedMockCreateConversation,
     updateConversation: hoistedMockUpdateConversation,
     // Also mock updateConversation so it doesn't call through to real findConversation.
     // In tests that don't set mockUpdateConversationResult, default to null.
   },
+}));
+
+vi.mock("@/lib/tenant/conversations", () => ({
+  startTenantConversation: hoistedMockCreateConversation,
 }));
 
 import { GET as getContact } from "@/app/api/tenants/[tenantId]/contacts/[contactId]/route";
@@ -506,7 +509,7 @@ describe("WA-01-05I tenant conversation list HTTP access", () => {
       new Request("https://example.test/api/tenants/tenant-1/conversations", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ waId: "919812345678" }),
+        body: JSON.stringify({ waId: "919812345678", phoneNumberId: "phone-1" }),
       }),
       makeListParams("tenant-1"),
     );
@@ -520,7 +523,7 @@ describe("WA-01-05I tenant conversation list HTTP access", () => {
       new Request("https://example.test/api/tenants/tenant-1/conversations", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ waId: "919812345678" }),
+        body: JSON.stringify({ waId: "919812345678", phoneNumberId: "phone-1" }),
       }),
       makeListParams("tenant-1"),
     );
@@ -535,7 +538,7 @@ describe("WA-01-05I tenant conversation list HTTP access", () => {
       new Request("https://example.test/api/tenants/tenant-2/conversations", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ waId: "919812345678" }),
+        body: JSON.stringify({ waId: "919812345678", phoneNumberId: "phone-1" }),
       }),
       makeListParams("tenant-2"),
     );
@@ -551,7 +554,7 @@ describe("WA-01-05I tenant conversation list HTTP access", () => {
       new Request("https://example.test/api/tenants/tenant-1/conversations", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ waId: "919812345678" }),
+        body: JSON.stringify({ waId: "919812345678", phoneNumberId: "phone-1" }),
       }),
       makeListParams("tenant-1"),
     );
@@ -561,22 +564,24 @@ describe("WA-01-05I tenant conversation list HTTP access", () => {
   it("POST /api/tenants/:tenantId/conversations — success returns conversation id", async () => {
     mockAuth({ user: { id: "user-1", role: "AGENT" } });
     mockResolveTenantContext(trustedContext);
-    mockCreateConversation({
-      conversation: { id: "conv-new-1" },
-      contact: { id: "contact-new-1" },
-    });
+    mockCreateConversation({ id: "conv-new-1", contactId: "contact-new-1", phoneNumberId: "phone-1" });
     const response = await postConversation(
       new Request("https://example.test/api/tenants/tenant-1/conversations", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ waId: "919812345678", name: "Jane" }),
+        body: JSON.stringify({ waId: "919812345678", name: "Jane", phoneNumberId: "phone-1" }),
       }),
       makeListParams("tenant-1"),
     );
     expect(response.status).toBe(201);
     const body = await response.json();
-    expect(body).toEqual({ id: "conv-new-1", contactId: "contact-new-1" });
-    expect(createConversationSpy).toHaveBeenCalledWith(trustedContext, { waId: "919812345678", name: "Jane" });
+    expect(body).toEqual({ id: "conv-new-1", contactId: "contact-new-1", phoneNumberId: "phone-1" });
+    expect(createConversationSpy).toHaveBeenCalledWith({
+      context: trustedContext,
+      waId: "919812345678",
+      name: "Jane",
+      phoneNumberId: "phone-1",
+    });
   });
 
   it("POST /api/tenants/:tenantId/conversations — invalid waId → 400", async () => {
@@ -586,7 +591,7 @@ describe("WA-01-05I tenant conversation list HTTP access", () => {
       new Request("https://example.test/api/tenants/tenant-1/conversations", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ waId: "not-a-phone-number" }),
+        body: JSON.stringify({ waId: "not-a-phone-number", phoneNumberId: "phone-1" }),
       }),
       makeListParams("tenant-1"),
     );

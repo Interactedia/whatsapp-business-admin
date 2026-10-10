@@ -100,13 +100,17 @@ model TenantMembership {
 
 // A Meta WhatsApp Business Account owned by a logical tenant.
 model WabaAccount {
-  id         String   @id @default(cuid())
-  tenantId   String
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  metaWabaId String
-  name       String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  metaWabaId     String
+  name           String?
+  metaAppId      String?
+  accessTokenEnc String?
+  appSecret      String?
+  apiVersion     String   @default("v21.0")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   phoneNumbers PhoneNumber[]
 
@@ -124,6 +128,8 @@ model PhoneNumber {
   verifiedName      String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
+
+  conversations Conversation[]
 
   @@unique([wabaAccountId, metaPhoneNumberId])
   @@index([wabaAccountId])
@@ -205,6 +211,8 @@ model Conversation {
   tenant         Tenant?            @relation("TenantConversations", fields: [tenantId], references: [id], onDelete: Restrict)
   contactId      String             @unique
   contact        Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  phoneNumberId  String?
+  phoneNumber    PhoneNumber?       @relation(fields: [phoneNumberId], references: [id], onDelete: Restrict)
   status         ConversationStatus @default(OPEN)
   unreadCount    Int                @default(0)
   lastMessageAt  DateTime?
@@ -219,6 +227,7 @@ model Conversation {
   flowLaunches FlowLaunch[]
 
   @@index([tenantId])
+  @@index([phoneNumberId])
   @@index([lastMessageAt])
 }
 

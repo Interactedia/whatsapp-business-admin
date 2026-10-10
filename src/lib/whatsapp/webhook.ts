@@ -1,10 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { getWabaConfig } from "@/lib/settings";
+import { phoneNumberConfig, resolveInboundPhoneNumber } from "@/lib/tenant/waba";
 import { downloadInboundMedia } from "@/lib/whatsapp/media";
 import { publish } from "@/server/realtime";
 import type { MessageStatus, MessageType, TemplateStatus } from "@/generated/prisma/client";
 import { recordFlowSubmission, redactFlowWebhookPayload } from "@/lib/whatsapp/flow-submission";
 import { readTemplateContent, templateContentText } from "@/lib/whatsapp/template-content";
+import type { ImageEnrichmentResult } from "@/lib/whatsapp/image-enrichment";
+import { enrichImage } from "@/lib/whatsapp/image-enrichment-service";
+import { createImageInterpreter } from "@/lib/ai/image-interpreter";
 
 export { verifySignature } from "@/lib/whatsapp/signature";
 
@@ -114,7 +118,7 @@ export async function processWebhook(payload: unknown): Promise<string> {
       // Inbound messages
       const profileName = value.contacts?.[0]?.profile?.name;
       for (const msg of value.messages ?? []) {
-        summaries.push(await handleInboundMessage(msg, profileName, config));
+        summaries.push(await handleInboundMessage(msg, profileName, value.metadata?.phone_number_id, config));
       }
       // Delivery statuses
       for (const st of value.statuses ?? []) {
@@ -129,37 +133,55 @@ export async function processWebhook(payload: unknown): Promise<string> {
 async function handleInboundMessage(
   msg: WaMessage,
   profileName: string | undefined,
-  config: Awaited<ReturnType<typeof getWabaConfig>>,
+  metaPhoneNumberId: string | undefined,
+  fallbackConfig: Awaited<ReturnType<typeof getWabaConfig>>,
 ): Promise<string> {
+  if (!metaPhoneNumberId) throw new Error("Inbound webhook missing business phone metadata");
+  const businessPhone = await resolveInboundPhoneNumber(metaPhoneNumberId);
+  const config = phoneNumberConfig(businessPhone);
   const waId = msg.from;
   const ts = new Date(Number(msg.timestamp) * 1000);
 
-  // Upsert contact.
+  // Upsert tenant-owned contact.
   const contact = await prisma.contact.upsert({
     where: { waId },
     update: { profileName: profileName ?? undefined, lastInboundAt: ts },
-    create: { waId, profileName, lastInboundAt: ts },
+    create: { waId, profileName, lastInboundAt: ts, tenantId: businessPhone.wabaAccount.tenantId },
   });
+  if (contact.tenantId !== businessPhone.wabaAccount.tenantId) throw new Error("Inbound contact tenant mismatch");
 
-  // Upsert conversation.
+  // Upsert conversation without rebinding historical unbound rows.
   const preview = summarizeText(msg);
-  const conversation = await prisma.conversation.upsert({
-    where: { contactId: contact.id },
-    update: {
-      lastMessageAt: ts,
-      lastInboundAt: ts,
-      lastPreview: preview.slice(0, 140),
-      unreadCount: { increment: 1 },
-      status: "OPEN",
-    },
-    create: {
-      contactId: contact.id,
-      lastMessageAt: ts,
-      lastInboundAt: ts,
-      lastPreview: preview.slice(0, 140),
-      unreadCount: 1,
-    },
-  });
+  const existingConversation = await prisma.conversation.findUnique({ where: { contactId: contact.id } });
+  if (existingConversation?.phoneNumberId && existingConversation.phoneNumberId !== businessPhone.id) {
+    throw new Error("Inbound conversation sender mismatch");
+  }
+  if (existingConversation && !existingConversation.phoneNumberId) {
+    throw new Error("Inbound conversation is unbound");
+  }
+  const conversation = existingConversation
+    ? await prisma.conversation.update({
+        where: { id: existingConversation.id },
+        data: {
+          lastMessageAt: ts,
+          lastInboundAt: ts,
+          lastPreview: preview.slice(0, 140),
+          unreadCount: { increment: 1 },
+          status: "OPEN",
+        },
+      })
+    : await prisma.conversation.create({
+        data: {
+          contactId: contact.id,
+          tenantId: businessPhone.wabaAccount.tenantId,
+          phoneNumberId: businessPhone.id,
+          lastMessageAt: ts,
+          lastInboundAt: ts,
+          lastPreview: preview.slice(0, 140),
+          unreadCount: 1,
+        },
+      });
+  void fallbackConfig;
 
   // Media download for supported types.
   let mediaPath: string | null = null;
@@ -195,6 +217,7 @@ async function handleInboundMessage(
 
   const created = await prisma.message.create({
     data: {
+      tenantId: businessPhone.wabaAccount.tenantId,
       conversationId: conversation.id,
       direction: "IN",
       type: mapMessageType(msg.type),
@@ -214,6 +237,45 @@ async function handleInboundMessage(
     type: "message:new",
     payload: { conversationId: conversation.id, contactId: contact.id, message: serializeMessage(created) },
   });
+
+  // ---- image enrichment (fire-and-forget, bounded timeout) ----
+  // Triggers asynchronous visual interpretation after the message is stored.
+  // Never blocks turn completion; never reorders conversation events.
+  if (msg.type === "image" && mediaPath) {
+    const interpreter = createImageInterpreter();
+    const dedupKey = `${conversation.id}:${msg.id}`;
+    const enrichPayload = redactFlowWebhookPayload(msg) as object;
+
+    enrichImage(
+      { mediaId: msg.id, dedupKey },
+      interpreter,
+      { accessToken: config.accessToken ?? "", apiVersion: config.apiVersion },
+    )
+      .then(async (result: ImageEnrichmentResult) => {
+        try {
+          const updatedPayload = { ...enrichPayload, imageEnrichment: result };
+          await prisma.message.update({
+            where: { id: created.id },
+            data: { payload: updatedPayload as object },
+          });
+
+          // Publish enrichment result — clients can use this to display the description.
+          publish({
+            type: "message:image-enriched",
+            payload: {
+              messageId: created.id,
+              conversationId: conversation.id,
+              enrichment: serializeEnrichmentResult(result),
+            },
+          });
+        } catch (e) {
+          console.error("Failed to persist image enrichment result:", e);
+        }
+      })
+      .catch((e) => {
+        console.error("Image enrichment threw unexpectedly:", e);
+      });
+  }
 
   return `message from ${waId}`;
 }
@@ -270,6 +332,26 @@ async function handleTemplateStatus(value: WebhookValue): Promise<string> {
     publish({ type: "template:status", payload: { id: tmpl.id, status } });
   }
   return `template ${event}`;
+}
+
+/**
+ * Serialize an image-enrichment result for safe WebSocket emission.
+ * Never exposes raw image bytes, tokens, or raw provider responses.
+ */
+function serializeEnrichmentResult(result: ImageEnrichmentResult) {
+  if (result.ok) {
+    return {
+      status: result.status,
+      description: {
+        content: result.description.content,
+        mediaRef: result.description.mediaRef,
+        provenance: result.description.provenance,
+        provider: result.description.provider,
+        model: result.description.model,
+      },
+    };
+  }
+  return { status: result.status, failure: result.failure };
 }
 
 /** Serialize a Prisma message to a plain object safe for JSON/WS. */
