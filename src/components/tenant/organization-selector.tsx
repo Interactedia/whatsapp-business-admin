@@ -14,11 +14,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
 
 export type TenantMembershipSummary = {
   id: string;
-  role: string;
   tenantId: string;
   tenant: { id: string; name: string };
 };
@@ -146,9 +144,6 @@ export function OrganizationSelector({
               {isActive && (
                 <Check className="h-4 w-4 shrink-0 text-primary" />
               )}
-              <Badge variant="outline" className="ml-1 shrink-0 text-[10px]">
-                {m.role}
-              </Badge>
             </DropdownMenuItem>
           );
         })}

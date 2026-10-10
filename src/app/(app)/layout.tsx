@@ -11,7 +11,6 @@ async function getMemberships(userId: string) {
     },
     select: {
       id: true,
-      role: true,
       tenantId: true,
       tenant: {
         select: { id: true, name: true },

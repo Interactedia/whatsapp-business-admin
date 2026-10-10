@@ -20,7 +20,6 @@ export async function GET() {
     },
     select: {
       id: true,
-      role: true,
       tenantId: true,
       tenant: {
         select: { id: true, name: true },

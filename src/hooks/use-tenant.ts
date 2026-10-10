@@ -6,7 +6,6 @@ import { useQueryClient } from "@tanstack/react-query";
 
 export type TenantMembership = {
   id: string;
-  role: string;
   tenantId: string;
   tenant: { id: string; name: string };
 };
