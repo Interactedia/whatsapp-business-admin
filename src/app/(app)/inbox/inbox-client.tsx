@@ -61,6 +61,8 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
   const params = useSearchParams();
   const qc = useQueryClient();
   const activeId = params.get("c");
+  // Derive tenantId from the explicit tenant-scoped basePath (/t/:tenantId/conversations).
+  const tenantId = basePath.startsWith("/t/") ? basePath.split("/")[2] : "";
   const [search, setSearch] = useState("");
 
   const { data: conversations = [] } = useQuery({
@@ -137,7 +139,7 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
 
       {/* Thread */}
       <div className={cn("min-w-0 flex-1", activeId ? "block" : "hidden md:block")}>
-        {activeId ? <ThreadPane conversationId={activeId} onBack={() => router.push(basePath)} /> : <EmptyThread />}
+        {activeId ? <ThreadPane tenantId={tenantId} conversationId={activeId} onBack={() => router.push(basePath)} /> : <EmptyThread />}
       </div>
     </div>
   );
@@ -152,7 +154,7 @@ function EmptyThread() {
   );
 }
 
-function ThreadPane({ conversationId, onBack }: { conversationId: string; onBack: () => void }) {
+function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; conversationId: string; onBack: () => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -163,7 +165,7 @@ function ThreadPane({ conversationId, onBack }: { conversationId: string; onBack
 
   const { data, isLoading } = useQuery({
     queryKey: ["thread", conversationId],
-    queryFn: () => apiFetch<Thread>(`/api/conversations/${conversationId}/messages`),
+    queryFn: () => apiFetch<Thread>(`/api/tenants/${tenantId}/conversations/${conversationId}/messages`),
   });
 
   // Auto-scroll to bottom on new messages.

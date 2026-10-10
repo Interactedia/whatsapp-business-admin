@@ -43,7 +43,6 @@ describe("auth boundary", () => {
   it("does not exempt similar-looking tenant API paths", async () => {
     const paths = [
       "/api/tenants/tenant-1/contacts/contact-1/messages",
-      "/api/tenants/tenant-1/conversations/conversation-1/messages",
       "/api/tenants/tenant-1/users/user-1",
     ];
 
@@ -51,6 +50,18 @@ describe("auth boundary", () => {
       const response = await authorized?.({ auth: null, request: request(pathname) });
       expect(response).toBe(false);
     }
+  });
+
+  it("returns 401 JSON for anonymous tenant message history", async () => {
+    const response = await authorized?.({
+      auth: null,
+      request: request("/api/tenants/tenant-1/conversations/conversation-1/messages"),
+    });
+
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).status).toBe(401);
+    expect((response as Response).headers.get("content-type")).toContain("application/json");
+    expect(await (response as Response).json()).toEqual({ error: "Unauthorized" });
   });
 
   it("returns 401 JSON for anonymous tenant contact list", async () => {

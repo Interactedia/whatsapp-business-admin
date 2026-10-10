@@ -1,6 +1,6 @@
 # Tenant HTTP Access
 
-WA-01-05C introduced the first bounded tenant-aware HTTP read surface using centralized tenant authorization and tenant-scoped repository access. WA-01-05D adds the matching protected conversation read endpoint. WA-01-05G-R2 adds the tenant contact list endpoint, canonical tenant navigation for Contacts, and removes the legacy global contact GET. WA-01-05H adds tenant-scoped contact write operations (POST/PATCH/DELETE), migrates the Contacts UI to tenant-aware endpoints, and removes the legacy global contact write handlers. WA-01-05I adds the tenant conversation list endpoint, canonical tenant navigation for Conversations (Inbox), and removes the legacy global conversation list GET.
+WA-01-05C introduced the first bounded tenant-aware HTTP read surface using centralized tenant authorization and tenant-scoped repository access. WA-01-05D adds the matching protected conversation read endpoint. WA-01-05G-R2 adds the tenant contact list endpoint, canonical tenant navigation for Contacts, and removes the legacy global contact GET. WA-01-05H adds tenant-scoped contact write operations (POST/PATCH/DELETE), migrates the Contacts UI to tenant-aware endpoints, and removes the legacy global contact write handlers. WA-01-05I adds the tenant conversation list endpoint, canonical tenant navigation for Conversations (Inbox), and removes the legacy global conversation list GET. WA-01-05J adds the tenant message history endpoint, migrates the Inbox UI consumer, and removes the legacy global message history GET.
 
 **These routes do not activate tenant isolation across legacy application routes.**
 
@@ -102,6 +102,59 @@ GET /api/tenants/:tenantId/conversations
 Read-only endpoint that returns a list of conversations owned by the specified tenant (up to 200). Only conversations with exact `tenantId` match AND whose related contact also has the same `tenantId` are returned — other tenants' conversations, null-owned conversations, and conversations with cross-tenant contacts are excluded. Tenant isolation is applied before pagination.
 
 The response includes an embedded `contact` object (`id`, `waId`, `name`, `profileName`), conversation status fields, and a computed `windowOpen` flag reflecting the 24-hour customer-service window.
+
+## Tenant Message History Route
+
+```
+GET /api/tenants/:tenantId/conversations/:conversationId/messages
+```
+
+Read-only endpoint that returns the message thread for a conversation owned by the specified tenant. Supports optional `take` (1–200, default 200) and `cursor` pagination. The route requires the conversation row and its related contact row to both be owned by the trusted `TenantContext.tenantId`. Unknown conversations, cross-tenant conversations, null-owned conversations, contact ownership mismatches, and malformed identifiers return `404`.
+
+**Query parameters:**
+- `take` — number of messages to return (1–200, default 200)
+- `cursor` — pagination cursor (message id from previous response)
+
+**Responses:**
+- `200 OK` — Thread object with `conversation`, `messages`, and `flowSubmissions`
+- `401 Unauthorized` — No session
+- `403 Forbidden` — No membership
+- `404 Not Found` — Conversation not found (unknown, cross-tenant, null-owned, or contact mismatch)
+
+**Behavior:**
+- Messages are returned ordered by timestamp ascending (oldest → newest), bounded by `take`.
+- Tenant isolation is applied through the repository before pagination.
+- Template content is resolved for `TEMPLATE`-type messages.
+- Flow submissions scoped to the conversation's verified tenant ownership are included.
+- If `unreadCount > 0`, the conversation is marked read (unreadCount set to 0).
+
+**Response shape:**
+```ts
+{
+  conversation: {
+    id: string;
+    contact: { id: string; waId: string; name: string | null; profileName: string | null };
+    windowOpen: boolean;
+    lastInboundAt: string | null;
+  };
+  messages: Array<{
+    id: string; conversationId: string; direction: string; type: string; status: string;
+    text: string | null; caption: string | null; hasMedia: boolean;
+    mediaMime: string | null; mediaFilename: string | null;
+    timestamp: string; waMessageId: string | null;
+    templateContent?: TemplateContent;
+  }>;
+  flowSubmissions: Array<{
+    id: string; waMessageId: string | null;
+    flow: { name: string };
+    response: Record<string, unknown> | null;
+    responseKeys: string[];
+    purgedAt: string | null; completedAt: string;
+  }>;
+}
+```
+
+**Never exposed:** `tenantId`, relation objects, raw payload fields, provider credentials, or internal security metadata.
 
 ## Canonical Tenant Conversations Navigation
 
@@ -322,12 +375,14 @@ The tenant-scoped routes are completely isolated from existing routes:
 | `/api/contacts/[id]` | **Removed** | N/A |
 | `/api/conversations` (GET) | **Removed (WA-01-05I)** | N/A |
 | `/api/conversations` (POST) | None (preserved write) | `requireUser()` |
-| `/api/conversations/[id]/messages` | None | `requireUser()` |
+| `/api/conversations/[id]/messages` (GET) | **Removed (WA-01-05J)** | N/A |
+| `/api/conversations/[id]/messages` (POST) | None (preserved send) | `requireUser()` |
 | `/api/tenants/:tenantId/contacts` | **Yes** | Session + membership verification |
 | `/api/tenants/:tenantId/contacts/:contactId` (GET) | **Yes** | Session + membership verification |
 | `/api/tenants/:tenantId/contacts/:contactId` (PATCH/DELETE) | **Yes** | Session + membership verification |
 | `/api/tenants/:tenantId/conversations` (GET) | **Yes** | Session + membership verification |
 | `/api/tenants/:tenantId/conversations/:conversationId` | **Yes** | Session + membership verification |
+| `/api/tenants/:tenantId/conversations/:conversationId/messages` | **Yes** | Session + membership verification |
 
 The legacy global contact write routes are removed. All contact write operations now require membership verification.
 
@@ -367,6 +422,26 @@ Automated behavioral tests cover:
 
 Build output includes `/api/tenants/[tenantId]/contacts/[contactId]`, proving the dynamic route is registered for write operations.
 
+### Message History Operations (WA-01-05J)
+- Authorized message history returns `200` with allowlisted conversation, messages, and flow submissions
+- Missing authentication returns `401`
+- Missing membership returns `403`
+- `ADMIN` without membership returns `403`
+- Unknown, cross-tenant, null-owned, and contact-mismatched conversations return `404`
+- Forged `userId` headers are ignored
+- Conversation is marked read when `unreadCount > 0`
+- No mark-read mutation when unreadCount is 0
+- Pagination via `take` and `cursor` is passed to repository
+- `take` is clamped to maximum 200
+- Template contents are resolved for TEMPLATE-type messages
+- Flow submissions are scoped through verified conversation tenant ownership
+- Response exposes only allowlisted fields (no `tenantId`, credentials, or internal metadata)
+- Legacy `/api/conversations/[id]/messages` GET is undefined (removed)
+- Legacy `/api/conversations/[id]/messages` POST is preserved unchanged
+- Inbox UI consumer uses the canonical tenant-scoped endpoint
+
+Build output includes `/api/tenants/[tenantId]/conversations/[conversationId]/messages`, proving the dynamic route is registered.
+
 ### Live HTTP verification
 
 WA-01-05-AUTH-01 updates the shared Auth.js boundary so anonymous `GET` requests to the protected tenant endpoints receive JSON authentication failures instead of browser redirects.
@@ -377,9 +452,11 @@ Live HTTP requests against an isolated local Next.js runtime now verify:
 |---------|--------|--------------|----------|
 | `GET /api/tenants/test-tenant/contacts/test-contact` | `401` | `application/json` | none |
 | `GET /api/tenants/test-tenant/conversations/test-conversation` | `401` | `application/json` | none |
+| `GET /api/tenants/test-tenant/conversations/test-conversation/messages` | `401` | `application/json` | none |
 | `POST /api/tenants/test-tenant/contacts` | `401` | `application/json` | none |
 | `PATCH /api/tenants/test-tenant/contacts/test-contact` | `401` | `application/json` | none |
 | `DELETE /api/tenants/test-tenant/contacts/test-contact` | `401` | `application/json` | none |
+| `GET /api/conversations/test-conversation/messages` | `307` | none | `/login?...` |
 | `GET /inbox` | `307` | none | `/login?callbackUrl=...` |
 
 The route handlers perform their own `auth()` check and return `401` if called without a session. The proxy-level JSON response prevents API/fetch consumers from receiving `/login` HTML while preserving browser-page login redirects.

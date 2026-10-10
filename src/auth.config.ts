@@ -8,6 +8,8 @@ const protectedTenantReadPattern =
   /^\/api\/tenants\/[^/]+\/(?:contacts|conversations)\/[^/]+$/;
 const protectedTenantListPattern =
   /^\/api\/tenants\/[^/]+\/(?:contacts|conversations)\/?$/;
+const protectedTenantMessageHistoryPattern =
+  /^\/api\/tenants\/[^/]+\/conversations\/[^/]+\/messages\/?$/;
 
 export const authConfig: NextAuthConfig = {
   trustHost: true,
@@ -27,7 +29,8 @@ export const authConfig: NextAuthConfig = {
         !isLoggedIn &&
         request.method === "GET" &&
         (protectedTenantReadPattern.test(nextUrl.pathname) ||
-          protectedTenantListPattern.test(nextUrl.pathname))
+          protectedTenantListPattern.test(nextUrl.pathname) ||
+          protectedTenantMessageHistoryPattern.test(nextUrl.pathname))
       ) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }

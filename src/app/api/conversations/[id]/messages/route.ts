@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
 import { handle, ok, requireUser, HttpError } from "@/lib/api";
 import { serializeMessage } from "@/lib/whatsapp/webhook";
 import { sendMessage, isWithinSessionWindow, type OutboundContent } from "@/lib/whatsapp/send";
@@ -7,47 +6,8 @@ import { uploadOutboundMedia } from "@/lib/whatsapp/media";
 import { mediaStore, extFromMime } from "@/lib/media";
 import { templateExampleComponents, templateRuntimeComponents } from "@/lib/whatsapp/template-service";
 import { extractVariables, isNamedToken, type ApiComponent } from "@/lib/whatsapp/template-types";
-import { presentFlowSubmission } from "@/lib/whatsapp/flow-present";
 import { finishPreparedFlowLaunch, launchFlow, prepareTemplateFlowLaunch } from "@/lib/whatsapp/flow-launch";
-import { resolveTemplateContents } from "@/lib/whatsapp/template-history";
-
-/** Fetch the thread (oldest → newest) and mark it read. */
-export const GET = handle(async (_req, { params }) => {
-  const session = await requireUser();
-  const { id } = await params;
-  const conversation = await prisma.conversation.findUnique({ where: { id }, include: { contact: true } });
-  if (!conversation) throw new HttpError(404, "Conversation not found");
-
-  const messages = await prisma.message.findMany({
-    where: { conversationId: id },
-    orderBy: { timestamp: "asc" },
-    take: 200,
-  });
-  const flowSubmissions = await prisma.flowSubmission.findMany({
-    where: { launch: { conversationId: id } },
-    include: { launch: { include: { flow: true } } },
-    orderBy: { completedAt: "asc" },
-  });
-  const templateContents = await resolveTemplateContents(messages);
-
-  // Mark read.
-  if (conversation.unreadCount > 0) {
-    await prisma.conversation.update({ where: { id }, data: { unreadCount: 0 } });
-  }
-
-  return ok({
-    conversation: {
-      id: conversation.id,
-      contact: conversation.contact,
-      windowOpen: isWithinSessionWindow(conversation.lastInboundAt),
-      lastInboundAt: conversation.lastInboundAt,
-    },
-    messages: messages.map((message) => serializeMessage(templateContents.has(message.id)
-      ? { ...message, payload: { templateContent: templateContents.get(message.id) } }
-      : message)),
-    flowSubmissions: flowSubmissions.map((submission) => presentFlowSubmission(submission, session.user.role === "ADMIN")),
-  });
-});
+import { prisma } from "@/lib/prisma";
 
 const textSchema = z.object({ kind: z.literal("text"), text: z.string().min(1) });
 const templateSchema = z.object({
