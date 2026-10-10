@@ -6,7 +6,10 @@ const phoneFindFirst = vi.hoisted(() => vi.fn());
 const phoneFindMany = vi.hoisted(() => vi.fn());
 const wabaFindFirst = vi.hoisted(() => vi.fn());
 const conversationFindUnique = vi.hoisted(() => vi.fn());
-const contactFindFirst = vi.hoisted(() => vi.fn());
+const contactFindUnique = vi.hoisted(() => vi.fn());
+const contactUpdate = vi.hoisted(() => vi.fn());
+const contactUpsert = vi.hoisted(() => vi.fn());
+const contactCreate = vi.hoisted(() => vi.fn());
 const conversationCreate = vi.hoisted(() => vi.fn());
 const messageCreate = vi.hoisted(() => vi.fn());
 const messageUpdate = vi.hoisted(() => vi.fn());
@@ -19,9 +22,10 @@ vi.mock("@/lib/prisma", () => ({
     tenantMembership: { findUnique: membershipFindUnique },
     phoneNumber: { findFirst: phoneFindFirst, findMany: phoneFindMany },
     wabaAccount: { findFirst: wabaFindFirst },
+    wabaSettings: { findUnique: vi.fn().mockResolvedValue({}) },
     conversation: { findUnique: conversationFindUnique, create: conversationCreate, update: conversationUpdate },
-    contact: { findFirst: contactFindFirst },
-    message: { create: messageCreate, update: messageUpdate },
+    contact: { findFirst: vi.fn(), findUnique: contactFindUnique, update: contactUpdate, create: contactCreate, upsert: contactUpsert },
+    message: { findUnique: vi.fn(), create: messageCreate, update: messageUpdate },
     template: { findUnique: templateFindUnique },
     apiLog: { create: apiLogCreate },
   },
@@ -40,7 +44,10 @@ vi.mock("@/lib/tenant", () => ({
 }));
 vi.mock("@/lib/crypto", () => ({ decrypt: (value: string) => `plain:${value}`, encrypt: (value: string) => `enc:${value}` }));
 vi.mock("@/server/realtime", () => ({ publish: vi.fn() }));
-vi.mock("@/lib/whatsapp/webhook", () => ({ serializeMessage: (message: unknown) => message }));
+vi.mock("@/lib/whatsapp/webhook", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/whatsapp/webhook")>();
+  return { ...actual, serializeMessage: (message: unknown) => message };
+});
 
 const context = { tenantId: "tenant-1", userId: "user-1", membershipId: "membership-1" };
 trustedContexts.add(context);
@@ -83,10 +90,78 @@ describe("tenant-owned WABA/PhoneNumber routing", () => {
     await expect(resolveTenantPhoneNumber(context, "foreign-phone")).rejects.toThrow("Tenant access denied");
   });
 
-  it("rejects ambiguous inbound business phone metadata", async () => {
+  it("requires explicit authorized phoneNumberId for new conversations (no implicit default)", async () => {
+    const { createTenantConversation, startTenantConversation } = await import("@/lib/tenant/conversations");
+
+    // Simulating foreign or missing number throws TenantAuthorizationError (handled by resolveTenantPhoneNumber returning null)
+    phoneFindFirst.mockResolvedValueOnce(null);
+    await expect(
+      createTenantConversation({ context, contactId: "contact-1", phoneNumberId: "missing-or-foreign" })
+    ).rejects.toThrow("Tenant access denied");
+
+    // Success case
+    phoneFindFirst.mockResolvedValueOnce(ownedPhone);
+    const existingContact = { id: "contact-1", tenantId: "tenant-1" };
+    contactFindUnique.mockResolvedValueOnce(null);
+    contactCreate.mockResolvedValueOnce(existingContact);
+    conversationFindUnique.mockResolvedValueOnce(null);
+    conversationCreate.mockResolvedValueOnce({ id: "conv-1" });
+
+    await expect(
+      startTenantConversation({ context, waId: "919812345678", phoneNumberId: "phone-1" })
+    ).resolves.toMatchObject({ id: "conv-1" });
+  });
+
+  it("inbound webhook binding: known -> succeeds, foreign/unknown/ambiguous -> rejected", async () => {
     const { resolveInboundPhoneNumber } = await import("@/lib/tenant/waba");
+
+    // Known exactly one -> succeeds
+    phoneFindMany.mockResolvedValueOnce([ownedPhone]);
+    await expect(resolveInboundPhoneNumber("meta-phone-1")).resolves.toEqual(ownedPhone);
+
+    // Foreign / Unknown (zero results) -> rejected
+    phoneFindMany.mockResolvedValueOnce([]);
+    await expect(resolveInboundPhoneNumber("meta-unknown")).rejects.toThrow("Tenant access denied");
+
+    // Ambiguous (multiple results) -> rejected
     phoneFindMany.mockResolvedValueOnce([ownedPhone, { ...ownedPhone, id: "phone-2" }]);
-    await expect(resolveInboundPhoneNumber("meta-phone-1")).rejects.toThrow("Tenant access denied");
+    await expect(resolveInboundPhoneNumber("meta-ambiguous")).rejects.toThrow("Tenant access denied");
+  });
+
+  it("cross-tenant credential isolation: prevents using another tenant's credentials", async () => {
+    const { resolveTenantPhoneNumber } = await import("@/lib/tenant/waba");
+    phoneFindFirst.mockResolvedValueOnce(null); // prisma query enforces wabaAccount: { tenantId: context.tenantId }
+    await expect(resolveTenantPhoneNumber(context, "foreign-phone-id")).rejects.toThrow("Tenant access denied");
+  });
+
+  it("historical unbound conversations and existing bound conflicts fail correctly on inbound", async () => {
+    const { processWebhook } = await import("@/lib/whatsapp/webhook");
+    const payload = {
+      entry: [{
+        changes: [{
+          field: "messages",
+          value: {
+            metadata: { display_phone_number: "1", phone_number_id: "meta-phone-1" },
+            contacts: [{ wa_id: "919812345678", profile: { name: "User" } }],
+            messages: [{ from: "919812345678", timestamp: "1600000000", id: "wamid.in", type: "text", text: { body: "hi" } }]
+          }
+        }]
+      }]
+    };
+
+    // 1. Existing unbound conversation fails closed if we try to rebind silently.
+    phoneFindMany.mockResolvedValueOnce([ownedPhone]);
+    contactUpsert.mockResolvedValueOnce({ id: "contact-1", tenantId: "tenant-1" });
+    conversationFindUnique.mockResolvedValueOnce({ id: "conv-hist", phoneNumberId: null });
+
+    await expect(processWebhook(payload)).rejects.toThrow("Inbound conversation is unbound");
+
+    // 2. Conflicting existing binding fails closed
+    phoneFindMany.mockResolvedValueOnce([ownedPhone]);
+    contactUpsert.mockResolvedValueOnce({ id: "contact-1", tenantId: "tenant-1" });
+    conversationFindUnique.mockResolvedValueOnce({ id: "conv-hist", phoneNumberId: "different-phone-id" });
+
+    await expect(processWebhook(payload)).rejects.toThrow("Inbound conversation sender mismatch");
   });
 
   it("fails closed for unbound conversations before provider invocation", async () => {
