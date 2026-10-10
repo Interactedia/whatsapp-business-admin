@@ -32,6 +32,11 @@ const mismatchedConversation: Conversation = {
   tenantId: tenant1,
   contactId: contact2.id,
 };
+const nullConversation: Conversation = {
+  id: "conversation-null",
+  tenantId: null,
+  contactId: contact1.id,
+};
 const message1: Message = {
   id: "message-1",
   tenantId: tenant1,
@@ -58,7 +63,7 @@ const nullMessage: Message = {
 };
 
 const baseContacts = [contact1, contact2, nullContact];
-const baseConversations = [conversation1, conversation2, mismatchedConversation];
+const baseConversations = [conversation1, conversation2, mismatchedConversation, nullConversation];
 const baseMessages = [message1, message2, mismatchedMessage, nullMessage];
 
 let contacts = [...baseContacts];
@@ -136,6 +141,11 @@ function fakeDb() {
         if (select) return { id: conversation.id };
         return includeConversation(conversation, include);
       }),
+      findMany: vi.fn(async ({ where, take, cursor, skip, include }: { where: Where; take: number; cursor?: { id: string }; skip?: number; include?: unknown }) => {
+        const matched = conversations.filter((row) => matchesConversation(row, where));
+        const start = cursor ? Math.max(0, matched.findIndex((row) => row.id === cursor.id) + (skip ?? 0)) : 0;
+        return matched.slice(start, start + take).map((c) => includeConversation(c, include));
+      }),
     },
     message: {
       findFirst: vi.fn(async ({ where, include }: { where: Where; include?: unknown }) => {
@@ -168,6 +178,7 @@ describe("WA-01-05B tenant-scoped messaging data access", () => {
     Object.assign(contact1, { id: "contact-1", tenantId: tenant1 });
     Object.assign(contact2, { id: "contact-2", tenantId: tenant2 });
     Object.assign(nullContact, { id: "contact-null", tenantId: null });
+    Object.assign(nullConversation, { id: "conversation-null", tenantId: null, contactId: contact1.id });
     delete contact1.name;
     delete contact2.name;
     delete nullContact.name;
@@ -359,5 +370,41 @@ describe("WA-01-05B tenant-scoped messaging data access", () => {
     await expect(repo.findConversation(ctx, "missing-conversation")).resolves.toBeNull();
     await expect(repo.findMessage(ctx, "missing-message")).resolves.toBeNull();
     await expect(repo.listConversationMessages(ctx, "missing-conversation")).resolves.toEqual([]);
+  });
+
+  it("lists only same-tenant conversations with owned contacts", async () => {
+    const result = await createTenantMessagingRepository(fakeDb() as TenantPrisma).listConversations(await context());
+
+    expect(result.map((c) => (c as { id: string }).id)).toEqual([conversation1.id]);
+  });
+
+  it("excludes cross-tenant, null-owned, and foreign-contact conversations from list", async () => {
+    const result = await createTenantMessagingRepository(fakeDb() as TenantPrisma).listConversations(await context());
+    const ids = result.map((c) => (c as { id: string }).id);
+
+    expect(ids).not.toContain(conversation2.id);
+    expect(ids).not.toContain(mismatchedConversation.id);
+    expect(ids).not.toContain(nullConversation.id);
+  });
+
+  it("rejects forged contexts and invalid pagination for listConversations", async () => {
+    const repo = createTenantMessagingRepository(fakeDb() as TenantPrisma);
+    const ctx = await context();
+    const forged = { tenantId: tenant1, userId: "user-1", membershipId: "membership-1" } as TenantContext;
+
+    await expect(repo.listConversations(forged)).rejects.toBeInstanceOf(TenantAuthorizationError);
+    await expect(repo.listConversations(null as unknown as TenantContext)).rejects.toBeInstanceOf(TenantAuthorizationError);
+    await expect(repo.listConversations(ctx, { take: 0 })).rejects.toBeInstanceOf(TenantAuthorizationError);
+    await expect(repo.listConversations(ctx, { take: 999 })).rejects.toBeInstanceOf(TenantAuthorizationError);
+  });
+
+  it("applies tenant filtering before pagination", async () => {
+    const repo = createTenantMessagingRepository(fakeDb() as TenantPrisma);
+    const ctx = await context();
+
+    const result = await repo.listConversations(ctx, { take: 1 });
+
+    expect(result).toHaveLength(1);
+    expect((result[0] as { id: string }).id).toBe(conversation1.id);
   });
 });

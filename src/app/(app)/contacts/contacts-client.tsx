@@ -28,6 +28,7 @@ type Contact = {
 export function ContactsClient({
   isAdmin,
   baseUrl,
+  conversationsHref,
 }: {
   isAdmin: boolean;
   /**
@@ -36,6 +37,8 @@ export function ContactsClient({
    * POST creates at this URL, PATCH/DELETE at `${baseUrl}/${id}`.
    */
   baseUrl: string;
+  /** Canonical tenant conversations page for "start chat" navigation. */
+  conversationsHref: string;
 }) {
   const qc = useQueryClient();
   const router = useRouter();
@@ -69,7 +72,7 @@ export function ContactsClient({
         method: "POST",
         body: JSON.stringify({ waId: c.waId, name: c.name ?? undefined }),
       }),
-    onSuccess: (conv) => router.push(`/inbox?c=${conv.id}`),
+    onSuccess: (conv) => router.push(`${conversationsHref}?c=${conv.id}`),
   });
 
   return (

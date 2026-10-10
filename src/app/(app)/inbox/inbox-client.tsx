@@ -56,7 +56,7 @@ function initials(c: Contact) {
   return displayName(c).replace("+", "").slice(0, 2).toUpperCase();
 }
 
-export function InboxClient() {
+export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: string; basePath: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const qc = useQueryClient();
@@ -65,7 +65,11 @@ export function InboxClient() {
 
   const { data: conversations = [] } = useQuery({
     queryKey: ["conversations", search],
-    queryFn: () => apiFetch<Conversation[]>(`/api/conversations${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+    queryFn: () => {
+      const base = conversationsUrl;
+      const qs = search ? `search=${encodeURIComponent(search)}` : "";
+      return apiFetch<Conversation[]>(qs ? `${base}?${qs}` : base);
+    },
     refetchInterval: 30_000,
   });
 
@@ -81,7 +85,7 @@ export function InboxClient() {
   });
 
   function openConversation(id: string) {
-    router.push(`/inbox?c=${id}`);
+    router.push(`${basePath}?c=${id}`);
   }
 
   return (
@@ -133,7 +137,7 @@ export function InboxClient() {
 
       {/* Thread */}
       <div className={cn("min-w-0 flex-1", activeId ? "block" : "hidden md:block")}>
-        {activeId ? <ThreadPane conversationId={activeId} onBack={() => router.push("/inbox")} /> : <EmptyThread />}
+        {activeId ? <ThreadPane conversationId={activeId} onBack={() => router.push(basePath)} /> : <EmptyThread />}
       </div>
     </div>
   );

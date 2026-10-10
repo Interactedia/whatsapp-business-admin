@@ -79,6 +79,7 @@ export function TenantContactsClient({
         <ContactsClient
           isAdmin={isAdmin}
           baseUrl={`/api/tenants/${tenant.id}/contacts`}
+          conversationsHref={`/t/${tenant.id}/conversations`}
         />
       </div>
     </div>

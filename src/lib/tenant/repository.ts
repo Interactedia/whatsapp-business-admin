@@ -16,6 +16,12 @@ const contactListSchema = paginationSchema.extend({
 
 export type ContactListPagination = z.input<typeof contactListSchema>;
 
+const conversationListSchema = paginationSchema.extend({
+  search: z.string().trim().max(500).optional(),
+});
+
+export type ConversationListPagination = z.input<typeof conversationListSchema>;
+
 export type TenantPrisma = {
   contact: {
     findFirst(args: unknown): Promise<unknown>;
@@ -24,7 +30,10 @@ export type TenantPrisma = {
     updateMany(args: unknown): Promise<{ count: number }>;
     deleteMany(args: unknown): Promise<{ count: number }>;
   };
-  conversation: { findFirst(args: unknown): Promise<unknown> };
+  conversation: {
+    findFirst(args: unknown): Promise<unknown>;
+    findMany(args: unknown): Promise<unknown[]>;
+  };
   message: {
     findFirst(args: unknown): Promise<unknown>;
     findMany(args: unknown): Promise<unknown[]>;
@@ -89,6 +98,35 @@ export function createTenantMessagingRepository(db: TenantPrisma = prisma) {
           tenantId: tenantId(context),
           contact: { tenantId: tenantId(context) },
         },
+        include: { contact: true },
+      });
+    },
+
+    async listConversations(context: TenantContext, pagination: ConversationListPagination = {}) {
+      const tenant = tenantId(context);
+      const parsed = conversationListSchema.safeParse(pagination);
+      if (!parsed.success) throw new TenantAuthorizationError();
+      const { take, cursor, search } = parsed.data;
+
+      return db.conversation.findMany({
+        where: {
+          tenantId: tenant,
+          contact: {
+            tenantId: tenant,
+            ...(search
+              ? {
+                  OR: [
+                    { name: { contains: search, mode: "insensitive" as const } },
+                    { profileName: { contains: search, mode: "insensitive" as const } },
+                    { waId: { contains: search } },
+                  ],
+                }
+              : undefined),
+          },
+        },
+        orderBy: [{ lastMessageAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+        take,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
         include: { contact: true },
       });
     },

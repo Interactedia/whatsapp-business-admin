@@ -1,6 +1,6 @@
 # Tenant HTTP Access
 
-WA-01-05C introduced the first bounded tenant-aware HTTP read surface using centralized tenant authorization and tenant-scoped repository access. WA-01-05D adds the matching protected conversation read endpoint. WA-01-05G-R2 adds the tenant contact list endpoint, canonical tenant navigation for Contacts, and removes the legacy global contact GET. WA-01-05H adds tenant-scoped contact write operations (POST/PATCH/DELETE), migrates the Contacts UI to tenant-aware endpoints, and removes the legacy global contact write handlers.
+WA-01-05C introduced the first bounded tenant-aware HTTP read surface using centralized tenant authorization and tenant-scoped repository access. WA-01-05D adds the matching protected conversation read endpoint. WA-01-05G-R2 adds the tenant contact list endpoint, canonical tenant navigation for Contacts, and removes the legacy global contact GET. WA-01-05H adds tenant-scoped contact write operations (POST/PATCH/DELETE), migrates the Contacts UI to tenant-aware endpoints, and removes the legacy global contact write handlers. WA-01-05I adds the tenant conversation list endpoint, canonical tenant navigation for Conversations (Inbox), and removes the legacy global conversation list GET.
 
 **These routes do not activate tenant isolation across legacy application routes.**
 
@@ -92,6 +92,28 @@ GET /api/tenants/:tenantId/conversations/:conversationId
 ```
 
 Read-only endpoint that returns a single conversation owned by the specified tenant. The route requires the conversation row and its related contact row to both be owned by the trusted `TenantContext.tenantId`. Unknown conversations, cross-tenant conversations, null-owned conversations and contact ownership mismatches return `404`.
+
+## Tenant Conversation List Route
+
+```
+GET /api/tenants/:tenantId/conversations
+```
+
+Read-only endpoint that returns a list of conversations owned by the specified tenant (up to 200). Only conversations with exact `tenantId` match AND whose related contact also has the same `tenantId` are returned — other tenants' conversations, null-owned conversations, and conversations with cross-tenant contacts are excluded. Tenant isolation is applied before pagination.
+
+The response includes an embedded `contact` object (`id`, `waId`, `name`, `profileName`), conversation status fields, and a computed `windowOpen` flag reflecting the 24-hour customer-service window.
+
+## Canonical Tenant Conversations Navigation
+
+Conversations (Inbox) uses explicit tenant-scoped navigation:
+
+```
+/t/:tenantId/conversations
+```
+
+The page verifies `TenantMembership` server-side before rendering tenant-sensitive information. Unauthorized tenant navigation shows the selector with authorized memberships. No tenant is auto-selected, no implicit tenant cookie exists, and the first membership is not chosen automatically. Users without memberships see a clear no-access state.
+
+The legacy global conversation list `GET /api/conversations` is removed. The `POST /api/conversations` (start conversation) write operation is preserved unchanged.
 
 ## Canonical Tenant Navigation
 
@@ -298,11 +320,13 @@ The tenant-scoped routes are completely isolated from existing routes:
 |-------|-------------------|---------------|
 | `/api/contacts` | **Removed** | N/A |
 | `/api/contacts/[id]` | **Removed** | N/A |
-| `/api/conversations` | None | `requireUser()` |
+| `/api/conversations` (GET) | **Removed (WA-01-05I)** | N/A |
+| `/api/conversations` (POST) | None (preserved write) | `requireUser()` |
 | `/api/conversations/[id]/messages` | None | `requireUser()` |
 | `/api/tenants/:tenantId/contacts` | **Yes** | Session + membership verification |
 | `/api/tenants/:tenantId/contacts/:contactId` (GET) | **Yes** | Session + membership verification |
 | `/api/tenants/:tenantId/contacts/:contactId` (PATCH/DELETE) | **Yes** | Session + membership verification |
+| `/api/tenants/:tenantId/conversations` (GET) | **Yes** | Session + membership verification |
 | `/api/tenants/:tenantId/conversations/:conversationId` | **Yes** | Session + membership verification |
 
 The legacy global contact write routes are removed. All contact write operations now require membership verification.

@@ -14,16 +14,22 @@ export type TenantMembership = {
 
 export function TenantSelector({
   memberships,
+  resource = "contacts",
 }: {
   memberships: TenantMembership[];
+  resource?: "contacts" | "conversations";
 }) {
   const router = useRouter();
+  const resourceHref =
+    resource === "conversations" ? "conversations" : "contacts";
+  const resourceTitle =
+    resource === "conversations" ? "Conversations" : "Contacts";
 
   if (memberships.length === 0) {
     return (
       <div className="flex h-full flex-col">
         <PageHeader
-          title="Contacts"
+          title={resourceTitle}
           description="You do not have access to any tenants."
         />
         <div className="flex flex-1 items-center justify-center p-6">
@@ -43,13 +49,13 @@ export function TenantSelector({
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="Contacts"
-        description="Select a tenant to view contacts."
+        title={resourceTitle}
+        description={`Select a tenant to view ${resourceHref}.`}
       />
       <div className="flex flex-1 items-center justify-center p-6">
         <div className="grid w-full max-w-md gap-3">
           <p className="text-sm text-muted-foreground">
-            Choose a tenant to access contacts:
+            {`Choose a tenant to access ${resourceHref}:`}
           </p>
           {memberships.map((m) => (
             <Card
@@ -67,7 +73,7 @@ export function TenantSelector({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => router.push(`/t/${m.tenantId}/contacts`)}
+                  onClick={() => router.push(`/t/${m.tenantId}/${resourceHref}`)}
                 >
                   Open
                 </Button>
