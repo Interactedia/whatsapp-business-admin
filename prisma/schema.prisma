@@ -29,12 +29,13 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  templates     Template[]
-  broadcasts    Broadcast[]
-  sentMessages  Message[]      @relation("SentBy")
-  conversations Conversation[] @relation("AssignedTo")
-  apiKeys       ApiKey[]
-  flows         Flow[]
+  templates         Template[]
+  broadcasts        Broadcast[]
+  sentMessages      Message[]          @relation("SentBy")
+  conversations     Conversation[]     @relation("AssignedTo")
+  apiKeys           ApiKey[]
+  flows             Flow[]
+  tenantMemberships TenantMembership[]
 }
 
 // External REST API keys (for /api/v1). Only the SHA-256 hash is stored.
@@ -81,6 +82,20 @@ model Tenant {
   contacts     Contact[]      @relation("TenantContacts")
   conversations Conversation[] @relation("TenantConversations")
   messages      Message[]      @relation("TenantMessages")
+  tenantMemberships TenantMembership[]
+}
+
+// Persistence foundation only. Membership does not grant tenant authorization.
+model TenantMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
 }
 
 // A Meta WhatsApp Business Account owned by a logical tenant.
