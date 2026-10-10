@@ -1,16 +1,24 @@
 # Tenant HTTP Access
 
-WA-01-05C introduces the first bounded tenant-aware HTTP read surface using centralized tenant authorization and tenant-scoped repository access.
+WA-01-05C introduced the first bounded tenant-aware HTTP read surface using centralized tenant authorization and tenant-scoped repository access. WA-01-05D adds the matching protected conversation read endpoint.
 
-**This route does not activate tenant isolation across legacy application routes.**
+**These routes do not activate tenant isolation across legacy application routes.**
 
-## New Route
+## Tenant Contact Route
 
 ```
 GET /api/tenants/:tenantId/contacts/:contactId
 ```
 
 Read-only endpoint that returns a single contact owned by the specified tenant.
+
+## Tenant Conversation Route
+
+```
+GET /api/tenants/:tenantId/conversations/:conversationId
+```
+
+Read-only endpoint that returns a single conversation owned by the specified tenant. The route requires the conversation row and its related contact row to both be owned by the trusted `TenantContext.tenantId`. Unknown conversations, cross-tenant conversations, null-owned conversations and contact ownership mismatches return `404`.
 
 ## Authentication Requirements
 
@@ -50,10 +58,11 @@ Global `ADMIN` and `AGENT` roles do **not** bypass this check.
 
 ## Data Access
 
-After authorization, the route invokes the tenant-scoped repository:
+After authorization, the routes invoke the tenant-scoped repository:
 
 ```ts
-const raw = await tenantMessagingRepository.findContact(context, contactId);
+const contact = await tenantMessagingRepository.findContact(context, contactId);
+const conversation = await tenantMessagingRepository.findConversation(context, conversationId);
 ```
 
 The repository `findContact` function:
@@ -61,19 +70,27 @@ The repository `findContact` function:
 - Queries with `WHERE id = ? AND tenantId = ?` — enforcing tenant ownership at the database level
 - Returns `null` for unknown, cross-tenant, or null-owned contacts
 
-No direct Prisma `contact.findUnique` or `contact.findFirst` is used in the HTTP handler.
+The repository `findConversation` function:
+- Accepts only a `WeakSet`-marked `TenantContext`
+- Queries with `WHERE id = ? AND tenantId = ? AND contact.tenantId = ?`
+- Returns `null` for unknown, cross-tenant, null-owned, or contact-mismatched conversations
+
+No direct Prisma `contact.findUnique`, `contact.findFirst`, `conversation.findUnique`, or `conversation.findFirst` is used in the HTTP handlers.
 
 ## HTTP Response Codes
 
 | Scenario | HTTP Status | Response |
 |----------|-------------|----------|
 | Valid session + valid membership + existing contact | 200 | Contact object |
+| Valid session + valid membership + existing conversation | 200 | Conversation object |
 | No session | 401 | `{"error": "Unauthorized"}` |
 | No membership / unknown tenant / malformed tenantId | 403 | `{"error": "Tenant access denied"}` |
 | Contact not found (unknown, cross-tenant, null-owned) | 404 | `{"error": "Contact not found"}` |
-| Malformed contactId | 403 | `{"error": "Tenant access denied"}` |
+| Conversation not found (unknown, cross-tenant, null-owned, contact mismatch, malformed conversationId) | 404 | `{"error": "Conversation not found"}` |
 
-Error responses use generic messages to avoid disclosing tenant existence or membership status.
+Malformed resource identifiers are rejected inside the tenant-scoped repository and surface as `404`, never disclosing whether the resource exists or which tenant owns it.
+
+Error responses use generic messages to avoid disclosing tenant existence, membership status, or resource ownership.
 
 ## Allowed Response Fields
 
@@ -93,11 +110,28 @@ type ContactRead = {
 };
 ```
 
-**Never exposed:** `tenantId`, `conversation`, relations, internal metadata, or other tenant identifiers.
+Conversation responses expose only:
+
+```ts
+type ConversationRead = {
+  id: string;
+  contactId: string;
+  status: "OPEN" | "CLOSED";
+  unreadCount: number;
+  lastMessageAt: Date | null;
+  lastInboundAt: Date | null;
+  lastPreview: string | null;
+  assignedUserId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+```
+
+**Never exposed:** `tenantId`, relation objects, messages, credentials, internal metadata, or unrelated tenant identifiers.
 
 ## Fail-Closed Behavior
 
-The route denies access by default for:
+The routes deny access by default for:
 
 - Missing authentication
 - Inactive users
@@ -107,16 +141,20 @@ The route denies access by default for:
 - Contacts owned by other tenants
 - Contacts with `null` tenantId
 - Unknown contacts
+- Conversations owned by other tenants
+- Conversations with `null` tenantId
+- Conversations whose related contact belongs to another tenant
+- Unknown conversations
 
 There is no fallback to legacy unscoped repositories.
 
 ## Security Limitations
 
-1. **No authorization beyond membership** — membership verification does not grant permission to send, delete, or mutate contacts
-2. **Legacy routes unchanged** — existing `/api/contacts` and `/api/contacts/[id]` routes do not use tenant enforcement
-3. **No rate limiting** — this route inherits global Next.js limits only
+1. **No authorization beyond membership** — membership verification does not grant permission to send, delete, or mutate contacts or conversations
+2. **Legacy routes unchanged** — existing `/api/contacts`, `/api/contacts/[id]`, `/api/conversations`, and `/api/conversations/[id]/messages` routes do not use tenant enforcement
+3. **No rate limiting** — these routes inherit global Next.js limits only
 4. **No audit logging** — access events are not persisted in this implementation unit
-5. **No tenant role hierarchy** — all tenant members have equal read access to contacts
+5. **No tenant role hierarchy** — all tenant members have equal read access to the protected tenant contact and conversation reads
 
 ## Legacy Route Separation
 
@@ -126,9 +164,35 @@ The new route is completely isolated from existing routes:
 |-------|-------------------|---------------|
 | `/api/contacts` | None | `requireUser()` |
 | `/api/contacts/[id]` (PATCH/DELETE) | None | `requireUser()` / `requireAdmin()` |
+| `/api/conversations` | None | `requireUser()` |
+| `/api/conversations/[id]/messages` | None | `requireUser()` |
 | `/api/tenants/:tenantId/contacts/:contactId` | **Yes** | Session + membership verification |
+| `/api/tenants/:tenantId/conversations/:conversationId` | **Yes** | Session + membership verification |
 
 Existing routes continue to use their current authorization semantics.
+
+## Tested HTTP Scenarios
+
+Automated behavioral tests cover:
+
+- Authorized conversation read returns `200` with allowlisted fields
+- Missing authentication returns `401` at the handler level
+- Missing membership and `ADMIN` without membership return `403`
+- Unknown, cross-tenant, null-owned, and contact-mismatched conversations return `404`
+- Forged `userId` headers are ignored
+- Existing protected contact endpoint still rejects missing authentication
+
+Build output includes `/api/tenants/[tenantId]/conversations/[conversationId]`, proving the dynamic route is registered.
+
+### Live HTTP verification and known middleware limitation
+
+Live HTTP requests against an isolated production Next.js instance confirm the dynamic route resolves for distinct identifier values (each redirect carries its own `callbackUrl`). However, an unauthenticated live request returns `307` (redirect to `/login`), not the handler's `401`.
+
+This is because the global NextAuth middleware (`src/proxy.ts`) intercepts `/api/tenants/*` before the route handler runs. Its `authorized` callback returns a redirect for browser navigation, which is incorrect for API/fetch consumers: the `307` is followed transparently and yields the `/login` HTML page instead of a `401` JSON body. This is a known pre-existing CORS/cookie middleware defect and is identical for the already-accepted contact endpoint (WA-01-05C).
+
+The handler-level `401`/`403`/`404` contract is correct and unit-verified. Fixing the middleware to return `401` JSON for API routes is an authentication-layer change that is out of scope for this task (it would alter existing authentication behavior for all `/api/tenants/*` routes) and requires a separate approved implementation unit.
+
+No controlled NextAuth session fixture is introduced by this task, so authorized `200` and tenant-denied `403`/`404` are verified at the handler level only, not end-to-end over live HTTP.
 
 ## Future Integration Requirements
 
