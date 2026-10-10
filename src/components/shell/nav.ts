@@ -1,5 +1,4 @@
 import {
-  LayoutDashboard,
   MessageSquare,
   Users,
   LayoutTemplate,
@@ -34,7 +33,6 @@ export type NavItem = {
  * Items marked `global` keep their absolute path and do not inject a tenant.
  */
 export const NAV_ITEMS: NavItem[] = [
-  { key: "/", label: "Dashboard", icon: LayoutDashboard, global: true },
   { key: "conversations", label: "Inbox", icon: MessageSquare, tenantScoped: true },
   { key: "contacts", label: "Contacts", icon: Users, tenantScoped: true },
   { key: "templates", label: "Templates", icon: LayoutTemplate, adminOnly: true, tenantScoped: true },

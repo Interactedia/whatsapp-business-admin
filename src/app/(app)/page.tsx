@@ -18,8 +18,8 @@ async function getMemberships(userId: string) {
 }
 
 /**
- * Dashboard — requires explicit tenant selection.
- * - Zero memberships: show the empty state via TenantSelector.
+ * Root dashboard — entry point that resolves the user's tenant context.
+ * - Zero memberships: show the empty state.
  * - One membership: auto-redirect to that tenant's inbox.
  * - Multiple memberships: show the selection screen.
  */
@@ -34,8 +34,6 @@ export default async function DashboardPage() {
   }
 
   if (memberships.length === 1) {
-    // Ponytail: absolute URL to avoid host-relative redirects that browsers
-    // sometimes strip or rewrite to the dev-server host (e.g. 127.0.0.1).
     redirect(`/t/${memberships[0].tenantId}/conversations`);
   }
 
