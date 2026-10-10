@@ -5,6 +5,8 @@ let mockAuthValue: { user: { id: string; role: string } } | null = null;
 let mockResolveResult: TenantContext | Error = new TenantAuthorizationError();
 let mockFindConversationResult: unknown = null;
 let mockListConversationsResult: unknown[] = [];
+let mockCreateConversationResult: unknown = null;
+let mockUpdateConversationResult: unknown = null;
 
 function mockAuth(session: typeof mockAuthValue) {
   mockAuthValue = session;
@@ -22,9 +24,19 @@ function mockListConversations(result: unknown[]) {
   mockListConversationsResult = result;
 }
 
+function mockCreateConversation(result: unknown) {
+  mockCreateConversationResult = result;
+}
+
+function mockUpdateConversation(result: unknown) {
+  mockUpdateConversationResult = result;
+}
+
 const findConversationSpy = vi.hoisted(() => vi.fn());
 const resolveTenantContextSpy = vi.hoisted(() => vi.fn());
 const listConversationsSpy = vi.hoisted(() => vi.fn());
+const createConversationSpy = vi.hoisted(() => vi.fn());
+const updateConversationSpy = vi.hoisted(() => vi.fn());
 
 const hoistedMockAuth = vi.hoisted(() => {
   return () => Promise.resolve(mockAuthValue);
@@ -53,6 +65,22 @@ const hoistedMockListConversations = vi.hoisted(() => {
   };
 });
 
+const hoistedMockCreateConversation = vi.hoisted(() => {
+  return (...args: unknown[]) => {
+    createConversationSpy(...args);
+    if (mockCreateConversationResult instanceof Error) throw mockCreateConversationResult;
+    return Promise.resolve(mockCreateConversationResult);
+  };
+});
+
+const hoistedMockUpdateConversation = vi.hoisted(() => {
+  return (...args: unknown[]) => {
+    updateConversationSpy(...args);
+    if (mockUpdateConversationResult instanceof Error) throw mockUpdateConversationResult;
+    return Promise.resolve(mockUpdateConversationResult);
+  };
+});
+
 vi.mock("@/auth", () => ({
   auth: hoistedMockAuth,
 }));
@@ -71,12 +99,16 @@ vi.mock("@/lib/tenant/repository", () => ({
   tenantMessagingRepository: {
     findConversation: hoistedMockFindConversation,
     listConversations: hoistedMockListConversations,
+    createConversation: hoistedMockCreateConversation,
+    updateConversation: hoistedMockUpdateConversation,
+    // Also mock updateConversation so it doesn't call through to real findConversation.
+    // In tests that don't set mockUpdateConversationResult, default to null.
   },
 }));
 
 import { GET as getContact } from "@/app/api/tenants/[tenantId]/contacts/[contactId]/route";
-import { GET } from "@/app/api/tenants/[tenantId]/conversations/[conversationId]/route";
-import { GET as getConversationList } from "@/app/api/tenants/[tenantId]/conversations/route";
+import { GET, PATCH } from "@/app/api/tenants/[tenantId]/conversations/[conversationId]/route";
+import { GET as getConversationList, POST as postConversation } from "@/app/api/tenants/[tenantId]/conversations/route";
 
 function makeRequest(tenantId: string, conversationId: string) {
   return new Request(`https://example.test/api/tenants/${tenantId}/conversations/${conversationId}`, {
@@ -147,6 +179,8 @@ describe("WA-01-05D tenant conversation HTTP access", () => {
     mockResolveResult = new TenantAuthorizationError();
     mockFindConversationResult = null;
     mockListConversationsResult = [];
+    mockCreateConversationResult = null;
+    mockUpdateConversationResult = null;
     vi.clearAllMocks();
   });
 
@@ -460,5 +494,211 @@ describe("WA-01-05I tenant conversation list HTTP access", () => {
     );
 
     expect(response.status).toBe(401);
+  });
+
+  // -------------------------------------------------------------------------
+  // A1 — Conversation creation POST security (tenant-scoped)
+  // -------------------------------------------------------------------------
+
+  it("POST /api/tenants/:tenantId/conversations — anonymous → 401", async () => {
+    mockAuth(null);
+    const response = await postConversation(
+      new Request("https://example.test/api/tenants/tenant-1/conversations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ waId: "919812345678" }),
+      }),
+      makeListParams("tenant-1"),
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("POST /api/tenants/:tenantId/conversations — missing membership → 403", async () => {
+    mockAuth({ user: { id: "user-2", role: "AGENT" } });
+    mockResolveTenantContext(new TenantAuthorizationError());
+    const response = await postConversation(
+      new Request("https://example.test/api/tenants/tenant-1/conversations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ waId: "919812345678" }),
+      }),
+      makeListParams("tenant-1"),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "Tenant access denied" });
+  });
+
+  it("POST /api/tenants/:tenantId/conversations — ADMIN without membership → 403", async () => {
+    mockAuth({ user: { id: "admin-user", role: "ADMIN" } });
+    mockResolveTenantContext(new TenantAuthorizationError());
+    const response = await postConversation(
+      new Request("https://example.test/api/tenants/tenant-2/conversations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ waId: "919812345678" }),
+      }),
+      makeListParams("tenant-2"),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it("POST /api/tenants/:tenantId/conversations — null-owned contact → 403", async () => {
+    mockAuth({ user: { id: "user-1", role: "AGENT" } });
+    mockResolveTenantContext(trustedContext);
+    // Repository throws TenantAuthorizationError when the upserted contact is not owned by the tenant.
+    mockCreateConversation(new TenantAuthorizationError());
+    const response = await postConversation(
+      new Request("https://example.test/api/tenants/tenant-1/conversations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ waId: "919812345678" }),
+      }),
+      makeListParams("tenant-1"),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it("POST /api/tenants/:tenantId/conversations — success returns conversation id", async () => {
+    mockAuth({ user: { id: "user-1", role: "AGENT" } });
+    mockResolveTenantContext(trustedContext);
+    mockCreateConversation({
+      conversation: { id: "conv-new-1" },
+      contact: { id: "contact-new-1" },
+    });
+    const response = await postConversation(
+      new Request("https://example.test/api/tenants/tenant-1/conversations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ waId: "919812345678", name: "Jane" }),
+      }),
+      makeListParams("tenant-1"),
+    );
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body).toEqual({ id: "conv-new-1", contactId: "contact-new-1" });
+    expect(createConversationSpy).toHaveBeenCalledWith(trustedContext, { waId: "919812345678", name: "Jane" });
+  });
+
+  it("POST /api/tenants/:tenantId/conversations — invalid waId → 400", async () => {
+    mockAuth({ user: { id: "user-1", role: "AGENT" } });
+    mockResolveTenantContext(trustedContext);
+    const response = await postConversation(
+      new Request("https://example.test/api/tenants/tenant-1/conversations", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ waId: "not-a-phone-number" }),
+      }),
+      makeListParams("tenant-1"),
+    );
+    expect(response.status).toBe(400);
+  });
+
+  // -------------------------------------------------------------------------
+  // A2 — Conversation mutation PATCH security (tenant-scoped)
+  // -------------------------------------------------------------------------
+
+  it("PATCH /api/tenants/:tenantId/conversations/:id — anonymous → 401", async () => {
+    mockAuth(null);
+    const response = await PATCH(
+      new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "CLOSED" }),
+      }),
+      makeParams("tenant-1", "conv-1"),
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("PATCH /api/tenants/:tenantId/conversations/:id — missing membership → 403", async () => {
+    mockAuth({ user: { id: "user-2", role: "AGENT" } });
+    mockResolveTenantContext(new TenantAuthorizationError());
+    const response = await PATCH(
+      new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "CLOSED" }),
+      }),
+      makeParams("tenant-1", "conv-1"),
+    );
+    expect(response.status).toBe(403);
+  });
+
+  it("PATCH /api/tenants/:tenantId/conversations/:id — cross-tenant → 404", async () => {
+    mockAuth({ user: { id: "user-1", role: "AGENT" } });
+    mockResolveTenantContext(trustedContext);
+    // Cross-tenant conversation not found — set to null (NOT an Error instance).
+    mockFindConversation(null);
+    const response = await PATCH(
+      new Request("https://example.test/api/tenants/tenant-1/conversations/conv-other-tenant", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "CLOSED" }),
+      }),
+      makeParams("tenant-1", "conv-other-tenant"),
+    );
+    expect(response.status).toBe(404);
+    // updateConversation returns null for cross-tenant — 404 is returned.
+    // Note: hoistedMockUpdateConversation is called with null result (not an Error).
+  });
+
+  it("PATCH /api/tenants/:tenantId/conversations/:id — success updates conversation", async () => {
+    mockAuth({ user: { id: "user-1", role: "AGENT" } });
+    mockResolveTenantContext(trustedContext);
+    mockFindConversation(conversationRow());
+    mockUpdateConversation(conversationRow({ status: "CLOSED" }));
+    const response = await PATCH(
+      new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ status: "CLOSED" }),
+      }),
+      makeParams("tenant-1", "conv-1"),
+    );
+    expect(response.status).toBe(200);
+    expect(updateConversationSpy).toHaveBeenCalledWith(
+      trustedContext,
+      "conv-1",
+      { status: "CLOSED" },
+    );
+  });
+
+  it("PATCH /api/tenants/:tenantId/conversations/:id — no fields → 400", async () => {
+    mockAuth({ user: { id: "user-1", role: "AGENT" } });
+    mockResolveTenantContext(trustedContext);
+    mockFindConversation(conversationRow());
+    const response = await PATCH(
+      new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+      makeParams("tenant-1", "conv-1"),
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("PATCH /api/tenants/:tenantId/conversations/:id — forged identity in body is ignored", async () => {
+    mockAuth({ user: { id: "user-1", role: "AGENT" } });
+    mockResolveTenantContext(trustedContext);
+    mockFindConversation(conversationRow());
+    mockUpdateConversation(conversationRow({ status: "CLOSED" }));
+    const response = await PATCH(
+      new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        // Attempt to forge tenantId or reassign conversation.
+        body: JSON.stringify({ status: "CLOSED", tenantId: "attacker-tenant" }),
+      }),
+      makeParams("tenant-1", "conv-1"),
+    );
+    // tenantId is not in updateSchema so it is ignored. The update succeeds with the URL tenant.
+    expect(response.status).toBe(200);
+    // Verify the repository was called with trusted context tenant, not the forged one.
+    expect(updateConversationSpy).toHaveBeenCalledWith(
+      trustedContext,
+      "conv-1",
+      { status: "CLOSED" },
+    );
   });
 });

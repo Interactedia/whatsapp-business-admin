@@ -65,6 +65,20 @@ vi.mock("@/lib/tenant/repository", () => ({
 vi.mock("@/lib/whatsapp/template-history", () => ({
   resolveTemplateContents: resolveTemplateContentsSpy,
 }));
+vi.mock("@/lib/whatsapp/send", () => ({
+  sendMessage: vi.fn().mockResolvedValue({
+    id: "msg-sent-1",
+    conversationId: "conv-1",
+    direction: "OUT",
+    type: "TEXT",
+    status: "SENT",
+    text: "Hello world",
+    timestamp: new Date("2026-01-01T12:00:00Z"),
+    waMessageId: "wamid.123",
+    payload: null,
+  }),
+  isWithinSessionWindow: vi.fn().mockReturnValue(true),
+}));
 
 // Mock prisma for flow submissions and mark-read.
 vi.mock("@/lib/prisma", () => ({
@@ -82,7 +96,7 @@ const mockTenantContext: TenantContext = {
 
 const mockPrisma = vi.mocked(await import("@/lib/prisma")).prisma;
 
-import { GET } from "@/app/api/tenants/[tenantId]/conversations/[conversationId]/messages/route";
+import { GET, POST as postMessage } from "@/app/api/tenants/[tenantId]/conversations/[conversationId]/messages/route";
 
 function makeRequest(tenantId: string, conversationId: string, qs = "") {
   return new Request(
@@ -374,6 +388,188 @@ describe("GET /api/tenants/:tenantId/conversations/:conversationId/messages", ()
       expect(source).toMatch(/\/api\/tenants\/\${tenantId}\/conversations\/\${conversationId}\/messages/);
       // Should NOT use the legacy global endpoint for POST.
       expect(source).not.toMatch(/\/api\/conversations\/\$\{conversationId\}\/messages.*method.*POST/);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // A3 — Message send POST security (tenant-scoped)
+  // -------------------------------------------------------------------------
+
+  describe("A3 message send tenant authorization", () => {
+    function makeSendParams(tenantId: string, conversationId: string) {
+      return { params: Promise.resolve({ tenantId, conversationId }) };
+    }
+
+    it("POST /api/tenants/:tenantId/conversations/:id/messages — anonymous → 401", async () => {
+      mockAuth(null);
+      const response = await postMessage(
+        new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1/messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind: "text", text: "hello" }),
+        }),
+        makeSendParams("tenant-1", "conv-1"),
+      );
+      expect(response.status).toBe(401);
+    });
+
+    it("POST — missing membership → 403", async () => {
+      mockAuth({ user: { id: "user-2", role: "AGENT" } });
+      mockResolveResult = new TenantAuthorizationError();
+      const response = await postMessage(
+        new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1/messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind: "text", text: "hello" }),
+        }),
+        makeSendParams("tenant-1", "conv-1"),
+      );
+      expect(response.status).toBe(403);
+    });
+
+    it("POST — cross-tenant conversation → 404 (no sendMessage called)", async () => {
+      mockAuth({ user: { id: "user-1", role: "AGENT" } });
+      mockResolveResult = mockTenantContext;
+      mockFindConversationResult = null;
+      const { sendMessage } = await import("@/lib/whatsapp/send");
+      const sendSpy = vi.mocked(sendMessage);
+      sendSpy.mockClear();
+      const response = await postMessage(
+        new Request("https://example.test/api/tenants/tenant-1/conversations/conv-other/messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind: "text", text: "hello" }),
+        }),
+        makeSendParams("tenant-1", "conv-other"),
+      );
+      expect(response.status).toBe(404);
+      expect(sendSpy).not.toHaveBeenCalled();
+    });
+
+    it("POST — session window closed returns 403 (no sendMessage called)", async () => {
+      mockAuth({ user: { id: "user-1", role: "AGENT" } });
+      mockResolveResult = mockTenantContext;
+      mockFindConversationResult = conversationRow();
+      const { isWithinSessionWindow, sendMessage } = await import("@/lib/whatsapp/send");
+      vi.mocked(isWithinSessionWindow).mockReturnValue(false);
+      const sendSpy = vi.mocked(sendMessage);
+      sendSpy.mockClear();
+      const response = await postMessage(
+        new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1/messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind: "text", text: "hello" }),
+        }),
+        makeSendParams("tenant-1", "conv-1"),
+      );
+      expect(response.status).toBe(403);
+      expect(sendSpy).not.toHaveBeenCalled();
+    });
+
+    it("POST — valid text send calls sendMessage with correct args", async () => {
+      mockAuth({ user: { id: "user-1", role: "AGENT" } });
+      mockResolveResult = mockTenantContext;
+      mockFindConversationResult = conversationRow();
+      const { isWithinSessionWindow, sendMessage } = await import("@/lib/whatsapp/send");
+      vi.mocked(isWithinSessionWindow).mockReturnValue(true);
+      const sendSpy = vi.mocked(sendMessage);
+      sendSpy.mockClear();
+      const response = await postMessage(
+        new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1/messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind: "text", text: "Hello world" }),
+        }),
+        makeSendParams("tenant-1", "conv-1"),
+      );
+      expect(response.status).toBe(201);
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: "conv-1",
+          to: "919812345678",
+          content: { kind: "text", text: "Hello world" },
+          sentById: "user-1",
+        }),
+      );
+    });
+
+    it("POST — no external send before conversation ownership is verified", async () => {
+      // The sendMessage spy should NOT be called when findConversation is the gatekeeper.
+      mockAuth({ user: { id: "user-1", role: "AGENT" } });
+      mockResolveResult = mockTenantContext;
+      mockFindConversationResult = null; // 404 before send
+      const { sendMessage } = await import("@/lib/whatsapp/send");
+      const sendSpy = vi.mocked(sendMessage);
+      sendSpy.mockClear();
+      await postMessage(
+        new Request("https://example.test/api/tenants/tenant-1/conversations/conv-not-found/messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind: "text", text: "test" }),
+        }),
+        makeSendParams("tenant-1", "conv-not-found"),
+      );
+      expect(sendSpy).not.toHaveBeenCalled();
+    });
+
+    it("POST — invalid payload → 400 (no sendMessage called)", async () => {
+      mockAuth({ user: { id: "user-1", role: "AGENT" } });
+      mockResolveResult = mockTenantContext;
+      mockFindConversationResult = conversationRow();
+      const { isWithinSessionWindow, sendMessage } = await import("@/lib/whatsapp/send");
+      vi.mocked(isWithinSessionWindow).mockReturnValue(true);
+      const sendSpy = vi.mocked(sendMessage);
+      sendSpy.mockClear();
+      const response = await postMessage(
+        new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1/messages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ kind: "text", text: "" }), // empty text = invalid
+        }),
+        makeSendParams("tenant-1", "conv-1"),
+      );
+      expect(response.status).toBe(400);
+      expect(sendSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Defect 4 — History GET read-marking tenant isolation
+  // -------------------------------------------------------------------------
+
+  describe("GET read-marking tenant isolation", () => {
+    it("read-marking updateMany includes tenantId predicate", async () => {
+      mockAuth({ user: { id: "user-1", role: "AGENT" } });
+      mockResolveResult = mockTenantContext;
+      mockFindConversationResult = conversationRow({ unreadCount: 3 });
+      mockListConversationMessages([]);
+      const { prisma } = await import("@/lib/prisma");
+      vi.mocked(prisma.conversation.updateMany).mockClear();
+
+      await GET(makeRequest("tenant-1", "conv-1"), makeParams("tenant-1", "conv-1"));
+
+      // The updateMany call MUST include tenantId to prevent cross-tenant mutation.
+      expect(vi.mocked(prisma.conversation.updateMany)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tenantId: "tenant-1" }),
+        }),
+      );
+    });
+
+    it("read-marking is skipped when conversation not found", async () => {
+      mockAuth({ user: { id: "user-1", role: "AGENT" } });
+      mockResolveResult = mockTenantContext;
+      mockFindConversationResult = null;
+      const { prisma } = await import("@/lib/prisma");
+      vi.mocked(prisma.conversation.updateMany).mockClear();
+
+      const response = await GET(
+        makeRequest("tenant-1", "conv-not-found"),
+        makeParams("tenant-1", "conv-not-found"),
+      );
+
+      expect(response.status).toBe(404);
+      expect(vi.mocked(prisma.conversation.updateMany)).not.toHaveBeenCalled();
     });
   });
 });
