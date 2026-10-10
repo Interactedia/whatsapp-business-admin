@@ -28,6 +28,19 @@ function parseId(value: string): string {
   return parsed.data;
 }
 
+export async function resolveApiKeyTenantContext(
+  principal: { apiKeyId: string; userId: string | null; tenantId: string | null } | null | undefined
+): Promise<TenantContext> {
+  if (!principal?.tenantId) throw new TenantAuthorizationError();
+  const context: TenantContext = {
+    tenantId: parseId(principal.tenantId),
+    userId: principal.userId || principal.apiKeyId,
+    membershipId: "api-key:" + principal.apiKeyId,
+  };
+  trustedTenantContexts.add(context);
+  return context;
+}
+
 export async function resolveTenantContext(
   principal: AuthenticatedPrincipal | null | undefined,
   requestedTenantId: string | null | undefined,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveApiKeyTenantContext } from "@/lib/tenant";
 import { apiOk, requireApiKey, v1Handle } from "@/lib/v1";
 import { launchFlow } from "@/lib/whatsapp/flow-launch";
 
@@ -15,7 +16,7 @@ const schema = z.object({
 
 export const POST = v1Handle(async (req, { params }) => {
   const body = schema.parse(await req.json());
-  await requireApiKey(req, body);
-  const result = await launchFlow({ flowId: (await params).id, to: body.to, cta: body.cta, body: body.body, header: body.header, footer: body.footer, entryScreen: body.entry_screen, initialData: body.data });
+  const context = await resolveApiKeyTenantContext(await requireApiKey(req, body));
+  const result = await launchFlow({ flowId: (await params).id, tenantId: context.tenantId, to: body.to, cta: body.cta, body: body.body, header: body.header, footer: body.footer, entryScreen: body.entry_screen, initialData: body.data });
   return apiOk({ launch_id: result.launchId, message_id: result.messageId, conversation_id: result.conversationId }, 201);
 });

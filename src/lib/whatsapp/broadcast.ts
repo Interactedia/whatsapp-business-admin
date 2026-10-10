@@ -27,6 +27,7 @@ export async function runBroadcast(broadcastId: string): Promise<void> {
     include: { template: true, recipients: { include: { contact: true } } },
   });
   if (!broadcast) throw new WhatsAppApiError(404, "Broadcast not found");
+  if (!broadcast.tenantId || broadcast.template.tenantId !== broadcast.tenantId) throw new WhatsAppApiError(403, "Broadcast tenant mismatch.");
   if (broadcast.template.status !== "APPROVED") {
     throw new WhatsAppApiError(400, "Broadcast template must be approved.");
   }
@@ -46,6 +47,7 @@ export async function runBroadcast(broadcastId: string): Promise<void> {
       let preparedLaunchId: string | undefined;
       try {
         const { contact, conversation } = await ensureConversation(recipient.contact.waId, recipient.contact.name ?? undefined);
+        if (contact.tenantId !== broadcast.tenantId || conversation.tenantId !== broadcast.tenantId) throw new WhatsAppApiError(403, "Broadcast recipient tenant mismatch.");
         const prepared = await prepareTemplateFlowLaunch({
           templateComponents: broadcast.template.components as unknown as ApiComponent[],
           contactId: contact.id,

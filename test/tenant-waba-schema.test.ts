@@ -29,7 +29,7 @@ describe("WA-01-01 tenant and WABA persistence foundation", () => {
     const tenant = modelBlock("Tenant");
     const waba = modelBlock("WabaAccount");
 
-    expect(tenant).toContain("wabaAccounts WabaAccount[]");
+    expect(tenant).toMatch(/wabaAccounts\s+WabaAccount\[\]/);
     expect(waba).toContain("tenantId       String");
     expect(waba).toContain("tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)");
     expect(waba).toContain("@@unique([tenantId, metaWabaId])");

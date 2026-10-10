@@ -208,14 +208,14 @@ export async function sendMessage(opts: {
       where: { id: opts.conversationId },
       data: { lastMessageAt: new Date(), lastPreview: preview.slice(0, 140) },
     });
-    publish({ type: "message:new", payload: { conversationId: opts.conversationId, message: serializeMessage(updated) } });
+    publish({ type: "message:new", payload: { conversationId: opts.conversationId, message: serializeMessage(updated) } }, conversation.tenantId);
     return updated;
   } catch (e) {
     const failed = await prisma.message.update({
       where: { id: message.id },
       data: { status: "FAILED", errorJson: { message: e instanceof Error ? e.message : String(e) } },
     });
-    publish({ type: "message:new", payload: { conversationId: opts.conversationId, message: serializeMessage(failed) } });
+    publish({ type: "message:new", payload: { conversationId: opts.conversationId, message: serializeMessage(failed) } }, conversation.tenantId);
     throw e;
   }
 }

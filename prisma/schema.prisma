@@ -48,7 +48,11 @@ model ApiKey {
   revoked     Boolean   @default(false)
   createdById String?
   createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  tenantId    String?
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   createdAt   DateTime  @default(now())
+
+  @@index([tenantId])
 }
 
 // Singleton row (id = "default") holding the connected WABA credentials.
@@ -78,11 +82,15 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  wabaAccounts WabaAccount[]
-  contacts     Contact[]      @relation("TenantContacts")
-  conversations Conversation[] @relation("TenantConversations")
-  messages      Message[]      @relation("TenantMessages")
+  wabaAccounts      WabaAccount[]
+  contacts          Contact[]      @relation("TenantContacts")
+  conversations     Conversation[] @relation("TenantConversations")
+  messages          Message[]      @relation("TenantMessages")
+  templates         Template[]     @relation("TenantTemplates")
+  flows             Flow[]         @relation("TenantFlows")
+  broadcasts        Broadcast[]    @relation("TenantBroadcasts")
   tenantMemberships TenantMembership[]
+  apiKeys           ApiKey[]
 }
 
 // Persistence foundation only. Membership does not grant tenant authorization.
@@ -156,6 +164,8 @@ enum TemplateStatus {
 
 model Template {
   id              String           @id @default(cuid())
+  tenantId        String?
+  tenant          Tenant?          @relation("TenantTemplates", fields: [tenantId], references: [id], onDelete: Restrict)
   name            String
   language        String           @default("en_US")
   category        TemplateCategory
@@ -173,6 +183,7 @@ model Template {
   messages   Message[]
 
   @@unique([name, language])
+  @@index([tenantId])
   @@index([status])
 }
 
@@ -323,6 +334,8 @@ enum FlowDeliveryStatus {
 
 model Flow {
   id                   String       @id @default(cuid())
+  tenantId             String?
+  tenant               Tenant?      @relation("TenantFlows", fields: [tenantId], references: [id], onDelete: Restrict)
   name                 String
   categories           String[]     @default(["OTHER"])
   retentionDays        Int          @default(90)
@@ -339,6 +352,7 @@ model Flow {
   versions FlowVersion[] @relation("FlowVersions")
   launches FlowLaunch[]
 
+  @@index([tenantId])
   @@index([updatedAt])
 }
 
@@ -510,6 +524,8 @@ enum BroadcastStatus {
 
 model Broadcast {
   id          String          @id @default(cuid())
+  tenantId    String?
+  tenant      Tenant?         @relation("TenantBroadcasts", fields: [tenantId], references: [id], onDelete: Restrict)
   name        String
   templateId  String
   template    Template        @relation(fields: [templateId], references: [id], onDelete: Restrict)
@@ -525,6 +541,8 @@ model Broadcast {
   updatedAt   DateTime        @updatedAt
 
   recipients BroadcastRecipient[]
+
+  @@index([tenantId])
 }
 
 enum RecipientStatus {

@@ -75,8 +75,8 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
     refetchInterval: 30_000,
   });
 
-  // Realtime: refresh lists + the open thread on any event.
-  useRealtime((msg) => {
+  // Realtime: refresh lists + the open thread on any event for this tenant.
+  useRealtime(tenantId || null, (msg) => {
     if (msg.type.startsWith("message:")) {
       qc.invalidateQueries({ queryKey: ["conversations"] });
       const p = msg.payload as { conversationId?: string };

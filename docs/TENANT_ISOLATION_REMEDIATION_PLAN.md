@@ -4,6 +4,10 @@ Task: `WA-01-05F`
 Date: 2026-10-09
 Status: remediation sequencing only; no application code, schema, migration, runtime, Docker, authentication, or authorization behavior changes.
 
+## WA-ERA1-BATCH-C-R2 implementation note
+
+This batch implements tenant-scoped API keys, tenant-bound realtime subscriptions, API key tenant gating for `/api/v1`, inbound/status webhook tenant resolution from business phone metadata, and tenant-scoped realtime publication. Legacy null-owned API keys are intentionally not backfilled. Templates/flows/broadcast definitions remain global schema surfaces and require a separately approved migration if full tenant ownership is needed there.
+
 ## Inventory baseline
 
 This plan is derived from the accepted tenant API isolation inventory committed as `341f263 docs(tenancy): inventory tenant isolation surfaces`.

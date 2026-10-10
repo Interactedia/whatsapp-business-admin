@@ -1,16 +1,22 @@
-import { v1Handle, apiOk, requireApiKey } from "@/lib/v1";
-import { getWabaConfig } from "@/lib/settings";
+import { v1Handle, apiOk, requireApiKey, ApiError } from "@/lib/v1";
+import { prisma } from "@/lib/prisma";
 
 /** GET /api/v1/status — connection status of the WhatsApp account. */
 export const GET = v1Handle(async (req) => {
-  await requireApiKey(req);
-  const cfg = await getWabaConfig();
+  const principal = await requireApiKey(req);
+  if (!principal.tenantId) throw new ApiError(403, "API key is not tenant-scoped");
+
+  const wabaAccount = await prisma.wabaAccount.findFirst({
+    where: { tenantId: principal.tenantId },
+    include: { phoneNumbers: true }
+  });
+
   return apiOk({
     data: {
-      connected: Boolean(cfg.phoneNumberId && cfg.accessToken),
-      phone_number: cfg.phoneNumberDisplay,
-      business_name: cfg.businessName,
-      api_version: cfg.apiVersion,
+      connected: Boolean(wabaAccount?.phoneNumbers[0]?.metaPhoneNumberId && wabaAccount?.accessTokenEnc),
+      phone_number: wabaAccount?.phoneNumbers[0]?.displayPhone,
+      business_name: wabaAccount?.name,
+      api_version: wabaAccount?.apiVersion,
     },
   });
 });

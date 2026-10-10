@@ -11,7 +11,7 @@ export async function recordFlowSubmission(input: { waMessageId: string; respons
   catch { throw new Error("WhatsApp Flow response_json was not valid JSON."); }
   const token = typeof parsed.flow_token === "string" ? parsed.flow_token : null;
   if (!token) throw new Error("WhatsApp Flow completion did not include a flow_token.");
-  const launch = await prisma.flowLaunch.findUnique({ where: { tokenHash: flowTokenHash(token) }, include: { flow: true } });
+  const launch = await prisma.flowLaunch.findUnique({ where: { tokenHash: flowTokenHash(token) }, include: { flow: true, conversation: true } });
   if (!launch) throw new Error("WhatsApp Flow completion used an unknown token.");
   const answers = { ...parsed };
   delete answers.flow_token;
@@ -34,7 +34,7 @@ export async function recordFlowSubmission(input: { waMessageId: string; respons
     }
     return created;
   });
-  publish({ type: "flow:submission", payload: { conversationId: launch.conversationId, submissionId: submission.id, launchId: launch.id } });
+  publish({ type: "flow:submission", payload: { conversationId: launch.conversationId, submissionId: submission.id, launchId: launch.id } }, launch.conversation.tenantId);
   return submission;
 }
 

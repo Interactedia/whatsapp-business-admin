@@ -20,6 +20,14 @@ A plain object with `tenantId`, `userId` or `membershipId` is rejected. Raw `ten
 
 The module does not expose arbitrary Prisma access and does not perform writes.
 
+## API Key tenant context (WA-ERA1-BATCH-C-R2)
+
+`ApiKey.tenantId` is nullable for legacy rows but required for newly-created keys. `verifyApiKey()` returns an `ApiKeyPrincipal` containing `tenantId` derived from the validated database row; caller-supplied tenant identifiers do not override it. `resolveApiKeyTenantContext(principal)` marks a trusted tenant context only when the stored API key has a non-null tenant owner. Legacy null-owned keys therefore fail closed for tenant-owned data.
+
+API key creation now requires an explicit `tenantId` and verifies persisted `TenantMembership` for the creator. Global `ADMIN` role does not bypass membership. Existing key hashing, prefix display, revocation and last-used behavior remain unchanged.
+
+Realtime WebSocket connections are also tenant-bound: `/ws?tenantId=...` is treated as an access request, verified against the authenticated session cookie and `TenantMembership`, and then stored as trusted connection metadata. Message/conversation/status/flow realtime publications require a server-derived tenant id and are delivered only to matching tenant connections. Membership/session revocation is enforced by periodic connection revalidation (60s max window) and by rejecting unauthorized handshakes.
+
 ## Ownership verification rules
 
 All reads include tenant ownership restrictions in the Prisma query itself. Missing records, records owned by another tenant and records with missing ownership all return the same denied result shape (`null` for lookups, `[]` for message listing).

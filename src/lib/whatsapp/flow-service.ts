@@ -28,6 +28,7 @@ function endpointUrl(): string {
 
 export async function createLocalFlow(input: {
   name: string;
+  tenantId?: string;
   categories?: FlowCategory[];
   flowJson?: FlowJson;
   retentionDays?: number;
@@ -37,6 +38,7 @@ export async function createLocalFlow(input: {
   const issues = validateFlowJson(flowJson);
   const flow = await prisma.flow.create({
     data: {
+      tenantId: input.tenantId,
       name: input.name,
       categories: input.categories?.length ? input.categories : ["OTHER"],
       retentionDays: input.retentionDays ?? 90,

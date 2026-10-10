@@ -112,7 +112,7 @@ describe("template delivery persistence and serialization", () => {
     expect(serializeMessage(result).templateContent?.body).toBe("Hello Priya");
     expect(mocks.message.create.mock.invocationCallOrder[0]).toBeLessThan(mocks.graphFetch.mock.invocationCallOrder[0]);
     expect(mocks.conversation.update).toHaveBeenCalledWith({ where: { id: "c1" }, data: { lastMessageAt: expect.any(Date), lastPreview: "Hello Priya" } });
-    expect(mocks.publish).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ message: expect.objectContaining({ templateContent: expect.objectContaining({ body: "Hello Priya" }) }) }) }));
+    expect(mocks.publish).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ message: expect.objectContaining({ templateContent: expect.objectContaining({ body: "Hello Priya" }) }) }) }), "tenant-1");
     expect(mocks.graphFetch).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ template: { name: "welcome", language: { code: "en" }, components: parameters } }) }));
   });
 
@@ -122,7 +122,7 @@ describe("template delivery persistence and serialization", () => {
     await expect(sendMessage({ conversationId: "c1", to: "919999999999", content })).rejects.toThrow("Meta rejected message");
     expect(row()).toMatchObject({ status: "FAILED", text: "Hello Priya", payload: { templateContent: { body: "Hello Priya" } } });
     expect(mocks.conversation.update).not.toHaveBeenCalled();
-    expect(mocks.publish).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ message: expect.objectContaining({ status: "FAILED", templateContent: expect.objectContaining({ body: "Hello Priya" }) }) }) }));
+    expect(mocks.publish).toHaveBeenCalledWith(expect.objectContaining({ payload: expect.objectContaining({ message: expect.objectContaining({ status: "FAILED", templateContent: expect.objectContaining({ body: "Hello Priya" }) }) }) }), "tenant-1");
   });
 
   it("resolves definitions for callers supplying only template identity", async () => {

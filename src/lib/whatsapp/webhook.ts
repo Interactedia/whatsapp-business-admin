@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getWabaConfig } from "@/lib/settings";
 import { phoneNumberConfig, resolveInboundPhoneNumber } from "@/lib/tenant/waba";
 import { downloadInboundMedia } from "@/lib/whatsapp/media";
-import { publish } from "@/server/realtime";
+import { publish, publishGlobal } from "@/server/realtime";
 import type { MessageStatus, MessageType, TemplateStatus } from "@/generated/prisma/client";
 import { recordFlowSubmission, redactFlowWebhookPayload } from "@/lib/whatsapp/flow-submission";
 import { readTemplateContent, templateContentText } from "@/lib/whatsapp/template-content";
@@ -122,7 +122,7 @@ export async function processWebhook(payload: unknown): Promise<string> {
       }
       // Delivery statuses
       for (const st of value.statuses ?? []) {
-        summaries.push(await handleStatus(st));
+        summaries.push(await handleStatus(st, value.metadata?.phone_number_id));
       }
     }
   }
@@ -236,7 +236,7 @@ async function handleInboundMessage(
   publish({
     type: "message:new",
     payload: { conversationId: conversation.id, contactId: contact.id, message: serializeMessage(created) },
-  });
+  }, businessPhone.wabaAccount.tenantId);
 
   // ---- image enrichment (fire-and-forget, bounded timeout) ----
   // Triggers asynchronous visual interpretation after the message is stored.
@@ -267,7 +267,7 @@ async function handleInboundMessage(
               conversationId: conversation.id,
               enrichment: serializeEnrichmentResult(result),
             },
-          });
+          }, businessPhone.wabaAccount.tenantId);
         } catch (e) {
           console.error("Failed to persist image enrichment result:", e);
         }
@@ -280,7 +280,10 @@ async function handleInboundMessage(
   return `message from ${waId}`;
 }
 
-async function handleStatus(st: WaStatus): Promise<string> {
+async function handleStatus(st: WaStatus, metaPhoneNumberId?: string): Promise<string> {
+  if (!metaPhoneNumberId) throw new Error("Status webhook missing business phone metadata");
+  const businessPhone = await resolveInboundPhoneNumber(metaPhoneNumberId);
+
   const status = STATUS_MAP[st.status];
   if (!status) return "";
   const errorJson = st.errors && st.errors.length > 0 ? (st.errors as object) : undefined;
@@ -288,16 +291,18 @@ async function handleStatus(st: WaStatus): Promise<string> {
   // Only downgrade never (read > delivered > sent); simplest: update if message exists.
   const msg = await prisma.message.findUnique({ where: { waMessageId: st.id } });
   if (msg) {
+    if (msg.tenantId !== businessPhone.wabaAccount.tenantId) throw new Error("Status tenant mismatch");
     await prisma.message.update({
       where: { id: msg.id },
       data: { status, errorJson: errorJson ?? undefined },
     });
-    publish({ type: "message:status", payload: { conversationId: msg.conversationId, waMessageId: st.id, status } });
+    publish({ type: "message:status", payload: { conversationId: msg.conversationId, waMessageId: st.id, status } }, msg.tenantId);
   }
 
   // Broadcast recipient tracking.
-  const recipient = await prisma.broadcastRecipient.findUnique({ where: { waMessageId: st.id } });
+  const recipient = await prisma.broadcastRecipient.findUnique({ where: { waMessageId: st.id }, include: { contact: true } });
   if (recipient) {
+    if (recipient.contact.tenantId !== businessPhone.wabaAccount.tenantId) throw new Error("Status broadcast tenant mismatch");
     const recStatus = status === "FAILED" ? "FAILED" : status === "SENT" ? "SENT" : status === "DELIVERED" ? "DELIVERED" : "READ";
     await prisma.broadcastRecipient.update({
       where: { id: recipient.id },
@@ -329,7 +334,8 @@ async function handleTemplateStatus(value: WebhookValue): Promise<string> {
       where: { id: tmpl.id },
       data: { status, rejectionReason: status === "REJECTED" ? value.reason ?? "Rejected" : null },
     });
-    publish({ type: "template:status", payload: { id: tmpl.id, status } });
+    // Template is a global (non tenant-owned) surface; payload carries only template id/status.
+    publishGlobal({ type: "template:status", payload: { id: tmpl.id, status } });
   }
   return `template ${event}`;
 }

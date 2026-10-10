@@ -5,14 +5,16 @@ import { useEffect, useRef } from "react";
 export type RealtimeMessage = { type: string; payload: unknown };
 
 /**
- * Subscribe to the server WebSocket (/ws). Reconnects with backoff. The handler
- * ref is kept current so callers don't need a stable callback.
+ * Subscribe to the server WebSocket (/ws?tenantId=…). Reconnects with backoff.
+ * The connection is bound to exactly one tenant; changing tenantId reconnects.
+ * The handler ref is kept current so callers don't need a stable callback.
  */
-export function useRealtime(onEvent: (msg: RealtimeMessage) => void) {
+export function useRealtime(tenantId: string | null | undefined, onEvent: (msg: RealtimeMessage) => void) {
   const handlerRef = useRef(onEvent);
   handlerRef.current = onEvent;
 
   useEffect(() => {
+    if (!tenantId) return;
     let ws: WebSocket | null = null;
     let closed = false;
     let retry = 0;
@@ -21,7 +23,7 @@ export function useRealtime(onEvent: (msg: RealtimeMessage) => void) {
     function connect() {
       if (closed) return;
       const proto = window.location.protocol === "https:" ? "wss" : "ws";
-      ws = new WebSocket(`${proto}://${window.location.host}/ws`);
+      ws = new WebSocket(`${proto}://${window.location.host}/ws?tenantId=${encodeURIComponent(tenantId!)}`);
 
       ws.onopen = () => {
         retry = 0;
@@ -47,5 +49,5 @@ export function useRealtime(onEvent: (msg: RealtimeMessage) => void) {
       clearTimeout(timer);
       ws?.close();
     };
-  }, []);
+  }, [tenantId]);
 }

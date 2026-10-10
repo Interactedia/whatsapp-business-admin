@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveApiKeyTenantContext } from "@/lib/tenant";
 import { v1Handle, apiOk, requireApiKey, ApiError, parseJsonBody } from "@/lib/v1";
 import { prisma } from "@/lib/prisma";
 import { runBroadcast } from "@/lib/whatsapp/broadcast";
@@ -24,24 +25,28 @@ export const POST = v1Handle(async (req) => {
   const raw = await parseJsonBody(req);
   const body = schema.parse(raw);
   const principal = await requireApiKey(req, body);
+  const context = await resolveApiKeyTenantContext(principal);
 
   const template = await prisma.template.findFirst({
-    where: { name: body.template, status: "APPROVED", ...(body.language ? { language: body.language } : {}) },
+    where: { tenantId: context.tenantId, name: body.template, status: "APPROVED", ...(body.language ? { language: body.language } : {}) },
   });
   if (!template) throw new ApiError(404, `No approved template named "${body.template}"`);
 
   const audience = body.audience ?? { type: "all" as const };
   const contacts = await prisma.contact.findMany({
-    where: audience.type === "tag" ? { tags: { has: audience.tag } } : undefined,
+    where: {
+      tenantId: context.tenantId,
+      ...(audience.type === "tag" ? { tags: { has: audience.tag } } : {}),
+    },
     select: { id: true },
   });
   if (contacts.length === 0) throw new ApiError(400, "No contacts match this audience");
 
   const broadcast = await prisma.broadcast.create({
     data: {
+      tenantId: context.tenantId,
       name: body.name,
       templateId: template.id,
-      status: "QUEUED",
       total: contacts.length,
       createdById: principal.userId,
       recipients: { create: contacts.map((c) => ({ contactId: c.id })) },

@@ -28,10 +28,10 @@ export function generateKey(): GeneratedKey {
   };
 }
 
-export type ApiKeyPrincipal = { apiKeyId: string; userId: string | null };
+export type ApiKeyPrincipal = { apiKeyId: string; userId: string | null; tenantId: string | null };
 
 /**
- * Look up a presented key. Returns the principal (key id + owning user) or null
+ * Look up a presented key. Returns the principal (key id + owning user + owning tenant) or null
  * if the key is unknown or revoked. Also records last-used (best effort).
  */
 export async function verifyApiKey(plaintext: string | null | undefined): Promise<ApiKeyPrincipal | null> {
@@ -45,5 +45,5 @@ export async function verifyApiKey(plaintext: string | null | undefined): Promis
     .update({ where: { id: key.id }, data: { lastUsedAt: new Date() } })
     .catch(() => {});
 
-  return { apiKeyId: key.id, userId: key.createdById };
+  return { apiKeyId: key.id, userId: key.createdById, tenantId: key.tenantId };
 }

@@ -15,9 +15,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/components/ui/use-toast";
 import { ApiDocs } from "./api-docs";
 
-type ApiKey = { id: string; name: string; keyPrefix: string; lastUsedAt: string | null; createdAt: string };
+type TenantOption = { id: string; name: string };
+type ApiKey = { id: string; name: string; keyPrefix: string; lastUsedAt: string | null; createdAt: string; tenantId: string | null };
 
-export function DeveloperClient({ baseUrl }: { baseUrl: string }) {
+export function DeveloperClient({ baseUrl, tenants }: { baseUrl: string; tenants: TenantOption[] }) {
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="API" description="Programmatic access to send messages, templates and broadcasts." />
@@ -28,7 +29,7 @@ export function DeveloperClient({ baseUrl }: { baseUrl: string }) {
             <TabsTrigger value="docs">Documentation</TabsTrigger>
           </TabsList>
           <TabsContent value="keys">
-            <ApiKeys />
+            <ApiKeys tenants={tenants} />
           </TabsContent>
           <TabsContent value="docs">
             <ApiDocs baseUrl={baseUrl} />
@@ -39,7 +40,7 @@ export function DeveloperClient({ baseUrl }: { baseUrl: string }) {
   );
 }
 
-function ApiKeys() {
+function ApiKeys({ tenants }: { tenants: TenantOption[] }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -74,6 +75,7 @@ function ApiKeys() {
             </Button>
           </DialogTrigger>
           <CreateKeyDialog
+            tenants={tenants}
             onClose={() => setOpen(false)}
             onCreated={(v) => {
               invalidate();
@@ -142,11 +144,20 @@ function ApiKeys() {
   );
 }
 
-function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (v: { name: string; key: string }) => void }) {
+function CreateKeyDialog({
+  tenants,
+  onClose,
+  onCreated,
+}: {
+  tenants: TenantOption[];
+  onClose: () => void;
+  onCreated: (v: { name: string; key: string }) => void;
+}) {
   const { toast } = useToast();
   const [name, setName] = useState("");
+  const [tenantId, setTenantId] = useState(tenants[0]?.id ?? "");
   const create = useMutation({
-    mutationFn: () => apiFetch<{ name: string; key: string }>("/api/apikeys", { method: "POST", body: JSON.stringify({ name }) }),
+    mutationFn: () => apiFetch<{ name: string; key: string }>("/api/apikeys", { method: "POST", body: JSON.stringify({ name, tenantId }) }),
     onSuccess: (r) => onCreated({ name: r.name, key: r.key }),
     onError: (e: Error) => toast({ variant: "destructive", title: "Could not create key", description: e.message }),
   });
@@ -160,9 +171,22 @@ function CreateKeyDialog({ onClose, onCreated }: { onClose: () => void; onCreate
         <Label>Name</Label>
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Production server" />
       </div>
+      <div className="space-y-1">
+        <Label>Tenant</Label>
+        <select
+          className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+          value={tenantId}
+          onChange={(e) => setTenantId(e.target.value)}
+          disabled={tenants.length === 0}
+        >
+          {tenants.map((tenant) => (
+            <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
+          ))}
+        </select>
+      </div>
       <DialogFooter>
         <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button size="sm" disabled={!name.trim() || create.isPending} onClick={() => create.mutate()}>Create key</Button>
+        <Button size="sm" disabled={!name.trim() || !tenantId || create.isPending} onClick={() => create.mutate()}>Create key</Button>
       </DialogFooter>
     </DialogContent>
   );

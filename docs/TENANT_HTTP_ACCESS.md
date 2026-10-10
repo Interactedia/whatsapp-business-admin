@@ -2,7 +2,17 @@
 
 WA-01-05C introduced the first bounded tenant-aware HTTP read surface using centralized tenant authorization and tenant-scoped repository access. WA-01-05D adds the matching protected conversation read endpoint. WA-01-05G-R2 adds the tenant contact list endpoint, canonical tenant navigation for Contacts, and removes the legacy global contact GET. WA-01-05H adds tenant-scoped contact write operations (POST/PATCH/DELETE), migrates the Contacts UI to tenant-aware endpoints, and removes the legacy global contact write handlers. WA-01-05I adds the tenant conversation list endpoint, canonical tenant navigation for Conversations (Inbox), and removes the legacy global conversation list GET. WA-01-05J adds the tenant message history endpoint, migrates the Inbox UI consumer, and removes the legacy global message history GET.
 
-**These routes do not activate tenant isolation across legacy application routes.**
+**These routes do not activate tenant isolation across every legacy application route.**
+
+## External API key tenancy (WA-ERA1-BATCH-C-R2)
+
+`ApiKey.tenantId` is the trusted tenant owner for `/api/v1` requests. New API keys require an explicit tenant and the creator must hold `TenantMembership`; `ADMIN` does not bypass membership. Legacy keys with `tenantId = null` are still verifiable for revocation/expiry semantics but fail closed for tenant-owned operations.
+
+`/api/v1/messages` derives the sender tenant from the stored API key, ignores forged tenant identifiers, creates/reuses only tenant-owned contacts/conversations, binds the tenant's authorized phone number, and preserves the existing WhatsApp provider integration. `/api/v1/status` reports only the API key tenant's WABA/phone status. Flow submissions and launch lookups are scoped through tenant-owned contacts. Broadcast audience selection is tenant-filtered through contacts; templates/flows remain global schema surfaces and are documented as remaining legacy surfaces rather than silently adding unapproved tenant columns.
+
+Inbound webhooks still require Meta signature verification. Tenant identity is resolved from verified business `phone_number_id` via `PhoneNumber -> WabaAccount -> Tenant`; customer `waId` cannot select tenant. Status updates now require the same verified business phone ownership and reject foreign message/broadcast-recipient updates.
+
+Realtime consumers must connect to `/ws?tenantId=<tenantId>`. The server authenticates the session cookie, verifies membership, binds the connection to one tenant, and publishes tenant-owned message/status/flow events only to matching tenant connections. Workspace switching reconnects through the new tenant-scoped URL; no session secrets are placed in the URL.
 
 ## Conversation sender binding
 

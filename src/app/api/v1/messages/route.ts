@@ -1,7 +1,9 @@
+import { resolveApiKeyTenantContext } from "@/lib/tenant";
+import { startTenantConversation } from "@/lib/tenant/conversations";
 import { z } from "zod";
 import { v1Handle, apiOk, requireApiKey, ApiError, parseJsonBody } from "@/lib/v1";
 import { prisma } from "@/lib/prisma";
-import { ensureConversation, sendMessage, isWithinSessionWindow } from "@/lib/whatsapp/send";
+import { sendMessage, isWithinSessionWindow } from "@/lib/whatsapp/send";
 import { storeFromLink } from "@/lib/whatsapp/media";
 import { buildTemplateComponents, normalizeTemplateButtonInputs } from "@/lib/whatsapp/template-params";
 import { templateExampleComponents, templateRuntimeComponents } from "@/lib/whatsapp/template-service";
@@ -65,10 +67,33 @@ const MEDIA_TYPES = ["image", "video", "audio", "document"] as const;
 export const POST = v1Handle(async (req) => {
   const raw = await parseJsonBody(req);
   const body = schema.parse(raw);
-  await requireApiKey(req, body);
+  const principal = await requireApiKey(req, body);
+  if (!principal.tenantId) throw new ApiError(403, "API key is not tenant-scoped");
+
+  const context = await resolveApiKeyTenantContext(principal);
+  // Reuse the sender bound to an existing conversation; otherwise pick the
+  // tenant's first phone number deterministically.
+  const existingContact = await prisma.contact.findUnique({
+    where: { waId: body.to },
+    select: { conversation: { select: { phoneNumberId: true } } },
+  });
+  const boundPhoneId = existingContact?.conversation?.phoneNumberId ?? null;
+  const phoneNumber = boundPhoneId
+    ? await prisma.phoneNumber.findFirst({
+        where: { id: boundPhoneId, wabaAccount: { tenantId: context.tenantId } },
+      })
+    : await prisma.phoneNumber.findFirst({
+        where: { wabaAccount: { tenantId: context.tenantId } },
+        orderBy: { id: "asc" },
+      });
+  if (!phoneNumber) throw new ApiError(403, "No authorized phone number for tenant");
 
   const type = body.type ?? (body.template ? "template" : body.media ? "image" : "text");
-  const { contact, conversation } = await ensureConversation(body.to);
+  const conversation = await startTenantConversation({
+    context,
+    waId: body.to,
+    phoneNumberId: phoneNumber.id,
+  });
 
   const windowOpen = async () => {
     const fresh = await prisma.conversation.findUnique({ where: { id: conversation.id } });
@@ -166,7 +191,7 @@ export const POST = v1Handle(async (req) => {
   }
   const prepared = await prepareTemplateFlowLaunch({
     templateComponents: template.components as unknown as ApiComponent[],
-    contactId: contact.id,
+    contactId: conversation.contactId,
     conversationId: conversation.id,
     initialData: body.flow_data,
   });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyApiKey, type ApiKeyPrincipal } from "@/lib/api-keys";
+import { TenantAuthorizationError } from "@/lib/tenant";
 
 /** Error carrying an HTTP status for v1 handlers. */
 export class ApiError extends Error {
@@ -61,6 +62,7 @@ export function v1Handle(
       return await fn(req, ctx);
     } catch (err) {
       if (err instanceof ApiError) return apiFail(err.status, err.message);
+      if (err instanceof TenantAuthorizationError) return apiFail(403, err.message);
       // Zod validation error → clean 400 with readable messages.
       if (err && typeof err === "object" && "issues" in err && Array.isArray((err as { issues: unknown[] }).issues)) {
         const issues = (err as { issues: { path: (string | number)[]; message: string }[] }).issues;

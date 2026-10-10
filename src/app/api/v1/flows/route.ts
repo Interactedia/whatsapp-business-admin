@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import { resolveApiKeyTenantContext } from "@/lib/tenant";
 import { apiOk, requireApiKey, v1Handle } from "@/lib/v1";
 
 export const GET = v1Handle(async (req) => {
-  await requireApiKey(req);
+  const context = await resolveApiKeyTenantContext(await requireApiKey(req));
   const cursor = new URL(req.url).searchParams.get("cursor") || undefined;
   const rows = await prisma.flow.findMany({
-    where: { versions: { some: { status: "PUBLISHED" } } },
+    where: { tenantId: context.tenantId, versions: { some: { status: "PUBLISHED" } } },
     include: { versions: { where: { status: "PUBLISHED" }, orderBy: { revision: "desc" }, take: 1 } },
     orderBy: { id: "asc" },
     take: 51,

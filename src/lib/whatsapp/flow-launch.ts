@@ -8,6 +8,7 @@ import type { ApiComponent } from "./template-types";
 
 export async function launchFlow(input: {
   flowId: string;
+  tenantId?: string;
   to: string;
   sentById?: string;
   cta?: string;
@@ -17,7 +18,7 @@ export async function launchFlow(input: {
   entryScreen?: string;
   initialData?: Record<string, unknown>;
 }) {
-  const flow = await prisma.flow.findUnique({ where: { id: input.flowId }, include: { versions: { where: { status: "PUBLISHED" }, orderBy: { revision: "desc" }, take: 1 } } });
+  const flow = await prisma.flow.findFirst({ where: { id: input.flowId, ...(input.tenantId ? { tenantId: input.tenantId } : {}) }, include: { versions: { where: { status: "PUBLISHED" }, orderBy: { revision: "desc" }, take: 1 } } });
   const publishedVersion = flow?.versions[0];
   if (!flow) throw new WhatsAppApiError(404, "Flow not found.");
   if (!publishedVersion?.metaFlowId) throw new WhatsAppApiError(409, "Only published Flows can be launched.");
@@ -25,6 +26,7 @@ export async function launchFlow(input: {
   const entryScreen = input.entryScreen || json.screens[0]?.id;
   if (!entryScreen || !json.screens.some((screen) => screen.id === entryScreen)) throw new WhatsAppApiError(400, "Entry screen does not exist in this Flow.");
   const { contact, conversation } = await ensureConversation(input.to);
+  if (input.tenantId && (contact.tenantId !== input.tenantId || conversation.tenantId !== input.tenantId)) throw new WhatsAppApiError(404, "Conversation not found.");
   if (!isWithinSessionWindow(conversation.lastInboundAt)) {
     throw new WhatsAppApiError(403, "Direct Flows can only be sent within the 24-hour window. Use an approved message template outside it.");
   }

@@ -1,14 +1,15 @@
 import { prisma } from "@/lib/prisma";
+import { resolveApiKeyTenantContext } from "@/lib/tenant";
 import { apiOk, requireApiKey, v1Handle } from "@/lib/v1";
 import { presentFlowSubmission } from "@/lib/whatsapp/flow-present";
 
 export const GET = v1Handle(async (req) => {
-  await requireApiKey(req);
+  const context = await resolveApiKeyTenantContext(await requireApiKey(req));
   const url = new URL(req.url);
   const cursor = url.searchParams.get("cursor") || undefined;
   const flowId = url.searchParams.get("flow_id") || undefined;
   const rows = await prisma.flowSubmission.findMany({
-    where: flowId ? { launch: { flowId } } : undefined,
+    where: { launch: { flow: { tenantId: context.tenantId }, contact: { tenantId: context.tenantId }, ...(flowId ? { flowId } : {}) } },
     include: { launch: { include: { flow: true, contact: true } } },
     orderBy: { completedAt: "desc" },
     take: 51,

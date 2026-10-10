@@ -25,6 +25,10 @@ Classification meanings:
 - **LEGACY**: existing authenticated/admin/API-key behavior is global or single-installation oriented and is not tenant-aware. This does not by itself prove exploitability.
 - **UNKNOWN**: source evidence is insufficient to classify tenant isolation safely.
 
+## WA-ERA1-BATCH-C-R2 update
+
+API keys are now tenant-owned for new keys (`ApiKey.tenantId`) and tenant-owned `/api/v1` data operations fail closed for legacy null-owned keys. Realtime WebSocket subscriptions are tenant-bound through explicit `tenantId` selection and membership verification. Inbound/status webhook tenant identity is resolved from verified business phone metadata, not customer `waId`. Remaining global-schema surfaces such as templates/flows/broadcast definitions are not silently migrated by this batch.
+
 ## Current security model
 
 ### Authentication and proxy behavior
