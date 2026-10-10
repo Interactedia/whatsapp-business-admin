@@ -7,7 +7,7 @@ const membershipFindUnique = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     tenantMembership: { findUnique: membershipFindUnique },
-    contact: { findFirst: vi.fn() },
+    contact: { findFirst: vi.fn(), findMany: vi.fn() },
     conversation: { findFirst: vi.fn() },
     message: { findFirst: vi.fn(), findMany: vi.fn() },
   },
@@ -102,6 +102,11 @@ function fakeDb() {
   return {
     contact: {
       findFirst: vi.fn(async ({ where }: { where: Where }) => contacts.find((row) => matchesContact(row, where)) ?? null),
+      findMany: vi.fn(async ({ where, take, cursor, skip }: { where: Where; take: number; cursor?: { id: string }; skip?: number }) => {
+        const matched = contacts.filter((row) => matchesContact(row, where));
+        const start = cursor ? Math.max(0, matched.findIndex((row) => row.id === cursor.id) + (skip ?? 0)) : 0;
+        return matched.slice(start, start + take);
+      }),
     },
     conversation: {
       findFirst: vi.fn(async ({ where, include, select }: { where: Where; include?: unknown; select?: unknown }) => {
@@ -190,6 +195,42 @@ describe("WA-01-05B tenant-scoped messaging data access", () => {
 
     expect(result).toEqual([message1]);
     expect(db.message.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 1 }));
+  });
+
+  it("lists only same-tenant contacts, excluding cross-tenant and null-owned", async () => {
+    const db = fakeDb();
+    const ctx = await context();
+    const result = await createTenantMessagingRepository(db).listContacts(ctx);
+
+    // Only tenant-1's contact is returned — tenant-2's and null-owned are excluded
+    expect(result).toEqual([contact1]);
+    expect(db.contact.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ tenantId: tenant1 }) })
+    );
+  });
+
+  it("lists contacts with bounded take", async () => {
+    const db = fakeDb();
+    const ctx = await context();
+    await createTenantMessagingRepository(db).listContacts(ctx, { take: 1 });
+
+    expect(db.contact.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 1 }));
+  });
+
+  it("rejects invalid contact pagination values", async () => {
+    const repo = createTenantMessagingRepository(fakeDb() as TenantPrisma);
+    const ctx = await context();
+
+    await expect(repo.listContacts(ctx, { take: 0 })).rejects.toBeInstanceOf(TenantAuthorizationError);
+    await expect(repo.listContacts(ctx, { take: 999 })).rejects.toBeInstanceOf(TenantAuthorizationError);
+  });
+
+  it("rejects forged contexts for listContacts", async () => {
+    const repo = createTenantMessagingRepository(fakeDb() as TenantPrisma);
+    const forged = { tenantId: tenant1, userId: "user-1", membershipId: "membership-1" } as TenantContext;
+
+    await expect(repo.listContacts(forged)).rejects.toBeInstanceOf(TenantAuthorizationError);
+    await expect(repo.listContacts(null as unknown as TenantContext)).rejects.toBeInstanceOf(TenantAuthorizationError);
   });
 
   it("denies mixed-tenant message listing", async () => {

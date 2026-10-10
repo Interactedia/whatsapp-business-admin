@@ -10,8 +10,14 @@ const paginationSchema = z.object({
 
 export type MessageListPagination = z.input<typeof paginationSchema>;
 
+const contactListSchema = paginationSchema.extend({
+  search: z.string().trim().max(500).optional(),
+});
+
+export type ContactListPagination = z.input<typeof contactListSchema>;
+
 export type TenantPrisma = {
-  contact: { findFirst(args: unknown): Promise<unknown> };
+  contact: { findFirst(args: unknown): Promise<unknown>; findMany(args: unknown): Promise<unknown[]> };
   conversation: { findFirst(args: unknown): Promise<unknown> };
   message: {
     findFirst(args: unknown): Promise<unknown>;
@@ -41,6 +47,32 @@ export function createTenantMessagingRepository(db: TenantPrisma = prisma) {
     async findContact(context: TenantContext, id: string) {
       return db.contact.findFirst({
         where: { id: parseId(id), tenantId: tenantId(context) },
+      });
+    },
+
+    async listContacts(context: TenantContext, pagination: ContactListPagination = {}) {
+      const tenant = tenantId(context);
+      const parsed = contactListSchema.safeParse(pagination);
+      if (!parsed.success) throw new TenantAuthorizationError();
+      const { take, cursor, search } = parsed.data;
+
+      return db.contact.findMany({
+        where: {
+          tenantId: tenant,
+          ...(search
+            ? {
+                OR: [
+                  { name: { contains: search, mode: "insensitive" as const } },
+                  { profileName: { contains: search, mode: "insensitive" as const } },
+                  { waId: { contains: search } },
+                ],
+              }
+            : undefined),
+        },
+        orderBy: { updatedAt: "desc" },
+        take,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        include: { conversation: { select: { id: true } } },
       });
     },
 

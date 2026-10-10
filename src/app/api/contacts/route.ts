@@ -2,27 +2,6 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { handle, ok, requireUser, HttpError } from "@/lib/api";
 
-export const GET = handle(async (req) => {
-  await requireUser();
-  const url = new URL(req.url);
-  const search = url.searchParams.get("search")?.trim();
-  const contacts = await prisma.contact.findMany({
-    where: search
-      ? {
-          OR: [
-            { name: { contains: search, mode: "insensitive" } },
-            { profileName: { contains: search, mode: "insensitive" } },
-            { waId: { contains: search } },
-          ],
-        }
-      : undefined,
-    orderBy: { updatedAt: "desc" },
-    take: 500,
-    include: { conversation: { select: { id: true } } },
-  });
-  return ok(contacts);
-});
-
 const createSchema = z.object({
   waId: z.string().trim().regex(/^\d{7,15}$/, "Enter digits only, no + (e.g. 919812345678)"),
   name: z.string().trim().optional(),

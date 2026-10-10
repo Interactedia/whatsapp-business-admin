@@ -1,8 +1,16 @@
 # Tenant HTTP Access
 
-WA-01-05C introduced the first bounded tenant-aware HTTP read surface using centralized tenant authorization and tenant-scoped repository access. WA-01-05D adds the matching protected conversation read endpoint.
+WA-01-05C introduced the first bounded tenant-aware HTTP read surface using centralized tenant authorization and tenant-scoped repository access. WA-01-05D adds the matching protected conversation read endpoint. WA-01-05G-R2 adds the tenant contact list endpoint, canonical tenant navigation for Contacts, and removes the legacy global contact GET.
 
 **These routes do not activate tenant isolation across legacy application routes.**
+
+## Tenant Contact List Route
+
+```
+GET /api/tenants/:tenantId/contacts
+```
+
+Read-only endpoint that returns a list of contacts owned by the specified tenant. Supports optional `search` (name/profileName/waId contains), `take` (1–200, default 200), and `cursor` pagination. Only contacts with exact `tenantId` match are returned — other tenants' contacts and null-owned contacts are excluded. Tenant isolation is applied before pagination.
 
 ## Tenant Contact Route
 
@@ -19,6 +27,22 @@ GET /api/tenants/:tenantId/conversations/:conversationId
 ```
 
 Read-only endpoint that returns a single conversation owned by the specified tenant. The route requires the conversation row and its related contact row to both be owned by the trusted `TenantContext.tenantId`. Unknown conversations, cross-tenant conversations, null-owned conversations and contact ownership mismatches return `404`.
+
+## Canonical Tenant Navigation
+
+Contacts uses explicit tenant-scoped navigation:
+
+```
+/t/:tenantId/contacts
+```
+
+The existing `/contacts` page no longer performs global contact reads. It presents an explicit tenant selection view listing only the authenticated user's authorized tenant memberships. No tenant is auto-selected, no implicit tenant cookie exists, and the first membership is not chosen automatically. Users without memberships see a clear no-access state.
+
+Selecting a tenant navigates to `/t/:tenantId/contacts`, which verifies `TenantMembership` server-side before rendering tenant-sensitive information. Unauthorized tenant navigation shows the selector with authorized memberships instead of tenant content.
+
+## Legacy Global GET Removal
+
+The legacy `GET /api/contacts` endpoint is removed. It previously returned an unscoped list of all contacts (up to 500) to any authenticated user. No compatibility alias exists. The remaining non-GET operations on `/api/contacts` (POST create) and `/api/contacts/:contactId` (PATCH/DELETE) are unchanged.
 
 ## Authentication Requirements
 
@@ -61,9 +85,16 @@ Global `ADMIN` and `AGENT` roles do **not** bypass this check.
 After authorization, the routes invoke the tenant-scoped repository:
 
 ```ts
+const contacts = await tenantMessagingRepository.listContacts(context, { search, take, cursor });
 const contact = await tenantMessagingRepository.findContact(context, contactId);
 const conversation = await tenantMessagingRepository.findConversation(context, conversationId);
 ```
+
+The repository `listContacts` function:
+- Accepts only a `WeakSet`-marked `TenantContext`
+- Queries with `WHERE tenantId = ?` — enforcing tenant ownership at the database level before pagination
+- Excludes other tenants' contacts and null-owned contacts
+- Bounded `take` (1–200, default 200), optional `cursor`
 
 The repository `findContact` function:
 - Accepts only a `WeakSet`-marked `TenantContext`
@@ -81,10 +112,12 @@ No direct Prisma `contact.findUnique`, `contact.findFirst`, `conversation.findUn
 
 | Scenario | HTTP Status | Response |
 |----------|-------------|----------|
+| Valid session + valid membership + contact list | 200 | Array of contact objects |
 | Valid session + valid membership + existing contact | 200 | Contact object |
 | Valid session + valid membership + existing conversation | 200 | Conversation object |
 | No session | 401 | `{"error": "Unauthorized"}` |
 | No membership / unknown tenant / malformed tenantId | 403 | `{"error": "Tenant access denied"}` |
+| Invalid pagination (e.g. `take` out of bounds) | 400 | `{"error": "Invalid request"}` |
 | Contact not found (unknown, cross-tenant, null-owned) | 404 | `{"error": "Contact not found"}` |
 | Conversation not found (unknown, cross-tenant, null-owned, contact mismatch, malformed conversationId) | 404 | `{"error": "Conversation not found"}` |
 
@@ -158,14 +191,15 @@ There is no fallback to legacy unscoped repositories.
 
 ## Legacy Route Separation
 
-The new route is completely isolated from existing routes:
+The new routes are completely isolated from existing routes:
 
 | Route | Tenant Enforcement | Authorization |
 |-------|-------------------|---------------|
-| `/api/contacts` | None | `requireUser()` |
+| `/api/contacts` (POST only) | None | `requireUser()` |
 | `/api/contacts/[id]` (PATCH/DELETE) | None | `requireUser()` / `requireAdmin()` |
 | `/api/conversations` | None | `requireUser()` |
 | `/api/conversations/[id]/messages` | None | `requireUser()` |
+| `/api/tenants/:tenantId/contacts` | **Yes** | Session + membership verification |
 | `/api/tenants/:tenantId/contacts/:contactId` | **Yes** | Session + membership verification |
 | `/api/tenants/:tenantId/conversations/:conversationId` | **Yes** | Session + membership verification |
 

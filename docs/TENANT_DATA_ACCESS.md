@@ -13,6 +13,7 @@ A plain object with `tenantId`, `userId` or `membershipId` is rejected. Raw `ten
 `src/lib/tenant/repository.ts` exposes bounded read operations:
 
 - `findContact(context, id)`
+- `listContacts(context, pagination)` — tenant-filtered contact list with optional `search`, bounded `take` (1–200), optional `cursor`
 - `findConversation(context, id)`
 - `findMessage(context, id)`
 - `listConversationMessages(context, conversationId, pagination)`

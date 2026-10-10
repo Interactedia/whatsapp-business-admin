@@ -6,6 +6,8 @@ import type { NextAuthConfig } from "next-auth";
  */
 const protectedTenantReadPattern =
   /^\/api\/tenants\/[^/]+\/(?:contacts|conversations)\/[^/]+$/;
+const protectedTenantListPattern =
+  /^\/api\/tenants\/[^/]+\/(?:contacts|conversations)\/?$/;
 
 export const authConfig: NextAuthConfig = {
   trustHost: true,
@@ -24,7 +26,8 @@ export const authConfig: NextAuthConfig = {
       if (
         !isLoggedIn &&
         request.method === "GET" &&
-        protectedTenantReadPattern.test(nextUrl.pathname)
+        (protectedTenantReadPattern.test(nextUrl.pathname) ||
+          protectedTenantListPattern.test(nextUrl.pathname))
       ) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }

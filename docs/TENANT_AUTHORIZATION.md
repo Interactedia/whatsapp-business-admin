@@ -59,6 +59,15 @@ Membership verification only proves that a user belongs to a tenant. It does not
 
 The helper `assertTenantOwned(context, resource)` only validates that an already-loaded resource has non-null ownership matching the verified context. It is not a data access layer and does not fetch unrestricted tenant data.
 
+## Explicit tenant selection (WA-01-05G-R2)
+
+Tenant selection is always explicit. The URL identifies the requested tenant (e.g. `/t/:tenantId/contacts`), but the URL tenantId is only an access request — never proof of authorization. The server verifies `TenantMembership` for the authenticated user before rendering tenant-sensitive information.
+
+- No default tenant, no first-membership auto-selection, no implicit tenant cookie.
+- The Contacts selector lists only the authenticated user's authorized memberships.
+- Users without memberships see a no-access state.
+- Global `ADMIN` without membership is denied exactly like any other user.
+
 ## Service identity separation
 
 Human tenant authorization is separate from service identity authorization. Do not reuse `TenantContext` automatically for:
@@ -78,3 +87,7 @@ WA-01-05A does not change existing API routes, NextAuth behavior, global `ADMIN`
 ## Deferred runtime enforcement and RLS
 
 Runtime tenant isolation across the application is deferred. PostgreSQL RLS remains deferred. Future work must add bounded tenant-scoped data operations and route enforcement without treating historical `null` ownership as accessible tenant data.
+
+## Remaining unmigrated application sections
+
+Only Contacts uses explicit tenant navigation (`/t/:tenantId/contacts`) and the tenant contact list API. Conversations, Settings, Inbox, Templates, Flows, Broadcasts, Logs, and other application sections still use legacy routes and are not migrated; their migration requires separate approved implementation units.

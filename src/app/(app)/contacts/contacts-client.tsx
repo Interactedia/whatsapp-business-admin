@@ -25,7 +25,14 @@ type Contact = {
   conversation: { id: string } | null;
 };
 
-export function ContactsClient({ isAdmin }: { isAdmin: boolean }) {
+export function ContactsClient({
+  isAdmin,
+  listUrl,
+}: {
+  isAdmin: boolean;
+  /** Tenant-scoped list endpoint — the legacy global GET is removed. */
+  listUrl: string;
+}) {
   const qc = useQueryClient();
   const router = useRouter();
   const { toast } = useToast();
@@ -33,11 +40,15 @@ export function ContactsClient({ isAdmin }: { isAdmin: boolean }) {
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState<Contact | null>(null);
 
+  const baseUrl = listUrl;
   const { data: contacts = [], isLoading } = useQuery({
-    queryKey: ["contacts", search],
-    queryFn: () => apiFetch<Contact[]>(`/api/contacts${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+    queryKey: [baseUrl, search],
+    queryFn: () =>
+      apiFetch<Contact[]>(
+        `${baseUrl}${search ? `?search=${encodeURIComponent(search)}` : ""}`
+      ),
   });
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["contacts"] });
+  const invalidate = () => qc.invalidateQueries({ queryKey: [baseUrl] });
 
   const remove = useMutation({
     mutationFn: (id: string) => apiFetch(`/api/contacts/${id}`, { method: "DELETE" }),
