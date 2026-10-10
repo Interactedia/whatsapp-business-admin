@@ -1,5 +1,34 @@
-import { SubmissionsClient } from "./submissions-client";
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
 
-export default function SubmissionsPage() {
-  return <SubmissionsClient />;
+async function getMemberships(userId: string) {
+  return prisma.tenantMembership.findMany({
+    where: {
+      userId,
+      user: { active: true },
+    },
+    select: {
+      id: true,
+      tenantId: true,
+      tenant: { select: { id: true, name: true } },
+    },
+  });
+}
+
+/**
+ * Submissions — requires explicit tenant selection.
+ * Redirects to tenant selector if no tenant context is established.
+ */
+export default async function SubmissionsPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+
+  const memberships = await getMemberships(session.user.id);
+
+  if (memberships.length === 0) {
+    redirect("/inbox");
+  }
+
+  redirect(`/t/${memberships[0].tenantId}/submissions`);
 }
