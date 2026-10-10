@@ -1,4 +1,5 @@
 import {
+  LayoutDashboard,
   MessageSquare,
   Users,
   LayoutTemplate,
@@ -33,6 +34,7 @@ export type NavItem = {
  * Items marked `global` keep their absolute path and do not inject a tenant.
  */
 export const NAV_ITEMS: NavItem[] = [
+  { key: "/", label: "Dashboard", icon: LayoutDashboard, tenantScoped: true },
   { key: "conversations", label: "Inbox", icon: MessageSquare, tenantScoped: true },
   { key: "contacts", label: "Contacts", icon: Users, tenantScoped: true },
   { key: "templates", label: "Templates", icon: LayoutTemplate, adminOnly: true, tenantScoped: true },
@@ -54,7 +56,11 @@ export const NAV_ITEMS: NavItem[] = [
 export function navHref(item: NavItem, activeTenantId: string | null): string {
   if (item.global) return item.key;
   if (item.tenantScoped) {
-    if (activeTenantId) return `/t/${activeTenantId}/${item.key}`;
+    if (activeTenantId) {
+      // The Dashboard "key" of "/" means the tenant root, not "/t/:id//".
+      if (item.key === "/") return `/t/${activeTenantId}`;
+      return `/t/${activeTenantId}/${item.key}`;
+    }
     return "/inbox";
   }
   return item.key;
@@ -72,5 +78,10 @@ export function isNavActive(
   const href = navHref(item, activeTenantId);
   if (href === "/") return pathname === "/";
   if (href === "/inbox") return pathname === "/inbox";
+  // The tenant root (e.g. /t/abc) is the Dashboard — match it exactly, since
+  // child routes like /t/abc/conversations already have their own items.
+  if (activeTenantId && href === `/t/${activeTenantId}`) {
+    return pathname === href;
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
