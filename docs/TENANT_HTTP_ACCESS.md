@@ -184,15 +184,21 @@ Automated behavioral tests cover:
 
 Build output includes `/api/tenants/[tenantId]/conversations/[conversationId]`, proving the dynamic route is registered.
 
-### Live HTTP verification and known middleware limitation
+### Live HTTP verification
 
-Live HTTP requests against an isolated production Next.js instance confirm the dynamic route resolves for distinct identifier values (each redirect carries its own `callbackUrl`). However, an unauthenticated live request returns `307` (redirect to `/login`), not the handler's `401`.
+WA-01-05-AUTH-01 updates the shared Auth.js boundary so anonymous `GET` requests to the two protected tenant read endpoints receive JSON authentication failures instead of browser redirects.
 
-This is because the global NextAuth middleware (`src/proxy.ts`) intercepts `/api/tenants/*` before the route handler runs. Its `authorized` callback returns a redirect for browser navigation, which is incorrect for API/fetch consumers: the `307` is followed transparently and yields the `/login` HTML page instead of a `401` JSON body. This is a known pre-existing CORS/cookie middleware defect and is identical for the already-accepted contact endpoint (WA-01-05C).
+Live HTTP GET requests against an isolated local Next.js runtime now verify:
 
-The handler-level `401`/`403`/`404` contract is correct and unit-verified. Fixing the middleware to return `401` JSON for API routes is an authentication-layer change that is out of scope for this task (it would alter existing authentication behavior for all `/api/tenants/*` routes) and requires a separate approved implementation unit.
+| Request | Status | Content-Type | Location |
+|---------|--------|--------------|----------|
+| `GET /api/tenants/test-tenant/contacts/test-contact` | `401` | `application/json` | none |
+| `GET /api/tenants/test-tenant/conversations/test-conversation` | `401` | `application/json` | none |
+| `GET /inbox` | `307` | none | `/login?callbackUrl=...` |
 
-No controlled NextAuth session fixture is introduced by this task, so authorized `200` and tenant-denied `403`/`404` are verified at the handler level only, not end-to-end over live HTTP.
+The route handlers still perform their own `auth()` check and return `401` if called without a session. The proxy-level JSON response prevents API/fetch consumers from receiving `/login` HTML while preserving browser-page login redirects.
+
+No controlled NextAuth session fixture is introduced by this task, so authorized `200` and tenant-denied `403`/`404` remain verified at the handler level.
 
 ## Future Integration Requirements
 

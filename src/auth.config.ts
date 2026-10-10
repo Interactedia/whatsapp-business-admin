@@ -4,18 +4,29 @@ import type { NextAuthConfig } from "next-auth";
  * Edge-safe auth config (no DB, no Node-only deps) shared by the middleware and
  * the full server config in `auth.ts`. Providers are added in `auth.ts`.
  */
+const protectedTenantReadPattern =
+  /^\/api\/tenants\/[^/]+\/(?:contacts|conversations)\/[^/]+$/;
+
 export const authConfig: NextAuthConfig = {
   trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [],
   callbacks: {
-    authorized({ auth, request: { nextUrl } }) {
+    authorized({ auth, request }) {
       const isLoggedIn = !!auth?.user;
+      const { nextUrl } = request;
       const isOnLogin = nextUrl.pathname.startsWith("/login");
       if (isOnLogin) {
         if (isLoggedIn) return Response.redirect(new URL("/", nextUrl));
         return true;
+      }
+      if (
+        !isLoggedIn &&
+        request.method === "GET" &&
+        protectedTenantReadPattern.test(nextUrl.pathname)
+      ) {
+        return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
       return isLoggedIn;
     },
