@@ -78,7 +78,7 @@ export function TenantContactsClient({
       <div className="flex-1 overflow-auto">
         <ContactsClient
           isAdmin={isAdmin}
-          listUrl={`/api/tenants/${tenant.id}/contacts`}
+          baseUrl={`/api/tenants/${tenant.id}/contacts`}
         />
       </div>
     </div>

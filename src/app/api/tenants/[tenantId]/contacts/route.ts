@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { handle, ok, fail } from "@/lib/api";
 import { auth } from "@/auth";
 import { resolveTenantContext, TenantAuthorizationError } from "@/lib/tenant";
@@ -83,4 +84,64 @@ export const GET = handle(async (req, { params }) => {
   const contacts = rawContacts.map(toContactRead).filter((c): c is ContactRead => c !== null);
 
   return ok(contacts);
+});
+
+const createSchema = z.object({
+  waId: z.string().trim().regex(/^\d{7,15}$/, "Enter digits only, no + (e.g. 919812345678)"),
+  name: z.string().trim().optional(),
+  tags: z.array(z.string()).optional(),
+  notes: z.string().optional(),
+});
+
+export const POST = handle(async (req, { params }) => {
+  // A. Authenticate
+  const session = await auth();
+  if (!session?.user) {
+    return fail(401, "Unauthorized");
+  }
+
+  // B. Server-verified principal
+  const principal = { userId: session.user.id };
+
+  // C. Read tenantId from URL
+  const { tenantId } = await params;
+
+  // D. Validate membership and resolve trusted TenantContext
+  let context;
+  try {
+    context = await resolveTenantContext(principal, tenantId);
+  } catch (err) {
+    if (err instanceof TenantAuthorizationError) {
+      return fail(403, "Tenant access denied");
+    }
+    throw err;
+  }
+
+  // E. Parse and validate input
+  let body;
+  try {
+    body = createSchema.parse(await req.json());
+  } catch {
+    return fail(400, "Invalid request");
+  }
+
+  // F. Create contact with tenant ownership from trusted context
+  let raw;
+  try {
+    raw = await tenantMessagingRepository.createContact(context, body);
+  } catch (err) {
+    // Handle unique constraint violation (waId already exists)
+    if (err instanceof Error && err.message.includes("Unique constraint")) {
+      return fail(409, "A contact with that number already exists.");
+    }
+    throw err;
+  }
+
+  // G. Return bounded response
+  const contact = toContactRead(raw);
+  if (!contact) {
+    return fail(500, "Internal error");
+  }
+
+  return ok(contact, 201);
 });

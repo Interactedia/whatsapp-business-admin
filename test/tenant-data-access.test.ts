@@ -107,6 +107,23 @@ function fakeDb() {
         const start = cursor ? Math.max(0, matched.findIndex((row) => row.id === cursor.id) + (skip ?? 0)) : 0;
         return matched.slice(start, start + take);
       }),
+      create: vi.fn(async ({ data }: { data: { tenantId: string; waId: string; name?: string | null; tags?: string[]; notes?: string | null } }) => {
+        const newContact: Contact = { id: `new-${data.waId}`, tenantId: data.tenantId };
+        contacts.push(newContact);
+        return { ...newContact, ...data, createdAt: new Date(), updatedAt: new Date() };
+      }),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        const idx = contacts.findIndex((c) => c.id === where.id);
+        if (idx === -1) return null;
+        Object.assign(contacts[idx], data);
+        return { ...contacts[idx], ...data, updatedAt: new Date() };
+      }),
+      delete: vi.fn(async ({ where }: { where: { id: string } }) => {
+        const idx = contacts.findIndex((c) => c.id === where.id);
+        if (idx === -1) return null;
+        contacts.splice(idx, 1);
+        return { id: where.id };
+      }),
     },
     conversation: {
       findFirst: vi.fn(async ({ where, include, select }: { where: Where; include?: unknown; select?: unknown }) => {

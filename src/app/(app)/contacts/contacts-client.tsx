@@ -27,11 +27,15 @@ type Contact = {
 
 export function ContactsClient({
   isAdmin,
-  listUrl,
+  baseUrl,
 }: {
   isAdmin: boolean;
-  /** Tenant-scoped list endpoint — the legacy global GET is removed. */
-  listUrl: string;
+  /**
+   * Tenant-scoped base URL for all contact operations.
+   * Example: `/api/tenants/${tenantId}/contacts`
+   * POST creates at this URL, PATCH/DELETE at `${baseUrl}/${id}`.
+   */
+  baseUrl: string;
 }) {
   const qc = useQueryClient();
   const router = useRouter();
@@ -40,18 +44,18 @@ export function ContactsClient({
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState<Contact | null>(null);
 
-  const baseUrl = listUrl;
+  const listUrl = baseUrl;
   const { data: contacts = [], isLoading } = useQuery({
-    queryKey: [baseUrl, search],
+    queryKey: [listUrl, search],
     queryFn: () =>
       apiFetch<Contact[]>(
-        `${baseUrl}${search ? `?search=${encodeURIComponent(search)}` : ""}`
+        `${listUrl}${search ? `?search=${encodeURIComponent(search)}` : ""}`
       ),
   });
-  const invalidate = () => qc.invalidateQueries({ queryKey: [baseUrl] });
+  const invalidate = () => qc.invalidateQueries({ queryKey: [listUrl] });
 
   const remove = useMutation({
-    mutationFn: (id: string) => apiFetch(`/api/contacts/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => apiFetch(`${baseUrl}/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       invalidate();
       toast({ title: "Contact deleted" });
@@ -80,7 +84,7 @@ export function ContactsClient({
                 <Plus className="h-4 w-4" /> New contact
               </Button>
             </DialogTrigger>
-            <ContactDialog onClose={() => setOpen(false)} onSaved={invalidate} />
+            <ContactDialog onClose={() => setOpen(false)} onSaved={invalidate} baseUrl={baseUrl} />
           </Dialog>
         }
       />
@@ -155,13 +159,13 @@ export function ContactsClient({
       </div>
 
       <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}>
-        {edit && <ContactDialog contact={edit} onClose={() => setEdit(null)} onSaved={invalidate} />}
+        {edit && <ContactDialog contact={edit} onClose={() => setEdit(null)} onSaved={invalidate} baseUrl={baseUrl} />}
       </Dialog>
     </div>
   );
 }
 
-function ContactDialog({ contact, onClose, onSaved }: { contact?: Contact; onClose: () => void; onSaved: () => void }) {
+function ContactDialog({ contact, onClose, onSaved, baseUrl }: { contact?: Contact; onClose: () => void; onSaved: () => void; baseUrl: string }) {
   const { toast } = useToast();
   const [form, setForm] = useState({
     waId: contact?.waId ?? "",
@@ -178,8 +182,8 @@ function ContactDialog({ contact, onClose, onSaved }: { contact?: Contact; onClo
         notes: form.notes || undefined,
       };
       return contact
-        ? apiFetch(`/api/contacts/${contact.id}`, { method: "PATCH", body: JSON.stringify(payload) })
-        : apiFetch("/api/contacts", { method: "POST", body: JSON.stringify({ waId: form.waId, ...payload }) });
+        ? apiFetch(`${baseUrl}/${contact.id}`, { method: "PATCH", body: JSON.stringify(payload) })
+        : apiFetch(baseUrl, { method: "POST", body: JSON.stringify({ waId: form.waId, ...payload }) });
     },
     onSuccess: () => {
       toast({ title: contact ? "Contact updated" : "Contact added" });

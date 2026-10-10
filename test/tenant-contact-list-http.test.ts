@@ -260,17 +260,30 @@ describe("WA-01-05G-R2 legacy global GET removal", () => {
   it("does not export GET from /api/contacts route", async () => {
     const routeModule = (await import("@/app/api/contacts/route")) as Record<string, unknown>;
     expect(routeModule.GET).toBeUndefined();
-    expect(routeModule.POST).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WA-01-05H legacy global write removal
+// ---------------------------------------------------------------------------
+
+describe("WA-01-05H legacy global write removal", () => {
+  it("does not export POST from /api/contacts route", async () => {
+    const routeModule = (await import("@/app/api/contacts/route")) as Record<string, unknown>;
+    expect(routeModule.POST).toBeUndefined();
   });
 
-  it("preserves POST, PATCH, and DELETE in contact routes", async () => {
-    const mainRoute = (await import("@/app/api/contacts/route")) as Record<string, unknown>;
+  it("does not export PATCH or DELETE from /api/contacts/[id] route", async () => {
     const idRoute = (await import("@/app/api/contacts/[id]/route")) as Record<string, unknown>;
+    expect(idRoute.PATCH).toBeUndefined();
+    expect(idRoute.DELETE).toBeUndefined();
+  });
 
-    expect(mainRoute.POST).toBeDefined();
-    expect(idRoute.PATCH).toBeDefined();
-    expect(idRoute.DELETE).toBeDefined();
-    expect(mainRoute.GET).toBeUndefined();
-    expect(idRoute.GET).toBeUndefined();
+  it("exports POST, PATCH, DELETE from canonical tenant routes", async () => {
+    const listRoute = (await import("@/app/api/tenants/[tenantId]/contacts/route")) as Record<string, unknown>;
+    const detailRoute = (await import("@/app/api/tenants/[tenantId]/contacts/[contactId]/route")) as Record<string, unknown>;
+    expect(listRoute.POST).toBeDefined();
+    expect(detailRoute.PATCH).toBeDefined();
+    expect(detailRoute.DELETE).toBeDefined();
   });
 });

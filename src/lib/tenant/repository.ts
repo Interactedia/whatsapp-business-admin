@@ -17,7 +17,7 @@ const contactListSchema = paginationSchema.extend({
 export type ContactListPagination = z.input<typeof contactListSchema>;
 
 export type TenantPrisma = {
-  contact: { findFirst(args: unknown): Promise<unknown>; findMany(args: unknown): Promise<unknown[]> };
+  contact: { findFirst(args: unknown): Promise<unknown>; findMany(args: unknown): Promise<unknown[]>; create(args: unknown): Promise<unknown>; update(args: unknown): Promise<unknown>; delete(args: unknown): Promise<unknown> };
   conversation: { findFirst(args: unknown): Promise<unknown> };
   message: {
     findFirst(args: unknown): Promise<unknown>;
@@ -129,6 +129,49 @@ export function createTenantMessagingRepository(db: TenantPrisma = prisma) {
         take,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       });
+    },
+
+    async createContact(context: TenantContext, data: { waId: string; name?: string; tags?: string[]; notes?: string }) {
+      const tenant = tenantId(context);
+      const id = parseId(data.waId); // validates non-empty
+      void id; // waId validation is separate
+      return db.contact.create({
+        data: {
+          tenantId: tenant,
+          waId: data.waId,
+          name: data.name ?? null,
+          tags: data.tags ?? [],
+          notes: data.notes ?? null,
+        },
+      });
+    },
+
+    async updateContact(
+      context: TenantContext,
+      id: string,
+      data: { name?: string | null; tags?: string[]; notes?: string | null },
+    ) {
+      const contactId = parseId(id);
+      // findContact already enforces tenant ownership
+      const existing = await this.findContact(context, contactId);
+      if (!existing) return null;
+      return db.contact.update({
+        where: { id: contactId },
+        data: {
+          ...(data.name !== undefined ? { name: data.name } : {}),
+          ...(data.tags !== undefined ? { tags: data.tags } : {}),
+          ...(data.notes !== undefined ? { notes: data.notes } : {}),
+        },
+      });
+    },
+
+    async deleteContact(context: TenantContext, id: string) {
+      const contactId = parseId(id);
+      // findContact already enforces tenant ownership
+      const existing = await this.findContact(context, contactId);
+      if (!existing) return null;
+      await db.contact.delete({ where: { id: contactId } });
+      return { deleted: true };
     },
   };
 }
