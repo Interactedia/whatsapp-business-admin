@@ -5,6 +5,8 @@ export type AuthenticatedPrincipal = {
   userId: string;
 };
 
+const trustedTenantContexts = new WeakSet<TenantContext>();
+
 export type TenantContext = {
   tenantId: string;
   userId: string;
@@ -46,7 +48,17 @@ export async function resolveTenantContext(
 
   if (!membership?.user.active || !membership.tenant) throw new TenantAuthorizationError();
 
-  return { tenantId: membership.tenant.id, userId: membership.user.id, membershipId: membership.id };
+  const context: TenantContext = {
+    tenantId: membership.tenant.id,
+    userId: membership.user.id,
+    membershipId: membership.id,
+  };
+  trustedTenantContexts.add(context);
+  return context;
+}
+
+export function assertTrustedTenantContext(context: TenantContext | null | undefined): asserts context is TenantContext {
+  if (!context || !trustedTenantContexts.has(context)) throw new TenantAuthorizationError();
 }
 
 export type TenantOwnedResource = {
@@ -57,7 +69,6 @@ export function assertTenantOwned(
   context: TenantContext,
   resource: TenantOwnedResource | null | undefined,
 ): void {
-  if (!resource?.tenantId || resource.tenantId !== context.tenantId) {
-    throw new TenantAuthorizationError();
-  }
+  assertTrustedTenantContext(context);
+  if (!resource?.tenantId || resource.tenantId !== context.tenantId) throw new TenantAuthorizationError();
 }
