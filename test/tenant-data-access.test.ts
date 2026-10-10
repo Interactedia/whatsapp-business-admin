@@ -57,9 +57,13 @@ const nullMessage: Message = {
   timestamp: new Date("2026-01-01T00:00:03Z"),
 };
 
-const contacts = [contact1, contact2, nullContact];
-const conversations = [conversation1, conversation2, mismatchedConversation];
-const messages = [message1, message2, mismatchedMessage, nullMessage];
+const baseContacts = [contact1, contact2, nullContact];
+const baseConversations = [conversation1, conversation2, mismatchedConversation];
+const baseMessages = [message1, message2, mismatchedMessage, nullMessage];
+
+let contacts = [...baseContacts];
+let conversations = [...baseConversations];
+let messages = [...baseMessages];
 
 function matchesContact(contact: Contact, where: Where): boolean {
   return (!where.id || contact.id === where.id) && (!where.tenantId || contact.tenantId === where.tenantId);
@@ -112,17 +116,17 @@ function fakeDb() {
         contacts.push(newContact);
         return { ...newContact, ...data, createdAt: new Date(), updatedAt: new Date() };
       }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-        const idx = contacts.findIndex((c) => c.id === where.id);
-        if (idx === -1) return null;
-        Object.assign(contacts[idx], data);
-        return { ...contacts[idx], ...data, updatedAt: new Date() };
+      updateMany: vi.fn(async ({ where, data }: { where: Where; data: Record<string, unknown> }) => {
+        const row = contacts.find((contact) => matchesContact(contact, where));
+        if (!row) return { count: 0 };
+        Object.assign(row, data);
+        return { count: 1 };
       }),
-      delete: vi.fn(async ({ where }: { where: { id: string } }) => {
-        const idx = contacts.findIndex((c) => c.id === where.id);
-        if (idx === -1) return null;
+      deleteMany: vi.fn(async ({ where }: { where: Where }) => {
+        const idx = contacts.findIndex((contact) => matchesContact(contact, where));
+        if (idx === -1) return { count: 0 };
         contacts.splice(idx, 1);
-        return { id: where.id };
+        return { count: 1 };
       }),
     },
     conversation: {
@@ -161,6 +165,15 @@ async function context() {
 describe("WA-01-05B tenant-scoped messaging data access", () => {
   beforeEach(() => {
     membershipFindUnique.mockReset();
+    Object.assign(contact1, { id: "contact-1", tenantId: tenant1 });
+    Object.assign(contact2, { id: "contact-2", tenantId: tenant2 });
+    Object.assign(nullContact, { id: "contact-null", tenantId: null });
+    delete contact1.name;
+    delete contact2.name;
+    delete nullContact.name;
+    contacts = [...baseContacts];
+    conversations = [...baseConversations];
+    messages = [...baseMessages];
   });
 
   it("reads an authorized contact", async () => {
@@ -232,6 +245,74 @@ describe("WA-01-05B tenant-scoped messaging data access", () => {
     await createTenantMessagingRepository(db).listContacts(ctx, { take: 1 });
 
     expect(db.contact.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 1 }));
+  });
+
+  it("updates only same-tenant contacts at mutation time", async () => {
+    const db = fakeDb();
+    const repo = createTenantMessagingRepository(db as TenantPrisma);
+    const ctx = await context();
+
+    await expect(repo.updateContact(ctx, contact1.id, { name: "Updated" })).resolves.toMatchObject({
+      id: contact1.id,
+      tenantId: tenant1,
+      name: "Updated",
+    });
+    expect(db.contact.updateMany).toHaveBeenCalledWith({
+      where: { id: contact1.id, tenantId: tenant1 },
+      data: { name: "Updated" },
+    });
+  });
+
+  it("denies cross-tenant and null-owned contact updates at mutation time", async () => {
+    const repo = createTenantMessagingRepository(fakeDb() as TenantPrisma);
+    const ctx = await context();
+
+    await expect(repo.updateContact(ctx, contact2.id, { name: "Nope" })).resolves.toBeNull();
+    await expect(repo.updateContact(ctx, nullContact.id, { name: "Nope" })).resolves.toBeNull();
+  });
+
+  it("does not mutate when contact ownership changes before update mutation", async () => {
+    const repo = createTenantMessagingRepository(fakeDb() as TenantPrisma);
+    const ctx = await context();
+    contact1.tenantId = tenant2;
+
+    await expect(repo.updateContact(ctx, contact1.id, { name: "Stale" })).resolves.toBeNull();
+    expect(contact1.name).toBeUndefined();
+  });
+
+  it("deletes only same-tenant contacts at mutation time", async () => {
+    const db = fakeDb();
+    const repo = createTenantMessagingRepository(db as TenantPrisma);
+    const ctx = await context();
+
+    await expect(repo.deleteContact(ctx, contact1.id)).resolves.toEqual({ deleted: true });
+    expect(db.contact.deleteMany).toHaveBeenCalledWith({ where: { id: contact1.id, tenantId: tenant1 } });
+    expect(db.conversation.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("denies cross-tenant and null-owned contact deletes at mutation time", async () => {
+    const repo = createTenantMessagingRepository(fakeDb() as TenantPrisma);
+    const ctx = await context();
+
+    await expect(repo.deleteContact(ctx, contact2.id)).resolves.toBeNull();
+    await expect(repo.deleteContact(ctx, nullContact.id)).resolves.toBeNull();
+  });
+
+  it("does not delete when contact ownership changes before delete mutation", async () => {
+    const repo = createTenantMessagingRepository(fakeDb() as TenantPrisma);
+    const ctx = await context();
+    contact1.tenantId = tenant2;
+
+    await expect(repo.deleteContact(ctx, contact1.id)).resolves.toBeNull();
+    expect(contacts.some((contact) => contact.id === contact1.id)).toBe(true);
+  });
+
+  it("returns null for missing contact mutations without disclosure", async () => {
+    const repo = createTenantMessagingRepository(fakeDb() as TenantPrisma);
+    const ctx = await context();
+
+    await expect(repo.updateContact(ctx, "missing-contact", { name: "Missing" })).resolves.toBeNull();
+    await expect(repo.deleteContact(ctx, "missing-contact")).resolves.toBeNull();
   });
 
   it("rejects invalid contact pagination values", async () => {

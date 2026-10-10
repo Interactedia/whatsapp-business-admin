@@ -17,7 +17,13 @@ const contactListSchema = paginationSchema.extend({
 export type ContactListPagination = z.input<typeof contactListSchema>;
 
 export type TenantPrisma = {
-  contact: { findFirst(args: unknown): Promise<unknown>; findMany(args: unknown): Promise<unknown[]>; create(args: unknown): Promise<unknown>; update(args: unknown): Promise<unknown>; delete(args: unknown): Promise<unknown> };
+  contact: {
+    findFirst(args: unknown): Promise<unknown>;
+    findMany(args: unknown): Promise<unknown[]>;
+    create(args: unknown): Promise<unknown>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+    deleteMany(args: unknown): Promise<{ count: number }>;
+  };
   conversation: { findFirst(args: unknown): Promise<unknown> };
   message: {
     findFirst(args: unknown): Promise<unknown>;
@@ -152,25 +158,25 @@ export function createTenantMessagingRepository(db: TenantPrisma = prisma) {
       data: { name?: string | null; tags?: string[]; notes?: string | null },
     ) {
       const contactId = parseId(id);
-      // findContact already enforces tenant ownership
-      const existing = await this.findContact(context, contactId);
-      if (!existing) return null;
-      return db.contact.update({
-        where: { id: contactId },
+      const ownerTenantId = tenantId(context);
+      const result = await db.contact.updateMany({
+        where: { id: contactId, tenantId: ownerTenantId },
         data: {
           ...(data.name !== undefined ? { name: data.name } : {}),
           ...(data.tags !== undefined ? { tags: data.tags } : {}),
           ...(data.notes !== undefined ? { notes: data.notes } : {}),
         },
       });
+      if (result.count !== 1) return null;
+      return this.findContact(context, contactId);
     },
 
     async deleteContact(context: TenantContext, id: string) {
       const contactId = parseId(id);
-      // findContact already enforces tenant ownership
-      const existing = await this.findContact(context, contactId);
-      if (!existing) return null;
-      await db.contact.delete({ where: { id: contactId } });
+      const result = await db.contact.deleteMany({
+        where: { id: contactId, tenantId: tenantId(context) },
+      });
+      if (result.count !== 1) return null;
       return { deleted: true };
     },
   };
