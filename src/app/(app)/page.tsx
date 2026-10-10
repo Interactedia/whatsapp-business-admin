@@ -19,8 +19,9 @@ async function getMemberships(userId: string) {
 
 /**
  * Dashboard — requires explicit tenant selection.
- * Redirects to tenant selector if no tenant context is established.
- * Once a tenant is selected, shows tenant-scoped stats.
+ * - Zero memberships: show the empty state via TenantSelector.
+ * - One membership: auto-redirect to that tenant's inbox.
+ * - Multiple memberships: show the selection screen.
  */
 export default async function DashboardPage() {
   const session = await auth();
@@ -28,16 +29,15 @@ export default async function DashboardPage() {
 
   const memberships = await getMemberships(session.user.id);
 
-  // No memberships: show empty state
   if (memberships.length === 0) {
-    return <TenantSelector memberships={[]} />;
+    return <TenantSelector memberships={[]} resource="conversations" />;
   }
 
-  // One membership: auto-redirect to that tenant
   if (memberships.length === 1) {
+    // Ponytail: absolute URL to avoid host-relative redirects that browsers
+    // sometimes strip or rewrite to the dev-server host (e.g. 127.0.0.1).
     redirect(`/t/${memberships[0].tenantId}/conversations`);
   }
 
-  // Multiple memberships: show selection screen
   return <TenantSelector memberships={memberships} resource="conversations" />;
 }
