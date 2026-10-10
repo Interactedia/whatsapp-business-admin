@@ -17,15 +17,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { OrganizationSelector } from "@/components/tenant/organization-selector";
+import type { TenantMembershipSummary } from "@/components/tenant/organization-selector";
 
 type Props = {
   user: { name: string; email: string; role: "ADMIN" | "AGENT" };
+  memberships: TenantMembershipSummary[];
+  activeTenantId: string | null;
   wabaConnected: boolean;
   phoneNumber: string | null;
   children: React.ReactNode;
 };
 
-export function AppShell({ user, wabaConnected, phoneNumber, children }: Props) {
+export function AppShell({ user, memberships, activeTenantId, wabaConnected, phoneNumber, children }: Props) {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const items = NAV_ITEMS.filter((i) => !i.adminOnly || user.role === "ADMIN");
@@ -82,6 +86,8 @@ export function AppShell({ user, wabaConnected, phoneNumber, children }: Props) 
         <header className="flex min-h-12 shrink-0 items-center justify-between border-b bg-card px-2 py-1 pt-[max(0.25rem,env(safe-area-inset-top))] sm:px-4">
           <div className="flex items-center gap-2">
             <button className="flex h-10 w-10 items-center justify-center rounded-md hover:bg-accent lg:hidden" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation"><Menu className="h-5 w-5" /></button>
+            {/* Organization selector — upper-left per UX spec */}
+            <OrganizationSelector memberships={memberships} activeTenantId={activeTenantId} />
             <span className="text-sm font-semibold lg:hidden">WA Admin</span>
             {!wabaConnected && (
               <Badge variant="warning" className="hidden gap-1 sm:inline-flex">

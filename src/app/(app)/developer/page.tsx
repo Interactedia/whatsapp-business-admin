@@ -1,28 +1,37 @@
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { DeveloperClient } from "./developer-client";
 
+async function getMemberships(userId: string) {
+  return prisma.tenantMembership.findMany({
+    where: {
+      userId,
+      user: { active: true },
+    },
+    select: {
+      id: true,
+      tenantId: true,
+      tenant: { select: { id: true, name: true } },
+    },
+  });
+}
+
+/**
+ * Developer — requires explicit tenant selection.
+ * Redirects to tenant selector if no tenant context is established.
+ */
 export default async function DeveloperPage() {
   const session = await auth();
+  if (!session?.user) redirect("/login");
   if (session?.user.role !== "ADMIN") redirect("/");
 
-  // Prefer the live request host so the docs show a working base URL.
-  const h = await headers();
-  const host = h.get("x-forwarded-host") || h.get("host");
-  const proto = h.get("x-forwarded-proto") || "http";
-  const baseUrl = host ? `${proto}://${host}` : process.env.APP_URL || "http://localhost:3000";
+  const memberships = await getMemberships(session.user.id);
 
-  const memberships = await prisma.tenantMembership.findMany({
-    where: { userId: session.user.id, user: { active: true } },
-    select: { tenantId: true, tenant: { select: { id: true, name: true } } },
-  });
+  // No memberships: redirect to tenant selection
+  if (memberships.length === 0) {
+    redirect("/inbox");
+  }
 
-  return (
-    <DeveloperClient
-      baseUrl={baseUrl}
-      tenants={memberships.map((m) => ({ id: m.tenant.id, name: m.tenant.name }))}
-    />
-  );
+  // Redirect to tenant-scoped developer page
+  redirect(`/t/${memberships[0].tenantId}/developer`);
 }

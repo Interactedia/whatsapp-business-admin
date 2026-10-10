@@ -1,9 +1,37 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { FlowsClient } from "./flows-client";
+import { prisma } from "@/lib/prisma";
 
+async function getMemberships(userId: string) {
+  return prisma.tenantMembership.findMany({
+    where: {
+      userId,
+      user: { active: true },
+    },
+    select: {
+      id: true,
+      tenantId: true,
+      tenant: { select: { id: true, name: true } },
+    },
+  });
+}
+
+/**
+ * Flows — requires explicit tenant selection.
+ * Redirects to tenant selector if no tenant context is established.
+ */
 export default async function FlowsPage() {
   const session = await auth();
+  if (!session?.user) redirect("/login");
   if (session?.user.role !== "ADMIN") redirect("/");
-  return <FlowsClient />;
+
+  const memberships = await getMemberships(session.user.id);
+
+  // No memberships: redirect to tenant selection
+  if (memberships.length === 0) {
+    redirect("/inbox");
+  }
+
+  // Redirect to tenant-scoped flows
+  redirect(`/t/${memberships[0].tenantId}/flows`);
 }
