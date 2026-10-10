@@ -96,15 +96,21 @@ export function AppShell({ user, memberships, activeTenantId, wabaConnected, pho
             )}
           </div>
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-accent">
-              <Avatar className="h-7 w-7">
-                <AvatarFallback>{initials || "U"}</AvatarFallback>
-              </Avatar>
-              <div className="hidden text-left leading-tight sm:block">
-                <div className="text-xs font-medium">{user.name}</div>
-                <div className="text-[10px] text-muted-foreground">{user.role}</div>
-              </div>
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="User menu"
+                className="flex items-center gap-2 rounded-md px-1.5 py-1 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Avatar className="h-7 w-7">
+                  <AvatarFallback>{initials || "U"}</AvatarFallback>
+                </Avatar>
+                <div className="hidden text-left leading-tight sm:block">
+                  <div className="text-xs font-medium">{user.name}</div>
+                  <div className="text-[10px] text-muted-foreground">{user.role}</div>
+                </div>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>{user.email}</DropdownMenuLabel>

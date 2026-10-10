@@ -99,7 +99,6 @@ export function OrganizationSelector({
         <span className="max-w-[120px] truncate text-xs font-medium sm:max-w-[160px] sm:text-sm">
           {m.tenant.name}
         </span>
-        {memberships.length > 1 && <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />}
       </Button>
     );
   }
