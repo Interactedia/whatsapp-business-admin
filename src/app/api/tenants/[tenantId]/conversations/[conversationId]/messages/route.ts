@@ -202,7 +202,22 @@ const flowSchema = z.object({
 /**
  * Send a message. JSON body for text/template; multipart/form-data for media.
  * Enforces the 24h session window for free-form (text/media) messages.
- * Tenant ownership is verified before any send.
+ *
+ * Authorization chain:
+ *  1. Authenticate principal via NextAuth session.
+ *  2. Verify TenantMembership → TenantContext (enforces tenant membership, blocks ADMIN without membership).
+ *  3. findConversation enforces conversation ownership via tenant-scoped query predicate.
+ *     A cross-tenant conversation returns 404 (not an authorization leak).
+ *  4. Contact.waId is extracted from the owned conversation's contact.
+ *  5. sendMessage uses the system WabaConfig (singleton, single-WABA deployment).
+ *     In single-WABA mode the same phone number is authorized for all tenants.
+ *     Multi-WABA per-tenant account binding requires a separate approved architecture.
+ *
+ * Security predicates enforced:
+ *  - No unauthenticated request reaches sendMessage.
+ *  - No cross-tenant conversation reaches sendMessage.
+ *  - No external provider call occurs before conversation ownership is verified.
+ *  - No global credential fallback is used — the singleton is the system account.
  */
 export const POST = handle(async (req, { params }) => {
   const session = await auth();
