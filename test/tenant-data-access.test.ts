@@ -121,6 +121,16 @@ function fakeDb() {
         contacts.push(newContact);
         return { ...newContact, ...data, createdAt: new Date(), updatedAt: new Date() };
       }),
+      upsert: vi.fn(async ({ where, update, create }: { where: { waId: string }; update: Record<string, unknown>; create: { tenantId: string; waId: string; name?: string | null } }) => {
+        const existing = contacts.find((row) => row.waId === where.waId) as unknown as { waId: string; id: string; tenantId: string | null; name?: string };
+        if (existing) {
+          Object.assign(existing, update);
+          return existing;
+        }
+        const newContact: Contact = { id: `new-${where.waId}`, tenantId: create.tenantId };
+        contacts.push(newContact);
+        return { ...newContact, createdAt: new Date(), updatedAt: new Date() };
+      }),
       updateMany: vi.fn(async ({ where, data }: { where: Where; data: Record<string, unknown> }) => {
         const row = contacts.find((contact) => matchesContact(contact, where));
         if (!row) return { count: 0 };
@@ -145,6 +155,21 @@ function fakeDb() {
         const matched = conversations.filter((row) => matchesConversation(row, where));
         const start = cursor ? Math.max(0, matched.findIndex((row) => row.id === cursor.id) + (skip ?? 0)) : 0;
         return matched.slice(start, start + take).map((c) => includeConversation(c, include));
+      }),
+      upsert: vi.fn(async ({ where, create }: { where: { contactId: string }; create: { contactId: string; tenantId: string } }) => {
+        const existing = conversations.find((row) => row.contactId === where.contactId);
+        if (existing) {
+          return existing;
+        }
+        const newConv: Conversation = { id: `new-${where.contactId}`, tenantId: create.tenantId, contactId: create.contactId };
+        conversations.push(newConv);
+        return newConv;
+      }),
+      updateMany: vi.fn(async ({ where, data }: { where: Where; data: Record<string, unknown> }) => {
+        const row = conversations.find((row) => matchesConversation(row, where));
+        if (!row) return { count: 0 };
+        Object.assign(row, data);
+        return { count: 1 };
       }),
     },
     message: {

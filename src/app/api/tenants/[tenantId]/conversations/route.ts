@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { handle, ok, fail } from "@/lib/api";
 import { auth } from "@/auth";
 import { resolveTenantContext, TenantAuthorizationError } from "@/lib/tenant";
@@ -80,4 +81,47 @@ export const GET = handle(async (_req, { params }) => {
     .filter((c): c is ConversationRead => c !== null);
 
   return ok(body);
+});
+
+const startSchema = z.object({
+  waId: z.string().trim().regex(/^\d{7,15}$/, "Enter digits only, no + (e.g. 919812345678)"),
+  name: z.string().trim().optional(),
+});
+
+/** Start (or resume) a conversation for a phone number, owned by the verified tenant. */
+export const POST = handle(async (req, { params }) => {
+  const session = await auth();
+  if (!session?.user) {
+    return fail(401, "Unauthorized");
+  }
+
+  const principal = { userId: session.user.id };
+  const { tenantId } = await params;
+
+  let context;
+  try {
+    context = await resolveTenantContext(principal, tenantId);
+  } catch (err) {
+    if (err instanceof TenantAuthorizationError) return fail(403, "Tenant access denied");
+    throw err;
+  }
+
+  let body;
+  try {
+    body = startSchema.parse(await req.json());
+  } catch {
+    return fail(400, "Invalid request");
+  }
+
+  let result;
+  try {
+    result = await tenantMessagingRepository.createConversation(context, body);
+  } catch (err) {
+    if (err instanceof TenantAuthorizationError) return fail(403, "Tenant access denied");
+    throw err;
+  }
+
+  const conv = result.conversation as { id: string };
+  const contact = result.contact as { id: string };
+  return ok({ id: conv.id, contactId: contact.id }, 201);
 });

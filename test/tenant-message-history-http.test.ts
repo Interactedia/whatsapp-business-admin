@@ -357,10 +357,11 @@ describe("GET /api/tenants/:tenantId/conversations/:conversationId/messages", ()
   });
 
   describe("legacy GET removal", () => {
-    it("legacy /api/conversations/[id]/messages only exports POST", async () => {
+    it("legacy /api/conversations/[id]/messages POST is removed", async () => {
       const route = await import("@/app/api/conversations/[id]/messages/route");
       expect(route).not.toHaveProperty("GET");
-      expect(route).toHaveProperty("POST");
+      // POST removed — superseded by /api/tenants/:tenantId/conversations/:conversationId/messages
+      expect(route).not.toHaveProperty("POST");
     });
   });
 
@@ -369,10 +370,10 @@ describe("GET /api/tenants/:tenantId/conversations/:conversationId/messages", ()
       const source = await import("node:fs").then((fs) =>
         fs.readFileSync("src/app/(app)/inbox/inbox-client.tsx", "utf-8"),
       );
-      // Should use the new canonical endpoint.
+      // Should use the new canonical endpoint with tenantId.
       expect(source).toMatch(/\/api\/tenants\/\${tenantId}\/conversations\/\${conversationId}\/messages/);
-      // Should NOT use the legacy endpoint.
-      expect(source).not.toMatch(/apiFetch<Thread>\(`\/api\/conversations\/\$\{conversationId\}\/messages`/);
+      // Should NOT use the legacy global endpoint for POST.
+      expect(source).not.toMatch(/\/api\/conversations\/\$\{conversationId\}\/messages.*method.*POST/);
     });
   });
 });

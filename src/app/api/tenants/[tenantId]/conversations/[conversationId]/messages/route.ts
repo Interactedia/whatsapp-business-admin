@@ -1,10 +1,17 @@
-import { handle, ok, fail } from "@/lib/api";
+import { z } from "zod";
+import { handle, ok, fail, HttpError } from "@/lib/api";
 import { auth } from "@/auth";
 import { resolveTenantContext, TenantAuthorizationError } from "@/lib/tenant";
 import { tenantMessagingRepository, type MessageListPagination } from "@/lib/tenant/repository";
 import { serializeMessage } from "@/lib/whatsapp/webhook";
 import { resolveTemplateContents } from "@/lib/whatsapp/template-history";
 import { isWithinSessionWindow } from "@/lib/whatsapp/send";
+import { sendMessage } from "@/lib/whatsapp/send";
+import { uploadOutboundMedia } from "@/lib/whatsapp/media";
+import { mediaStore, extFromMime } from "@/lib/media";
+import { templateExampleComponents, templateRuntimeComponents } from "@/lib/whatsapp/template-service";
+import { extractVariables, isNamedToken, type ApiComponent } from "@/lib/whatsapp/template-types";
+import { finishPreparedFlowLaunch, launchFlow, prepareTemplateFlowLaunch } from "@/lib/whatsapp/flow-launch";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 
@@ -166,4 +173,182 @@ export const GET = handle(async (_req, { params }) => {
     ),
     flowSubmissions: flowSubmissions.map((s) => toFlowSubmissionRead(s)).filter((s): s is FlowSubmissionRead => s !== null),
   });
+});
+
+// ---------------------------------------------------------------------------
+// POST — Send outbound message (tenant-scoped)
+// ---------------------------------------------------------------------------
+
+const textSchema = z.object({ kind: z.literal("text"), text: z.string().min(1) });
+const templateSchema = z.object({
+  kind: z.literal("template"),
+  templateId: z.string(),
+  bodyVariables: z.union([
+    z.array(z.string().trim().min(1)),
+    z.record(z.string(), z.string().trim().min(1)),
+  ]).optional(),
+});
+const flowSchema = z.object({
+  kind: z.literal("flow"),
+  flowId: z.string(),
+  cta: z.string().trim().min(1).max(20).default("Open form"),
+  body: z.string().trim().min(1).max(1024).optional(),
+  header: z.string().trim().max(60).optional(),
+  footer: z.string().trim().max(60).optional(),
+  entryScreen: z.string().optional(),
+  initialData: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * Send a message. JSON body for text/template; multipart/form-data for media.
+ * Enforces the 24h session window for free-form (text/media) messages.
+ * Tenant ownership is verified before any send.
+ */
+export const POST = handle(async (req, { params }) => {
+  const session = await auth();
+  if (!session?.user) {
+    return fail(401, "Unauthorized");
+  }
+
+  const principal = { userId: session.user.id };
+  const { tenantId, conversationId } = await params;
+
+  let context;
+  try {
+    context = await resolveTenantContext(principal, tenantId);
+  } catch (err) {
+    if (err instanceof TenantAuthorizationError) return fail(403, "Tenant access denied");
+    throw err;
+  }
+
+  // Verify conversation ownership through tenant-scoped repository.
+  let conversation;
+  try {
+    conversation = await tenantMessagingRepository.findConversation(context, conversationId);
+  } catch (err) {
+    if (err instanceof TenantAuthorizationError) return fail(404, "Conversation not found");
+    throw err;
+  }
+  if (!conversation) return fail(404, "Conversation not found");
+
+  const conv = conversation as Record<string, unknown>;
+  const to = (conv.contact as Record<string, unknown>)?.waId as string;
+  if (!to) return fail(500, "Internal error");
+
+  const windowOpen = isWithinSessionWindow(conv.lastInboundAt as Date | null);
+  const contentType = req.headers.get("content-type") || "";
+
+  // ---- Media (multipart) ----
+  if (contentType.includes("multipart/form-data")) {
+    if (!windowOpen) throw new HttpError(403, "This chat is outside the 24-hour window. Send an approved template instead.");
+    const form = await req.formData();
+    const file = form.get("file");
+    const caption = (form.get("caption") as string) || undefined;
+    if (!(file instanceof File)) throw new HttpError(400, "No file provided");
+
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const mime = file.type || "application/octet-stream";
+    const mediaType = mime.startsWith("image/")
+      ? "image"
+      : mime.startsWith("video/")
+        ? "video"
+        : mime.startsWith("audio/")
+          ? "audio"
+          : "document";
+
+    const mediaId = await uploadOutboundMedia({ data: buffer, mimeType: mime, fileName: file.name });
+    const localPath = await mediaStore.save(buffer, extFromMime(mime));
+
+    const message = await sendMessage({
+      conversationId,
+      to,
+      sentById: session.user.id,
+      content: {
+        kind: "media",
+        mediaType: mediaType as "image" | "video" | "audio" | "document",
+        mediaId,
+        caption,
+        mediaPath: localPath,
+        mediaMime: mime,
+        filename: file.name,
+      },
+    });
+    return ok(serializeMessage(message), 201);
+  }
+
+  // ---- Text / Template / Flow (JSON) ----
+  const body = await req.json();
+
+  if (body.kind === "flow") {
+    if (!windowOpen) throw new HttpError(403, "This chat is outside the 24-hour window. Send an approved template with a Flow button instead.");
+    const parsed = flowSchema.parse(body);
+    const launched = await launchFlow({ ...parsed, to, sentById: session.user.id });
+    return ok(launched, 201);
+  }
+
+  if (body.kind === "template") {
+    const parsed = templateSchema.parse(body);
+    const template = await prisma.template.findUnique({ where: { id: parsed.templateId } });
+    if (!template) throw new HttpError(404, "Template not found");
+    if (template.status !== "APPROVED") throw new HttpError(400, "Only approved templates can be sent.");
+
+    const templateComponents = template.components as unknown as ApiComponent[];
+    const bodyComponent = templateComponents.find((component) => component.type === "BODY");
+    const bodyTokens = extractVariables(bodyComponent?.text ?? "");
+    if (bodyTokens.length > 0 && !parsed.bodyVariables) {
+      throw new HttpError(400, "Enter all template parameter values before sending.");
+    }
+    const bodyVariables = parsed.bodyVariables;
+    if (bodyVariables) {
+      const named = bodyTokens.some(isNamedToken);
+      if (named && Array.isArray(bodyVariables)) {
+        throw new HttpError(400, "Named template parameters must be supplied by name.");
+      }
+      if (!named && !Array.isArray(bodyVariables)) {
+        throw new HttpError(400, "Numbered template parameters must be supplied in order.");
+      }
+      if (Array.isArray(bodyVariables) && bodyVariables.length < bodyTokens.length) {
+        throw new HttpError(400, "Enter all template parameter values before sending.");
+      }
+      if (!Array.isArray(bodyVariables) && bodyTokens.some((token) => !bodyVariables[token])) {
+        throw new HttpError(400, "Enter all template parameter values before sending.");
+      }
+    }
+
+    const contactId = (conv.contact as Record<string, unknown>)?.id as string;
+    const prepared = await prepareTemplateFlowLaunch({ templateComponents, contactId, conversationId });
+    const sendComponents = bodyVariables
+      ? templateRuntimeComponents(templateComponents, template.category, bodyVariables)
+      : templateExampleComponents(templateComponents, template.category);
+    const content = {
+      kind: "template" as const,
+      templateId: template.id,
+      templateName: template.name,
+      language: template.language,
+      components: [
+        ...sendComponents,
+        ...(prepared ? [prepared.sendComponent] : []),
+      ],
+      templateComponents,
+    };
+    try {
+      const message = await sendMessage({ conversationId, to, sentById: session.user.id, content });
+      if (prepared) await finishPreparedFlowLaunch(prepared.launchId, message.id);
+      return ok(serializeMessage(message), 201);
+    } catch (error) {
+      if (prepared) await finishPreparedFlowLaunch(prepared.launchId, undefined, error);
+      throw error;
+    }
+  }
+
+  // text
+  const parsed = textSchema.parse(body);
+  if (!windowOpen) throw new HttpError(403, "This chat is outside the 24-hour window. Send an approved template instead.");
+  const message = await sendMessage({
+    conversationId,
+    to,
+    sentById: session.user.id,
+    content: { kind: "text", text: parsed.text },
+  });
+  return ok(serializeMessage(message), 201);
 });

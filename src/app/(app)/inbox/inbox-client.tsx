@@ -185,7 +185,7 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
 
   const sendText = useMutation({
     mutationFn: (t: string) =>
-      apiFetch(`/api/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ kind: "text", text: t }) }),
+      apiFetch(`/api/tenants/${tenantId}/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ kind: "text", text: t }) }),
     onSuccess: () => {
       setText("");
       invalidate();
@@ -197,7 +197,7 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
     mutationFn: (file: File) => {
       const fd = new FormData();
       fd.append("file", file);
-      return fetch(`/api/conversations/${conversationId}/messages`, { method: "POST", body: fd }).then(async (r) => {
+      return fetch(`/api/tenants/${tenantId}/conversations/${conversationId}/messages`, { method: "POST", body: fd }).then(async (r) => {
         if (!r.ok) throw new Error((await r.json()).error || "Upload failed");
       });
     },
@@ -207,7 +207,7 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
 
   const sendTemplate = useMutation({
     mutationFn: (input: { templateId: string; bodyVariables?: string[] | Record<string, string> }) =>
-      apiFetch(`/api/conversations/${conversationId}/messages`, {
+      apiFetch(`/api/tenants/${tenantId}/conversations/${conversationId}/messages`, {
         method: "POST",
         body: JSON.stringify({ kind: "template", ...input }),
       }),
@@ -218,7 +218,7 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
     onError: (e: Error) => toast({ variant: "destructive", title: "Not sent", description: e.message }),
   });
   const sendFlow = useMutation({
-    mutationFn: (flowId: string) => apiFetch(`/api/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ kind: "flow", flowId, cta: "Open form" }) }),
+    mutationFn: (flowId: string) => apiFetch(`/api/tenants/${tenantId}/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ kind: "flow", flowId, cta: "Open form" }) }),
     onSuccess: () => { setShowFlows(false); invalidate(); },
     onError: (e: Error) => toast({ variant: "destructive", title: "Flow not sent", description: e.message }),
   });

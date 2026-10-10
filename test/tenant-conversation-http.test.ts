@@ -435,10 +435,11 @@ describe("WA-01-05I tenant conversation list HTTP access", () => {
     expect(listConversationsSpy).toHaveBeenCalledWith(trustedContext, { take: 200 });
   });
 
-  it("legacy global conversation list GET is removed; POST preserved", async () => {
+  it("legacy global conversation list GET is removed; POST migrated to tenant API", async () => {
     const routeModule = (await import("@/app/api/conversations/route")) as Record<string, unknown>;
     expect(routeModule.GET).toBeUndefined();
-    expect(typeof routeModule.POST).toBe("function");
+    // POST removed — superseded by /api/tenants/:tenantId/conversations
+    expect(routeModule.POST).toBeUndefined();
   });
 
   it("migrated UI no longer consumes the global list GET", async () => {

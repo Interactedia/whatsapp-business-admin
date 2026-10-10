@@ -87,12 +87,22 @@ describe("auth boundary", () => {
     expect((response as Response).headers.get("content-type")).toContain("application/json");
   });
 
-  it("does not convert non-GET tenant requests to JSON 401", async () => {
+  it("returns 401 JSON for anonymous tenant write requests (POST/PATCH/DELETE)", async () => {
+    // POST, PATCH, DELETE to protected tenant routes must return 401 JSON.
+    for (const method of ["POST", "PATCH", "DELETE"] as const) {
+      const response = await authorized?.({
+        auth: null,
+        request: request("/api/tenants/tenant-1/contacts/contact-1", method),
+      });
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(401);
+      expect((response as Response).headers.get("content-type")).toContain("application/json");
+    }
+    // Non-protected routes still return false (not JSON).
     const response = await authorized?.({
       auth: null,
-      request: request("/api/tenants/tenant-1/contacts/contact-1", "POST"),
+      request: request("/api/tenants/tenant-1/users/user-1", "POST"),
     });
-
     expect(response).toBe(false);
   });
 });

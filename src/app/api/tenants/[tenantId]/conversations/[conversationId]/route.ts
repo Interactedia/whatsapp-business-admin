@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { handle, ok, fail } from "@/lib/api";
 import { auth } from "@/auth";
 import { resolveTenantContext, TenantAuthorizationError } from "@/lib/tenant";
@@ -64,4 +65,53 @@ export const GET = handle(async (_req, { params }) => {
   if (!body) return fail(404, "Conversation not found");
 
   return ok(body);
+});
+
+const updateSchema = z.object({
+  status: z.enum(["OPEN", "CLOSED"]).optional(),
+  unreadCount: z.number().int().min(0).optional(),
+  assignedUserId: z.string().nullable().optional(),
+});
+
+/** Update conversation fields (status, unreadCount, assignedUser). Enforces tenant ownership. */
+export const PATCH = handle(async (req, { params }) => {
+  const session = await auth();
+  if (!session?.user) {
+    return fail(401, "Unauthorized");
+  }
+
+  const principal = { userId: session.user.id };
+  const { tenantId, conversationId } = await params;
+
+  let context;
+  try {
+    context = await resolveTenantContext(principal, tenantId);
+  } catch (err) {
+    if (err instanceof TenantAuthorizationError) return fail(403, "Tenant access denied");
+    throw err;
+  }
+
+  let body;
+  try {
+    body = updateSchema.parse(await req.json());
+  } catch {
+    return fail(400, "Invalid request");
+  }
+
+  if (Object.keys(body).length === 0) return fail(400, "No fields to update");
+
+  let updated;
+  try {
+    updated = await tenantMessagingRepository.updateConversation(context, conversationId, body);
+  } catch (err) {
+    if (err instanceof TenantAuthorizationError) return fail(404, "Conversation not found");
+    throw err;
+  }
+
+  if (!updated) return fail(404, "Conversation not found");
+
+  const result = toConversationRead(updated);
+  if (!result) return fail(500, "Internal error");
+
+  return ok(result);
 });

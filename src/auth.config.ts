@@ -10,6 +10,14 @@ const protectedTenantListPattern =
   /^\/api\/tenants\/[^/]+\/(?:contacts|conversations)\/?$/;
 const protectedTenantMessageHistoryPattern =
   /^\/api\/tenants\/[^/]+\/conversations\/[^/]+\/messages\/?$/;
+/** Tenant-scoped write endpoints (POST/PATCH/DELETE) that need auth protection. */
+const protectedTenantWritePatterns = [
+  /^\/api\/tenants\/[^/]+\/contacts\/?$/,                         // POST contact
+  /^\/api\/tenants\/[^/]+\/contacts\/[^/]+\/?$/,                // PATCH/DELETE contact
+  /^\/api\/tenants\/[^/]+\/conversations\/?$/,                  // POST conversation
+  /^\/api\/tenants\/[^/]+\/conversations\/[^/]+\/?$/,           // PATCH/DELETE conversation
+  /^\/api\/tenants\/[^/]+\/conversations\/[^/]+\/messages\/?$/, // POST message
+];
 
 export const authConfig: NextAuthConfig = {
   trustHost: true,
@@ -25,14 +33,27 @@ export const authConfig: NextAuthConfig = {
         if (isLoggedIn) return Response.redirect(new URL("/", nextUrl));
         return true;
       }
-      if (
-        !isLoggedIn &&
-        request.method === "GET" &&
-        (protectedTenantReadPattern.test(nextUrl.pathname) ||
-          protectedTenantListPattern.test(nextUrl.pathname) ||
-          protectedTenantMessageHistoryPattern.test(nextUrl.pathname))
-      ) {
-        return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!isLoggedIn) {
+        // Write methods (POST/PATCH/DELETE) always require auth.
+        if (["POST", "PATCH", "DELETE"].includes(request.method)) {
+          if (
+            protectedTenantWritePatterns.some((p) => p.test(nextUrl.pathname)) ||
+            protectedTenantListPattern.test(nextUrl.pathname) ||
+            protectedTenantReadPattern.test(nextUrl.pathname) ||
+            protectedTenantMessageHistoryPattern.test(nextUrl.pathname)
+          ) {
+            return Response.json({ error: "Unauthorized" }, { status: 401 });
+          }
+        }
+        // Read methods (GET) with specific patterns.
+        if (
+          request.method === "GET" &&
+          (protectedTenantReadPattern.test(nextUrl.pathname) ||
+            protectedTenantListPattern.test(nextUrl.pathname) ||
+            protectedTenantMessageHistoryPattern.test(nextUrl.pathname))
+        ) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
       }
       return isLoggedIn;
     },

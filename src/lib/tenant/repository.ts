@@ -27,12 +27,15 @@ export type TenantPrisma = {
     findFirst(args: unknown): Promise<unknown>;
     findMany(args: unknown): Promise<unknown[]>;
     create(args: unknown): Promise<unknown>;
+    upsert(args: unknown): Promise<unknown>;
     updateMany(args: unknown): Promise<{ count: number }>;
     deleteMany(args: unknown): Promise<{ count: number }>;
   };
   conversation: {
     findFirst(args: unknown): Promise<unknown>;
     findMany(args: unknown): Promise<unknown[]>;
+    upsert(args: unknown): Promise<unknown>;
+    updateMany(args: unknown): Promise<{ count: number }>;
   };
   message: {
     findFirst(args: unknown): Promise<unknown>;
@@ -216,6 +219,66 @@ export function createTenantMessagingRepository(db: TenantPrisma = prisma) {
       });
       if (result.count !== 1) return null;
       return { deleted: true };
+    },
+
+    /**
+     * Get or create a Contact + Conversation pair, both owned by the verified tenant.
+     * Uses upsert semantics: existing null-owned resources are NOT claimed.
+     * Returns the Conversation (not the Contact) to match the inbox thread flow.
+     */
+    async createConversation(context: TenantContext, data: { waId: string; name?: string }) {
+      const tenant = tenantId(context);
+      // Upsert contact with explicit tenant ownership.
+      const contact = await db.contact.upsert({
+        where: { waId: data.waId },
+        update: data.name ? { name: data.name } : {},
+        create: {
+          waId: data.waId,
+          name: data.name ?? null,
+          tenantId: tenant,
+        },
+      }) as { id: string; tenantId: string | null };
+      // Only upsert a conversation for contacts owned by this tenant.
+      // A null-owned contact (created before tenant isolation) cannot receive a conversation here.
+      if (contact.tenantId !== tenant) {
+        throw new TenantAuthorizationError();
+      }
+      const conversation = await db.conversation.upsert({
+        where: { contactId: contact.id },
+        update: {},
+        create: {
+          contactId: contact.id,
+          tenantId: tenant,
+        },
+      });
+      return { conversation, contact };
+    },
+
+    /**
+     * Update conversation fields (status, unreadCount, assignedUserId).
+     * Enforces conversation ownership at mutation time.
+     */
+    async updateConversation(
+      context: TenantContext,
+      id: string,
+      data: { status?: "OPEN" | "CLOSED"; unreadCount?: number; assignedUserId?: string | null },
+    ) {
+      const conversationId = parseId(id);
+      const ownerTenantId = tenantId(context);
+      const result = await db.conversation.updateMany({
+        where: {
+          id: conversationId,
+          tenantId: ownerTenantId,
+          contact: { tenantId: ownerTenantId },
+        },
+        data: {
+          ...(data.status !== undefined ? { status: data.status } : {}),
+          ...(data.unreadCount !== undefined ? { unreadCount: data.unreadCount } : {}),
+          ...(data.assignedUserId !== undefined ? { assignedUserId: data.assignedUserId } : {}),
+        },
+      });
+      if (result.count !== 1) return null;
+      return this.findConversation(context, conversationId);
     },
   };
 }

@@ -48,6 +48,8 @@ export function ContactsClient({
   const [edit, setEdit] = useState<Contact | null>(null);
 
   const listUrl = baseUrl;
+  // Derive tenantId from the conversationsHref path (/t/:tenantId/conversations).
+  const tenantId = conversationsHref.startsWith("/t/") ? conversationsHref.split("/")[2] : "";
   const { data: contacts = [], isLoading } = useQuery({
     queryKey: [listUrl, search],
     queryFn: () =>
@@ -68,7 +70,7 @@ export function ContactsClient({
 
   const startChat = useMutation({
     mutationFn: (c: Contact) =>
-      apiFetch<{ id: string }>("/api/conversations", {
+      apiFetch<{ id: string }>(`/api/tenants/${tenantId}/conversations`, {
         method: "POST",
         body: JSON.stringify({ waId: c.waId, name: c.name ?? undefined }),
       }),
