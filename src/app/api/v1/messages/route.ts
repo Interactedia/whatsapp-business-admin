@@ -3,12 +3,13 @@ import { startTenantConversation } from "@/lib/tenant/conversations";
 import { z } from "zod";
 import { v1Handle, apiOk, requireApiKey, ApiError, parseJsonBody } from "@/lib/v1";
 import { prisma } from "@/lib/prisma";
-import { sendMessage, isWithinSessionWindow } from "@/lib/whatsapp/send";
+import { sendMessage, enqueueOutboundMessage, isWithinSessionWindow } from "@/lib/whatsapp/send";
 import { storeFromLink } from "@/lib/whatsapp/media";
 import { buildTemplateComponents, normalizeTemplateButtonInputs } from "@/lib/whatsapp/template-params";
 import { templateExampleComponents, templateRuntimeComponents } from "@/lib/whatsapp/template-service";
 import type { ApiComponent } from "@/lib/whatsapp/template-types";
 import { finishPreparedFlowLaunch, prepareTemplateFlowLaunch } from "@/lib/whatsapp/flow-launch";
+import { isOutboundAsyncEnabled } from "@/lib/whatsapp/outbound/config";
 
 const mediaSchema = z.object({
   link: z.string().url().optional(),
@@ -105,10 +106,27 @@ export const POST = v1Handle(async (req) => {
       "Recipient is outside the 24-hour window; free-form messages are not allowed. Send an approved template instead.",
     );
 
+  // Feature flag — default false keeps the legacy synchronous sendMessage path.
+  // Set WHATSAPP_OUTBOUND_ASYNC_ENABLED=true to route through the durable outbox.
+  const useAsync = isOutboundAsyncEnabled();
+
   // ---- Text ----
   if (type === "text") {
     if (!body.text) throw new ApiError(400, "`text` is required for text messages");
     if (!(await windowOpen())) throw outsideWindowError();
+
+    if (useAsync) {
+      const msg = await enqueueOutboundMessage({
+        conversationId: conversation.id,
+        to: body.to,
+        content: { kind: "text", text: body.text },
+      });
+      return apiOk(
+        { id: msg.id, status: msg.status, to: body.to, accepted: true },
+        202,
+      );
+    }
+
     const msg = await sendMessage({
       conversationId: conversation.id,
       to: body.to,
@@ -128,6 +146,27 @@ export const POST = v1Handle(async (req) => {
     // Best-effort local copy (only when sent by link) so the inbox renders it.
     let stored: { path: string; mime: string } | null = null;
     if (media.link) stored = await storeFromLink(media.link);
+
+    if (useAsync) {
+      const msg = await enqueueOutboundMessage({
+        conversationId: conversation.id,
+        to: body.to,
+        content: {
+          kind: "media",
+          mediaType: type as "image" | "video" | "audio" | "document",
+          mediaLink: media.link,
+          mediaId: media.id,
+          caption: media.caption,
+          filename: media.filename,
+          mediaPath: stored?.path,
+          mediaMime: stored?.mime,
+        },
+      });
+      return apiOk(
+        { id: msg.id, status: msg.status, to: body.to, accepted: true },
+        202,
+      );
+    }
 
     const msg = await sendMessage({
       conversationId: conversation.id,
@@ -206,6 +245,26 @@ export const POST = v1Handle(async (req) => {
   }
 
   try {
+    if (useAsync) {
+      const msg = await enqueueOutboundMessage({
+        conversationId: conversation.id,
+        to: body.to,
+        content: {
+          kind: "template",
+          templateId: template.id,
+          templateName: template.name,
+          language: template.language,
+          components,
+          templateComponents: template.components,
+        },
+      });
+      if (prepared) await finishPreparedFlowLaunch(prepared.launchId, msg.id);
+      return apiOk(
+        { id: msg.id, status: msg.status, to: body.to, accepted: true, ...(prepared ? { flow_launch_id: prepared.launchId } : {}) },
+        202,
+      );
+    }
+
     const msg = await sendMessage({
       conversationId: conversation.id,
       to: body.to,
@@ -219,7 +278,10 @@ export const POST = v1Handle(async (req) => {
       },
     });
     if (prepared) await finishPreparedFlowLaunch(prepared.launchId, msg.id);
-    return apiOk({ message_id: msg.waMessageId, id: msg.id, to: body.to, ...(prepared ? { flow_launch_id: prepared.launchId } : {}) }, 201);
+    return apiOk(
+      { message_id: msg.waMessageId, id: msg.id, to: body.to, ...(prepared ? { flow_launch_id: prepared.launchId } : {}) },
+      201,
+    );
   } catch (error) {
     if (prepared) await finishPreparedFlowLaunch(prepared.launchId, undefined, error);
     throw error;

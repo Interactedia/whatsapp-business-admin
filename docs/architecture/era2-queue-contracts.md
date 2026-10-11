@@ -76,7 +76,7 @@ ERA 2 introduces four distinct BullMQ queue channels to partition workloads and 
 
 ### 2.2 Outbound Dispatch Job Contract (`wa-message-outbound`)
 
-* **Purpose:** Provide resilient outbound sending with rate-limit adherence, timeout handling, and automatic retry without losing messages.
+* **Purpose:** Provide resilient outbound sending with durable PostgreSQL execution ownership and no automatic retransmission after the Meta send boundary is crossed.
 * **Producer:** Operator Inbox route or API v1 route (`src/app/api/...`).
 * **Consumer:** `OutboundMessageWorker`.
 * **Queue Name:** `wa-message-outbound`.
@@ -100,8 +100,11 @@ ERA 2 introduces four distinct BullMQ queue channels to partition workloads and 
   5. Upon Meta 200: updates `Message` to `status: "SENT"`, sets `waMessageId: data.messages[0].id`.
   6. Emits `message:new` (or `message:status`) via realtime hub.
 * **Retry Classification:**
-  - Meta HTTP 429 (Rate Limit): Backoff honoring `Retry-After` header or exponential backoff up to 5 retries.
-  - Meta HTTP 5xx (Server Error): 3 retries with jitter.
+  - `OutboundSendAttempt.metaRequestStartedAt` is written before the Meta HTTP call; expired `CLAIMED` leases are not automatically re-claimed because Meta may have accepted the original request.
+  - Timeout, 429, 5xx, parse errors, and missing Meta message IDs transition the attempt to terminal `UNCERTAIN`; operator review is required before any manual retry.
+  - Worker failure before the Meta boundary leaves no external side effect and may be retried only through explicit durable state, not by expired-lease auto-reclaim.
+  - Meta HTTP 429 (Rate Limit): no automatic resend; mark `UNCERTAIN`.
+  - Meta HTTP 5xx (Server Error): no automatic resend; mark `UNCERTAIN`. jitter.
   - Meta HTTP 4xx (Invalid recipient, outside 24h window): Terminal failure.
 * **Terminal Failure:** Update `Message.status = "FAILED"`, persist `Message.errorJson = metaError`. Emits realtime update.
 * **Tenant Isolation:** Worker performs `assertTenantOwned(tenantContext, conversation)`.

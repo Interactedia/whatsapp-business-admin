@@ -4,8 +4,11 @@ import { graphFetch, WhatsAppApiError } from "@/lib/whatsapp/client";
 import { phoneNumberConfig } from "@/lib/tenant/waba";
 import { publish } from "@/server/realtime";
 import { serializeMessage } from "@/lib/whatsapp/webhook";
-import type { MessageType } from "@/generated/prisma/client";
+import type { MessageType, Prisma } from "@/generated/prisma/client";
 import { buildTemplateContent, templateContentText, templateContentPreview } from "./template-content";
+import { addOutboxEvent } from "@/lib/outbox";
+import { createOutboundMessageJobPayload } from "@/lib/queue";
+import type { KnownJobPayload } from "@/lib/queue";
 
 export { isWithinSessionWindow } from "@/lib/whatsapp/window";
 
@@ -161,7 +164,7 @@ export async function sendMessage(opts: {
     }))?.components;
     templateContent = buildTemplateContent({ name: content.templateName, language: content.language, definition, parameters: content.components });
   }
-  const preview = templateContent ? templateContentPreview(templateContent) : previewFor(opts.content);
+  const preview = templateContent ? templateContentPreview(templateContent) : (previewFor(opts.content) ?? "");
 
   const type: MessageType =
     opts.content.kind === "text"
@@ -180,7 +183,7 @@ export async function sendMessage(opts: {
       direction: "OUT",
       type,
       status: "PENDING",
-      text: templateContent ? templateContentText(templateContent) : opts.content.kind === "text" ? opts.content.text : preview,
+      text: templateContent ? templateContentText(templateContent) : opts.content.kind === "text" ? (opts.content.text ?? "") : preview,
       caption: opts.content.kind === "media" ? opts.content.caption : undefined,
       mediaPath: opts.content.kind === "media" ? opts.content.mediaPath : undefined,
       mediaMime: opts.content.kind === "media" ? opts.content.mediaMime : undefined,
@@ -218,4 +221,127 @@ export async function sendMessage(opts: {
     publish({ type: "message:new", payload: { conversationId: opts.conversationId, message: serializeMessage(failed) } }, conversation.tenantId);
     throw e;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Durable outbound via transactional outbox
+// ---------------------------------------------------------------------------
+
+export interface EnqueueOutboundMessageOptions {
+  conversationId: string;
+  to: string;
+  content: OutboundContent;
+  sentById?: string;
+  config?: WabaConfig;
+}
+
+/**
+ * Durable message send using the transactional outbox pattern.
+ *
+ * Atomically creates a Message row (PENDING) and an OutboxEvent in PostgreSQL.
+ * The OutboxDispatcher picks up the event and enqueues it to BullMQ. The
+ * outbound worker calls Meta, updates the Message row, and notifies via
+ * realtime.
+ *
+ * Returns immediately with the PENDING message. Use `enqueueOutboundMessage`
+ * when the caller does not need to wait for Meta confirmation (e.g. API
+ * clients that poll or subscribe to realtime events).
+ *
+ * For "uncertain" Meta responses (timeout, 5xx, rate limit, parse error),
+ * the message stays PENDING so an operator can review it without triggering
+ * a BullMQ retry that might cause a duplicate send.
+ */
+export async function enqueueOutboundMessage(
+  opts: EnqueueOutboundMessageOptions
+): Promise<{ id: string; status: "PENDING"; waMessageId: null }> {
+  const conversation = await prisma.conversation.findUnique({
+    where: { id: opts.conversationId },
+    include: { phoneNumber: { include: { wabaAccount: true } } },
+  });
+  if (!conversation) throw new WhatsAppApiError(404, "Conversation not found.");
+  if (!conversation.phoneNumber) throw new WhatsAppApiError(403, "Conversation has no authorized sender phone number.");
+  const cfg = opts.config ?? phoneNumberConfig(conversation.phoneNumber);
+  if (!cfg.phoneNumberId) throw new WhatsAppApiError(400, "WhatsApp is not connected.");
+  // Extract IDs while phoneNumber narrowing is still active
+  const phoneNumberId: string = conversation.phoneNumber.id;
+  const wabaAccountId: string = conversation.phoneNumber.wabaAccount.id;
+  const tenantId: string = conversation.tenantId ?? "";
+
+  let templateContent: ReturnType<typeof buildTemplateContent> | null = null;
+  if (opts.content.kind === "template") {
+    const content = opts.content;
+    const definition = content.templateComponents ?? (await prisma.template.findUnique({
+      where: content.templateId ? { id: content.templateId } : { name_language: { name: content.templateName, language: content.language } },
+      select: { components: true },
+    }))?.components;
+    templateContent = buildTemplateContent({ name: content.templateName, language: content.language, definition, parameters: content.components });
+  }
+  const preview = templateContent ? templateContentPreview(templateContent) : (previewFor(opts.content) ?? "");
+
+  const type: MessageType =
+    opts.content.kind === "text"
+      ? "TEXT"
+      : opts.content.kind === "template"
+        ? "TEMPLATE"
+        : opts.content.kind === "flow"
+          ? "INTERACTIVE"
+        : MEDIA_TYPE_TO_ENUM[opts.content.mediaType];
+
+  // Build payload stored in Message row for the worker to reconstruct the API call.
+  // For templates: store the components that were validated and sent so the worker
+  // can reconstruct the Meta payload without needing the original caller's data.
+  // For flows: we store the flowId/cta/token.
+  const storedPayload: Record<string, unknown> =
+    templateContent
+      ? (() => {
+          const tc = opts.content as Extract<OutboundContent, { kind: "template" }>;
+          return {
+            _kind: "template",
+            name: tc.templateName,
+            language: tc.language,
+            components: tc.components ?? [],
+          };
+        })()
+      : opts.content.kind === "flow"
+        ? { flowId: opts.content.flowId, cta: opts.content.cta, flowToken: opts.content.flowToken }
+        : {};
+
+  // Atomic: Message row + OutboxEvent in one transaction
+  const messageId = await prisma.$transaction(async (tx) => {
+    // Create the PENDING message
+    const message = await tx.message.create({
+      data: {
+        tenantId: conversation.tenantId,
+        conversationId: opts.conversationId,
+        direction: "OUT",
+        type,
+        status: "PENDING",
+        text: templateContent ? templateContentText(templateContent) : opts.content.kind === "text" ? (opts.content.text ?? "") : preview,
+        caption: opts.content.kind === "media" ? opts.content.caption : undefined,
+        mediaPath: opts.content.kind === "media" ? opts.content.mediaPath : undefined,
+        mediaMime: opts.content.kind === "media" ? opts.content.mediaMime : undefined,
+        mediaFilename: opts.content.kind === "media" ? (opts.content.filename ?? null) : undefined,
+        templateId: opts.content.kind === "template" ? opts.content.templateId : undefined,
+        payload: Object.keys(storedPayload).length > 0 ? (storedPayload as unknown as Prisma.InputJsonValue) : undefined,
+        sentById: opts.sentById,
+      },
+    });
+
+    // Add the outbox event so the dispatcher enqueues it to BullMQ
+    await addOutboxEvent(tx, {
+      tenantId,
+      payload: createOutboundMessageJobPayload({
+        tenantId,
+        wabaAccountId,
+        phoneNumberId,
+        conversationId: opts.conversationId,
+        messageId: message.id,
+        producer: "queue-producer",
+      }) as KnownJobPayload,
+    });
+
+    return message.id;
+  });
+
+  return { id: messageId, status: "PENDING" as const, waMessageId: null };
 }

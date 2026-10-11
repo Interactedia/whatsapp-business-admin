@@ -93,6 +93,7 @@ model Tenant {
   tenantMemberships TenantMembership[]
   apiKeys           ApiKey[]
   outboxEvents      OutboxEvent[]
+  outboundAttempts  OutboundSendAttempt[]
 }
 
 // Persistence foundation only. Membership does not grant tenant authorization.
@@ -334,10 +335,59 @@ model Message {
   sentById       String?
   sentBy         User?            @relation("SentBy", fields: [sentById], references: [id], onDelete: SetNull)
   flowLaunch     FlowLaunch?
+  attempts       OutboundSendAttempt[]
   timestamp      DateTime         @default(now())
 
   @@index([tenantId])
   @@index([conversationId, timestamp])
+}
+
+// ---------------------------------------------------------------------------
+// Durable outbound execution ownership.
+//
+// One row per outbound send attempt. Created when a worker CLAIMS execution
+// of an outbound Message. The UNCERTAIN state is a terminal, non-retryable
+// guard: an expired lease on an UNCERTAIN row does NOT authorize a retry —
+// the operator must explicitly retry after investigation. The schema enums
+// cover the six required lifecycle states.
+//
+// This is the durable record that protects against duplicate Meta
+// transmissions when BullMQ jobIds alone are insufficient (re-enqueue, lease
+// expiry after the Meta transmission boundary, concurrent workers).
+// ---------------------------------------------------------------------------
+
+enum OutboundAttemptState {
+  PENDING       // ready for initial send
+  CLAIMED       // execution claimed by a worker
+  SENT          // Meta accepted
+  FAILED        // definitive failure (no retry)
+  RETRYABLE     // safe to retry
+  UNCERTAIN     // Meta outcome unknown; non-retryable automatically
+}
+
+model OutboundSendAttempt {
+  id              String               @id @default(cuid())
+  messageId       String
+  message         Message              @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  tenantId        String
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  state           OutboundAttemptState @default(PENDING)
+  attemptCount    Int                  @default(0)
+  ownerId         String?              // worker / dispatcher ID that claimed
+  claimExpiresAt  DateTime?            // lease expiry; null when not CLAIMED
+  metaRequestStartedAt DateTime?       // set before crossing the Meta send boundary
+  waMessageId     String?              // set when Meta accepted
+  lastErrorCode   String?
+  lastErrorMessage String?
+  lastMetaStatus  Int?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  claimedAt       DateTime?
+  finishedAt      DateTime?
+
+  @@index([messageId, state])
+  @@index([state, claimExpiresAt])
+  @@index([tenantId, state])
 }
 
 // ---------------------------------------------------------------------------
