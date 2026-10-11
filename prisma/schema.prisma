@@ -92,6 +92,7 @@ model Tenant {
   broadcasts        Broadcast[]    @relation("TenantBroadcasts")
   tenantMemberships TenantMembership[]
   apiKeys           ApiKey[]
+  outboxEvents      OutboxEvent[]
 }
 
 // Persistence foundation only. Membership does not grant tenant authorization.
@@ -272,6 +273,40 @@ enum MessageType {
   BUTTON
   REACTION
   UNSUPPORTED
+}
+
+enum OutboxPublicationState {
+  PENDING
+  CLAIMED
+  PUBLISHED
+  RETRYABLE
+  TERMINAL
+}
+
+model OutboxEvent {
+  id              String                 @id @default(cuid())
+  tenantId        String
+  tenant          Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  eventType       String
+  contractVersion Int
+  payload         Json
+  state           OutboxPublicationState @default(PENDING)
+  attemptCount    Int                    @default(0)
+  maxAttempts     Int                    @default(5)
+  nextAttemptAt   DateTime               @default(now())
+  claimedBy       String?
+  claimExpiresAt  DateTime?
+  publishedAt     DateTime?
+  failureCode     String?
+  failureMessage  String?
+  lastAttemptedAt DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([state, nextAttemptAt, createdAt])
+  @@index([state, claimExpiresAt])
+  @@index([tenantId, createdAt])
+  @@index([publishedAt])
 }
 
 model Message {

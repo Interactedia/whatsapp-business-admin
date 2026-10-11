@@ -1,0 +1,1 @@
+export { claimOutboxEvents } from "./repository";
