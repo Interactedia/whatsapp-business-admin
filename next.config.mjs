@@ -11,16 +11,18 @@ const nextConfig = {
   // localtunnel, etc.) so HMR and asset requests don't get blocked when the
   // user reaches the server through 127.0.0.1, 0.0.0.0, or a public tunnel.
   // For local-only dev, AUTH_TRUST_HOST + AUTH_URL must also be set in .env.
+  // Note: Next.js matches patterns segment-by-segment, so use `*.example.com`
+  // (NOT `.example.com`) to allow any subdomain.
   allowedDevOrigins: [
     "127.0.0.1",
     "0.0.0.0",
     "localhost",
-    // Wildcard for *.ngrok-free.app, *.ngrok.app, *.ngrok.io, *.trycloudflare.com, *.loca.lt
-    ".ngrok-free.app",
-    ".ngrok.app",
-    ".ngrok.io",
-    ".trycloudflare.com",
-    ".loca.lt",
+    // Wildcard subdomains for common tunnels.
+    "*.ngrok-free.app",
+    "*.ngrok.app",
+    "*.ngrok.io",
+    "*.trycloudflare.com",
+    "*.loca.lt",
   ],
 };
 
