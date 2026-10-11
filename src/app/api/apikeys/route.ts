@@ -5,9 +5,15 @@ import { generateKey } from "@/lib/api-keys";
 import { requireTenantAdminApi } from "@/lib/tenant/page-guards";
 
 export const GET = handle(async () => {
-  await requireUser();
+  const session = await requireUser();
+  const memberships = await prisma.tenantMembership.findMany({
+    where: { userId: session.user.id },
+    select: { tenantId: true },
+  });
+  const tenantIds = memberships.map((m) => m.tenantId);
+
   const keys = await prisma.apiKey.findMany({
-    where: { revoked: false },
+    where: { revoked: false, tenantId: { in: tenantIds } },
     orderBy: { createdAt: "desc" },
     select: { id: true, name: true, keyPrefix: true, lastUsedAt: true, createdAt: true, tenantId: true },
   });
