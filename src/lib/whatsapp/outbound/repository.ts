@@ -219,6 +219,7 @@ export async function releaseExpiredClaim(
     WHERE "id" = ${attemptId}
       AND "state" = 'CLAIMED'::"OutboundAttemptState"
       AND "claimExpiresAt" < NOW()
+      AND "metaRequestStartedAt" IS NULL
     RETURNING *
   `;
   return row ?? null;

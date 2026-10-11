@@ -52,16 +52,42 @@ async function main() {
   const tenantId = `${runId}_tenant`;
   const wabaId = `${runId}_waba`;
   const phoneId = `${runId}_phone`;
+  const contactId = `${runId}_contact`;
   const convId = `${runId}_conv`;
+  const msgExpired = `${runId}_msg_expired`;
+  const msgUncertain = `${runId}_msg_uncertain`;
+  const msgMetaStarted = `${runId}_msg_meta_started`;
   const dispatcherA = `${runId}_dispatcher_A`;
   const dispatcherB = `${runId}_dispatcher_B`;
 
   try {
-    // Seed
+    // Seed hierarchy: Tenant -> WabaAccount -> PhoneNumber -> Contact -> Conversation -> Messages
     await prisma.$executeRawUnsafe(
       `INSERT INTO "Tenant" ("id", "name", "updatedAt") VALUES ($1, $2, NOW())`,
       tenantId, tenantId
     );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "WabaAccount" ("id", "tenantId", "metaWabaId", "name", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+      wabaId, tenantId, `${runId}_meta_waba`, "Recovery Test WABA"
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "PhoneNumber" ("id", "wabaAccountId", "metaPhoneNumberId", "displayPhone", "verifiedName", "updatedAt") VALUES ($1, $2, $3, $4, $5, NOW())`,
+      phoneId, wabaId, `${runId}_meta_phone`, "+15550001", "Recovery Phone"
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "Contact" ("id", "waId", "name", "createdAt", "updatedAt") VALUES ($1, $2, $3, NOW(), NOW())`,
+      contactId, `${runId}_wa_contact`, "Recovery Contact"
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "Conversation" ("id", "tenantId", "phoneNumberId", "contactId", "status", "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, 'OPEN', NOW(), NOW())`,
+      convId, tenantId, phoneId, contactId
+    );
+    for (const msgId of [`${runId}_msg`, msgExpired, msgUncertain, msgMetaStarted]) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO "Message" ("id", "tenantId", "conversationId", "direction", "type", "status", "text", "timestamp") VALUES ($1, $2, $3, 'OUT', 'TEXT', 'PENDING', 'test', NOW())`,
+        msgId, tenantId, convId
+      );
+    }
 
     const payload = createOutboundMessageJobPayload({
       tenantId,
@@ -214,6 +240,14 @@ async function main() {
       s6Release.reason === "META_REQUEST_STARTED"
     );
 
+    // Also verify raw releaseExpiredClaim refuses it at the SQL layer
+    const s6RawRelease = await releaseExpiredClaim(prisma, s6AttemptId);
+    check(
+      "S6c. raw releaseExpiredClaim also refuses attempt with metaRequestStartedAt",
+      s6RawRelease === null,
+      `rawReleased=${s6RawRelease !== null}`
+    );
+
     // ---- S7. Retryable failure transitions to RETRYABLE ----
     const s7Event = await addOutboxEvent(prisma, { tenantId, payload });
     await prisma.$executeRaw`
@@ -238,6 +272,11 @@ async function main() {
   } finally {
     await prisma.$executeRawUnsafe(`DELETE FROM "OutboundSendAttempt" WHERE "tenantId" LIKE '${runId}%'`);
     await prisma.$executeRawUnsafe(`DELETE FROM "OutboxEvent" WHERE "tenantId" = $1`, tenantId);
+    await prisma.$executeRawUnsafe(`DELETE FROM "Message" WHERE "tenantId" LIKE '${runId}%'`);
+    await prisma.$executeRawUnsafe(`DELETE FROM "Conversation" WHERE "tenantId" LIKE '${runId}%'`);
+    await prisma.$executeRawUnsafe(`DELETE FROM "Contact" WHERE "id" = '${contactId}'`);
+    await prisma.$executeRawUnsafe(`DELETE FROM "PhoneNumber" WHERE "id" = '${phoneId}'`);
+    await prisma.$executeRawUnsafe(`DELETE FROM "WabaAccount" WHERE "id" = '${wabaId}'`);
     await prisma.$executeRawUnsafe(`DELETE FROM "Tenant" WHERE "id" LIKE '${runId}%'`);
     await closeAllQueueResources();
     await prisma.$disconnect();

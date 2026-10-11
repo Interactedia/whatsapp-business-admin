@@ -7,7 +7,7 @@
  *   npx tsx test/lib/queue/retry-policy.test.ts
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { WhatsAppApiError } from "@/lib/whatsapp/client";
 import {
   FAILURE_CATEGORY,
