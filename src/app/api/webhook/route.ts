@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getWabaConfig } from "@/lib/settings";
 import { verifySignature, processWebhook } from "@/lib/whatsapp/webhook";
 import { redactFlowWebhookPayload } from "@/lib/whatsapp/flow-submission";
+import { classifyWebhookPayload } from "@/lib/whatsapp/inbound/classify";
+import { isInboundAsyncEnabled } from "@/lib/whatsapp/inbound/config";
+import { persistInboundWebhookReceipt } from "@/lib/whatsapp/inbound/receipt";
 
 /** Meta webhook verification handshake. */
 export async function GET(req: Request) {
@@ -56,13 +59,13 @@ export async function POST(req: Request) {
     payload = { raw };
   }
 
-  // Persist the raw event up front.
-  const event = await prisma.webhookEvent.create({
-    data: { payload: redactFlowWebhookPayload(payload) as object, signatureValid, processedOk: false },
-  });
+  const safePayload = redactFlowWebhookPayload(payload);
 
   // If an app secret is configured, reject unsigned/invalid events (but keep the record).
   if (cfg.appSecret && !signatureValid) {
+    const event = await prisma.webhookEvent.create({
+      data: { payload: safePayload as object, signatureValid, processedOk: false },
+    });
     await prisma.webhookEvent.update({
       where: { id: event.id },
       data: { error: "Invalid signature", eventSummary: "rejected: bad signature" },
@@ -70,6 +73,22 @@ export async function POST(req: Request) {
     // Still return 200 so Meta doesn't retry a spoofed request forever.
     return NextResponse.json({ received: true });
   }
+
+  const classification = classifyWebhookPayload(payload);
+  const canUseAsyncInbound = isInboundAsyncEnabled()
+    && classification.hasInboundMessages
+    && !classification.hasStatuses
+    && !classification.hasTemplateStatuses
+    && !classification.hasFlowReplies;
+
+  if (canUseAsyncInbound) {
+    await persistInboundWebhookReceipt({ payload, signatureValid });
+    return NextResponse.json({ received: true });
+  }
+
+  const event = await prisma.webhookEvent.create({
+    data: { payload: safePayload as object, signatureValid, processedOk: false },
+  });
 
   try {
     const summary = await processWebhook(payload);
