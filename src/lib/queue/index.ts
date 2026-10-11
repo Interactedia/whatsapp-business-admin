@@ -17,16 +17,47 @@ export {
 export type { QueueName, QueueConfig } from "./config";
 
 // Contracts
-export { JOB_NAMES } from "./contracts";
+export { JOB_CONTRACT_VERSION, JOB_TYPES, JOB_NAMES, JOB_CONTRACTS } from "./contracts";
 export type {
+  JobType,
   JobName,
+  ProducerIdentity,
+  JobReferenceBase,
+  PhoneScopedJobReference,
   BaseJobPayload,
   InboundWebhookJobPayload,
   OutboundMessageJobPayload,
   StatusReconciliationJobPayload,
   BroadcastDispatchJobPayload,
   KnownJobPayload,
+  JobContract,
 } from "./contracts";
+
+// Job builders and validation
+export {
+  createInboundWebhookJobPayload,
+  createOutboundMessageJobPayload,
+  createStatusReconciliationJobPayload,
+  createBroadcastDispatchJobPayload,
+  JobValidationError,
+  validateJobPayload,
+  getJobContract,
+  buildJobIdentity,
+  buildJobIdentityForPayload,
+} from "./jobs";
+export type {
+  CreateInboundWebhookJobInput,
+  CreateOutboundMessageJobInput,
+  CreateStatusReconciliationJobInput,
+  CreateBroadcastDispatchJobInput,
+  JobIdentity,
+  JobIdentityInput,
+  JobValidationErrorCode,
+} from "./jobs";
+
+// Producers
+export { enqueueQueueJob, QueueProducerError } from "./producers";
+export type { ProducerErrorCode, EnqueueJobOptions, EnqueueJobResult } from "./producers";
 
 // Connection
 export {

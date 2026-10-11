@@ -15,6 +15,8 @@ describe("Queue import safety", () => {
       expect(typeof queueModule.createQueueEvents).toBe("function");
       expect(typeof queueModule.inspectQueue).toBe("function");
       expect(typeof queueModule.closeAllQueueResources).toBe("function");
+      expect(typeof queueModule.enqueueQueueJob).toBe("function");
+      expect(typeof queueModule.validateJobPayload).toBe("function");
       expect(queueModule.QUEUE_NAMES).toBeDefined();
 
       // Registries must be empty
