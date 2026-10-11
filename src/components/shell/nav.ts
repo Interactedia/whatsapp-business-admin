@@ -37,6 +37,7 @@ export type NavItem = {
  * Items marked `global` keep their absolute path and do not inject a tenant.
  */
 export const NAV_ITEMS: NavItem[] = [
+  // Tenant workspace (hidden from SYSTEM_ADMIN)
   { key: "/", label: "Dashboard", icon: LayoutDashboard, tenantScoped: true },
   { key: "conversations", label: "Inbox", icon: MessageSquare, tenantScoped: true },
   { key: "contacts", label: "Contacts", icon: Users, tenantScoped: true },
@@ -48,7 +49,10 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "settings", label: "Settings", icon: Settings, adminOnly: true, tenantScoped: true },
   { key: "developer", label: "API", icon: Code2, adminOnly: true, tenantScoped: true },
   { key: "users", label: "Users", icon: UserCog, adminOnly: true, tenantScoped: true },
+  // System administration (SYSTEM_ADMIN only — no operational menus)
+  { key: "/admin", label: "Dashboard", icon: LayoutDashboard, systemAdminOnly: true, global: true },
   { key: "/admin/tenants", label: "Tenants", icon: Building2, systemAdminOnly: true, global: true },
+  { key: "/admin/users", label: "Users", icon: UserCog, systemAdminOnly: true, global: true },
 ];
 
 /**
@@ -82,10 +86,30 @@ export function isNavActive(
   const href = navHref(item, activeTenantId);
   if (href === "/") return pathname === "/";
   if (href === "/inbox") return pathname === "/inbox";
+  // Exact-match items must never light up on child routes.
+  if (href === "/admin") return pathname === "/admin";
   // The tenant root (e.g. /t/abc) is the Dashboard — match it exactly, since
   // child routes like /t/abc/conversations already have their own items.
   if (activeTenantId && href === `/t/${activeTenantId}`) {
     return pathname === href;
   }
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/**
+ * Nav items visible to a given role.
+ * SYSTEM_ADMIN is a pure system administrator: only the system-administration
+ * section (Dashboard /admin, Tenants, Users) is visible — no operational
+ * tenant workspace menus. Tenant ADMIN sees admin + operational items;
+ * AGENT sees only non-admin operational items.
+ */
+export function visibleNavItems(role: "SYSTEM_ADMIN" | "ADMIN" | "AGENT"): NavItem[] {
+  if (role === "SYSTEM_ADMIN") {
+    return NAV_ITEMS.filter((i) => i.systemAdminOnly);
+  }
+  return NAV_ITEMS.filter((i) => {
+    if (i.systemAdminOnly) return false;
+    if (i.adminOnly) return role === "ADMIN";
+    return true;
+  });
 }

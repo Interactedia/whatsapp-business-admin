@@ -16,6 +16,7 @@ export default async function TenantUsersPage({
   return (
     <UsersClient
       currentUserId={session.user.id}
+      currentRole={session.user.role}
       tenantId={tenantId}
       tenantName={membership.tenant.name}
     />

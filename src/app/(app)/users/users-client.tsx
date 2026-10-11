@@ -48,10 +48,12 @@ type TenantMember = {
 
 export function UsersClient({
   currentUserId,
+  currentRole,
   tenantId,
   tenantName,
 }: {
   currentUserId: string;
+  currentRole?: "SYSTEM_ADMIN" | "ADMIN" | "AGENT";
   tenantId?: string;
   tenantName?: string;
 }) {
@@ -60,6 +62,11 @@ export function UsersClient({
   const [open, setOpen] = useState(false);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [resetFor, setResetFor] = useState<User | null>(null);
+
+  // Only a SYSTEM_ADMIN may grant/revoke the SYSTEM_ADMIN role or modify
+  // existing SYSTEM_ADMIN accounts (mirrors the server-side check in
+  // /api/users/[id]).
+  const canManageSystemAdmins = currentRole === "SYSTEM_ADMIN";
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users"],
@@ -132,7 +139,11 @@ export function UsersClient({
                   <Plus className="h-4 w-4" /> New user
                 </Button>
               </DialogTrigger>
-              <CreateUserDialog onClose={() => setOpen(false)} onCreated={invalidate} />
+              <CreateUserDialog
+                onClose={() => setOpen(false)}
+                onCreated={invalidate}
+                canCreateSystemAdmin={canManageSystemAdmins}
+              />
             </Dialog>
           </div>
         }
@@ -184,21 +195,24 @@ export function UsersClient({
                       <Select
                         value={u.role}
                         onValueChange={(role) => patch.mutate({ id: u.id, body: { role: role as User["role"] } })}
-                        disabled={self}
+                        disabled={self || (!canManageSystemAdmins && u.role === "SYSTEM_ADMIN")}
                       >
-                        <SelectTrigger className="h-7 w-28">
+                        <SelectTrigger className="h-7 w-36">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="ADMIN">Admin</SelectItem>
                           <SelectItem value="AGENT">Agent</SelectItem>
+                          <SelectItem value="ADMIN">Admin</SelectItem>
+                          {canManageSystemAdmins && (
+                            <SelectItem value="SYSTEM_ADMIN">System Admin</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell data-label="Status">
                       <button
                         type="button"
-                        disabled={self}
+                        disabled={self || (!canManageSystemAdmins && u.role === "SYSTEM_ADMIN")}
                         onClick={() => patch.mutate({ id: u.id, body: { active: !u.active } })}
                         className="disabled:opacity-60"
                       >
@@ -212,14 +226,20 @@ export function UsersClient({
                     </TableCell>
                     <TableCell data-label="Actions" className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon" title="Reset password" onClick={() => setResetFor(u)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Reset password"
+                          disabled={!canManageSystemAdmins && u.role === "SYSTEM_ADMIN"}
+                          onClick={() => setResetFor(u)}
+                        >
                           <KeyRound className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           title="Delete"
-                          disabled={self}
+                          disabled={self || (!canManageSystemAdmins && u.role === "SYSTEM_ADMIN")}
                           onClick={() => {
                             if (confirm(`Delete ${u.name}?`)) remove.mutate(u.id);
                           }}
@@ -248,7 +268,15 @@ export function UsersClient({
   );
 }
 
-function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreateUserDialog({
+  onClose,
+  onCreated,
+  canCreateSystemAdmin,
+}: {
+  onClose: () => void;
+  onCreated: () => void;
+  canCreateSystemAdmin: boolean;
+}) {
   const { toast } = useToast();
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "AGENT" as User["role"] });
 
@@ -295,6 +323,9 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
             <SelectContent>
               <SelectItem value="AGENT">Agent — inbox &amp; contacts only</SelectItem>
               <SelectItem value="ADMIN">Admin — full access</SelectItem>
+              {canCreateSystemAdmin && (
+                <SelectItem value="SYSTEM_ADMIN">System Admin — tenant administration</SelectItem>
+              )}
             </SelectContent>
           </Select>
         </div>

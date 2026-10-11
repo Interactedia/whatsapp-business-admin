@@ -7,7 +7,7 @@ const createSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  role: z.enum(["ADMIN", "AGENT"]),
+  role: z.enum(["SYSTEM_ADMIN", "ADMIN", "AGENT"]),
 });
 
 export const GET = handle(async () => {
@@ -20,8 +20,13 @@ export const GET = handle(async () => {
 });
 
 export const POST = handle(async (req) => {
-  await requireAdmin();
+  const session = await requireAdmin();
   const body = createSchema.parse(await req.json());
+
+  // Privilege boundary: only a SYSTEM_ADMIN can create another SYSTEM_ADMIN.
+  if (body.role === "SYSTEM_ADMIN" && session.user.role !== "SYSTEM_ADMIN") {
+    throw new HttpError(403, "Only a system administrator can manage system administrator accounts");
+  }
 
   const exists = await prisma.user.findUnique({ where: { email: body.email } });
   if (exists) throw new HttpError(409, "A user with that email already exists");

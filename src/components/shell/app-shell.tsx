@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { MessageCircle, LogOut, ChevronDown, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS, isNavActive, navHref } from "@/components/shell/nav";
+import { isNavActive, navHref, visibleNavItems } from "@/components/shell/nav";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -32,11 +32,10 @@ type Props = {
 export function AppShell({ user, memberships, activeTenantId, wabaConnected, phoneNumber, children }: Props) {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const items = NAV_ITEMS.filter((i) => {
-    if (i.systemAdminOnly) return user.role === "SYSTEM_ADMIN";
-    if (i.adminOnly) return user.role === "ADMIN" || user.role === "SYSTEM_ADMIN";
-    return true;
-  });
+  // SYSTEM_ADMIN is a pure system administrator: only Dashboard/Tenants/Users
+  // in the administration section — never the operational tenant workspace.
+  const items = visibleNavItems(user.role);
+  const isSystemAdmin = user.role === "SYSTEM_ADMIN";
   const initials = user.name
     .split(" ")
     .map((s) => s[0])
@@ -80,10 +79,17 @@ export function AppShell({ user, memberships, activeTenantId, wabaConnected, pho
         })}
       </nav>
       <div className="border-t p-3 text-xs text-muted-foreground lg:p-2">
-        <div className="flex items-center gap-1.5 px-1.5">
-          <span className={cn("h-1.5 w-1.5 rounded-full", wabaConnected ? "bg-emerald-500" : "bg-muted-foreground/40")} />
-          {wabaConnected ? phoneNumber || "Connected" : "Not connected"}
-        </div>
+        {isSystemAdmin ? (
+          <div className="flex items-center gap-1.5 px-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            System Administration
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 px-1.5">
+            <span className={cn("h-1.5 w-1.5 rounded-full", wabaConnected ? "bg-emerald-500" : "bg-muted-foreground/40")} />
+            {wabaConnected ? phoneNumber || "Connected" : "Not connected"}
+          </div>
+        )}
       </div>
     </>
   );
@@ -141,12 +147,18 @@ export function AppShell({ user, memberships, activeTenantId, wabaConnected, pho
             >
               <Menu className="h-5 w-5" />
             </button>
-            <OrganizationSelector memberships={memberships} activeTenantId={activeTenantId} />
-            <span className="text-sm font-semibold lg:hidden">WA Admin</span>
-            {!wabaConnected && (
-              <Badge variant="warning" className="hidden gap-1 sm:inline-flex">
-                Connect your WhatsApp account in Settings
-              </Badge>
+            {isSystemAdmin ? (
+              <span className="text-sm font-semibold">System Administration</span>
+            ) : (
+              <>
+                <OrganizationSelector memberships={memberships} activeTenantId={activeTenantId} />
+                <span className="text-sm font-semibold lg:hidden">WA Admin</span>
+                {!wabaConnected && (
+                  <Badge variant="warning" className="hidden gap-1 sm:inline-flex">
+                    Connect your WhatsApp account in Settings
+                  </Badge>
+                )}
+              </>
             )}
           </div>
           <DropdownMenu>

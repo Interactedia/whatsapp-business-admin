@@ -20,6 +20,7 @@ async function getMemberships(userId: string) {
 /**
  * Root entry — resolves the user's tenant context and sends them to the
  * tenant-scoped Dashboard as the first screen.
+ * - SYSTEM_ADMIN: always lands on the system administration dashboard (/admin).
  * - Zero memberships: show the empty state.
  * - One membership: auto-redirect to that tenant's Dashboard.
  * - Multiple memberships: show the selection screen.
@@ -27,6 +28,9 @@ async function getMemberships(userId: string) {
 export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+
+  // The system administrator does not enter the operational tenant workspace.
+  if (session.user.role === "SYSTEM_ADMIN") redirect("/admin");
 
   const memberships = await getMemberships(session.user.id);
 
