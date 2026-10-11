@@ -116,8 +116,9 @@ model WabaAccount {
   name           String?
   metaAppId      String?
   accessTokenEnc String?
-  appSecret      String?
-  apiVersion     String   @default("v21.0")
+  appSecret          String?
+  webhookVerifyToken String?
+  apiVersion         String   @default("v21.0")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

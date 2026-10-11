@@ -1,18 +1,33 @@
 import { prisma } from "@/lib/prisma";
-import { handle, ok, requireAdmin } from "@/lib/api";
-import { getWabaConfig } from "@/lib/settings";
+import { handle, ok, requireUser, HttpError } from "@/lib/api";
+import { requireTenantAdminApi } from "@/lib/tenant/page-guards";
+import { getTenantWabaConfig } from "@/lib/settings";
 import { graphFetch, WhatsAppApiError } from "@/lib/whatsapp/client";
 import { createAndActivateFlowKey, getFlowKeyHealth } from "@/lib/whatsapp/flow-crypto";
 
-export const GET = handle(async () => {
-  await requireAdmin();
+export const GET = handle(async (req) => {
+  const session = await requireUser();
+  const url = new URL(req.url);
+  const tenantId = url.searchParams.get("tenantId");
+  if (!tenantId) {
+    throw new HttpError(400, "tenantId parameter is required. Settings are tenant-scoped.");
+  }
+  await requireTenantAdminApi(session.user.id, tenantId);
+
   return ok(await getFlowKeyHealth());
 });
 
-export const POST = handle(async () => {
-  await requireAdmin();
-  const config = await getWabaConfig();
-  if (!config.phoneNumberId) throw new WhatsAppApiError(400, "Set the Phone Number ID first.");
+export const POST = handle(async (req) => {
+  const session = await requireUser();
+  const url = new URL(req.url);
+  const tenantId = url.searchParams.get("tenantId");
+  if (!tenantId) {
+    throw new HttpError(400, "tenantId parameter is required. Settings are tenant-scoped.");
+  }
+  await requireTenantAdminApi(session.user.id, tenantId);
+
+  const config = await getTenantWabaConfig(tenantId);
+  if (!config?.phoneNumberId) throw new WhatsAppApiError(400, "Set the Phone Number ID first.");
   const key = await createAndActivateFlowKey();
   const form = new FormData();
   form.set("business_public_key", key.publicKey);

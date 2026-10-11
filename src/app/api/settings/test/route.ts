@@ -1,5 +1,6 @@
-import { handle, ok, requireAdmin, HttpError } from "@/lib/api";
-import { getWabaConfig, updateWabaConfig } from "@/lib/settings";
+import { handle, ok, requireUser, HttpError } from "@/lib/api";
+import { requireTenantAdminApi } from "@/lib/tenant/page-guards";
+import { getTenantWabaConfig, updateTenantWabaConfig } from "@/lib/settings";
 import { graphFetch, WhatsAppApiError } from "@/lib/whatsapp/client";
 
 type PhoneNumberInfo = {
@@ -13,11 +14,18 @@ type PhoneNumberInfo = {
  * Verify the saved credentials by fetching the phone number profile from Meta.
  * On success, cache the display number + business name for the UI.
  */
-export const POST = handle(async () => {
-  await requireAdmin();
-  const cfg = await getWabaConfig();
-  if (!cfg.phoneNumberId) throw new HttpError(400, "Set the Phone Number ID first");
-  if (!cfg.accessToken) throw new HttpError(400, "Set the Access Token first");
+export const POST = handle(async (req) => {
+  const session = await requireUser();
+  const url = new URL(req.url);
+  const tenantId = url.searchParams.get("tenantId");
+  if (!tenantId) {
+    throw new HttpError(400, "tenantId parameter is required. Settings are tenant-scoped.");
+  }
+  await requireTenantAdminApi(session.user.id, tenantId);
+
+  const cfg = await getTenantWabaConfig(tenantId);
+  if (!cfg?.phoneNumberId) throw new HttpError(400, "Set the Phone Number ID first");
+  if (!cfg?.accessToken) throw new HttpError(400, "Set the Access Token first");
 
   try {
     const info = await graphFetch<PhoneNumberInfo>({
@@ -28,7 +36,7 @@ export const POST = handle(async () => {
       related: { type: "settings" },
     });
 
-    await updateWabaConfig({
+    await updateTenantWabaConfig(tenantId, {
       phoneNumberDisplay: info.display_phone_number ?? null,
       businessName: info.verified_name ?? null,
     });

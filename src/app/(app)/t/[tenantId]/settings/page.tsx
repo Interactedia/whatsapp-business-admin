@@ -13,5 +13,5 @@ export default async function TenantSettingsPage({
     return <TenantSelector memberships={memberships} />;
   }
 
-  return <SettingsClient />;
+  return <SettingsClient tenantId={tenantId} />;
 }

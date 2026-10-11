@@ -29,12 +29,21 @@ type Settings = {
 type FlowKey = { configured: boolean; fingerprint: string | null; registeredAt: string | null };
 type FlowConnector = { id: string; name: string; baseUrl: string; allowedHosts: string[]; authType: string; credentialsSet: boolean };
 
-export function SettingsClient() {
+export function SettingsClient({ tenantId }: { tenantId: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data } = useQuery({ queryKey: ["settings"], queryFn: () => apiFetch<Settings>("/api/settings") });
-  const { data: flowKey } = useQuery({ queryKey: ["flow-key"], queryFn: () => apiFetch<FlowKey>("/api/settings/flow-key") });
-  const { data: connectors = [] } = useQuery({ queryKey: ["flow-connectors"], queryFn: () => apiFetch<FlowConnector[]>("/api/flow-connectors") });
+  const { data, isLoading } = useQuery({
+    queryKey: ["settings", tenantId],
+    queryFn: () => apiFetch<Settings>(`/api/tenants/${tenantId}/settings`),
+  });
+  const { data: flowKey } = useQuery({
+    queryKey: ["flow-key", tenantId],
+    queryFn: () => apiFetch<FlowKey>(`/api/tenants/${tenantId}/settings/flow-key`),
+  });
+  const { data: connectors = [] } = useQuery({
+    queryKey: ["flow-connectors"],
+    queryFn: () => apiFetch<FlowConnector[]>("/api/flow-connectors"),
+  });
 
   const [form, setForm] = useState({
     wabaId: "",
@@ -50,41 +59,53 @@ export function SettingsClient() {
 
   useEffect(() => {
     if (data) {
-      setForm((f) => ({
-        ...f,
-        wabaId: data.wabaId,
-        metaAppId: data.metaAppId,
-        phoneNumberId: data.phoneNumberId,
-        apiVersion: data.apiVersion,
-        webhookVerifyToken: data.webhookVerifyToken,
-      }));
+      setForm({
+        wabaId: data.wabaId ?? "",
+        metaAppId: data.metaAppId ?? "",
+        phoneNumberId: data.phoneNumberId ?? "",
+        apiVersion: data.apiVersion ?? "v21.0",
+        webhookVerifyToken: data.webhookVerifyToken ?? "",
+        accessToken: "",
+        appSecret: "",
+      });
+    } else {
+      setForm({
+        wabaId: "",
+        metaAppId: "",
+        phoneNumberId: "",
+        apiVersion: "v21.0",
+        webhookVerifyToken: "",
+        accessToken: "",
+        appSecret: "",
+      });
     }
-  }, [data]);
+    setTestResult(null);
+  }, [data, tenantId]);
 
   const save = useMutation({
-    mutationFn: () => apiFetch("/api/settings", { method: "PUT", body: JSON.stringify(form) }),
+    mutationFn: () => apiFetch(`/api/tenants/${tenantId}/settings`, { method: "PUT", body: JSON.stringify(form) }),
     onSuccess: () => {
       toast({ title: "Settings saved" });
       setForm((f) => ({ ...f, accessToken: "", appSecret: "" }));
-      qc.invalidateQueries({ queryKey: ["settings"] });
+      qc.invalidateQueries({ queryKey: ["settings", tenantId] });
     },
     onError: (e: Error) => toast({ variant: "destructive", title: "Save failed", description: e.message }),
   });
 
   const test = useMutation({
-    mutationFn: () => apiFetch<{ success: boolean; message?: string; verifiedName?: string }>("/api/settings/test", { method: "POST" }),
+    mutationFn: () => apiFetch<{ success: boolean; message?: string; verifiedName?: string }>(`/api/tenants/${tenantId}/settings/test`, { method: "POST" }),
     onSuccess: (r) => {
       setTestResult(r);
       if (r.success) {
         toast({ title: "Connected", description: r.verifiedName });
-        qc.invalidateQueries({ queryKey: ["settings"] });
+        qc.invalidateQueries({ queryKey: ["settings", tenantId] });
       }
     },
     onError: (e: Error) => setTestResult({ success: false, message: e.message }),
   });
   const rotateFlowKey = useMutation({
-    mutationFn: () => apiFetch<FlowKey>("/api/settings/flow-key", { method: "POST" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["flow-key"] }); toast({ title: "Flow encryption key registered with Meta" }); },
+    mutationFn: () => apiFetch<FlowKey>(`/api/tenants/${tenantId}/settings/flow-key`, { method: "POST" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["flow-key", tenantId] }); toast({ title: "Flow encryption key registered with Meta" }); },
     onError: (e: Error) => toast({ variant: "destructive", title: "Key registration failed", description: e.message }),
   });
   const addConnector = useMutation({
@@ -101,6 +122,21 @@ export function SettingsClient() {
   function copy(text: string) {
     navigator.clipboard.writeText(text);
     toast({ title: "Copied to clipboard" });
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex h-full flex-col">
+        <PageHeader
+          title="Settings"
+          description="Connect your WhatsApp Business Cloud API account."
+        />
+        <div className="mx-auto w-full max-w-3xl space-y-4 p-4">
+          <Card className="h-64 animate-pulse bg-muted/40" />
+          <Card className="h-48 animate-pulse bg-muted/40" />
+        </div>
+      </div>
+    );
   }
 
   return (

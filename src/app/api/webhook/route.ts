@@ -11,9 +11,17 @@ export async function GET(req: Request) {
   const token = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
 
-  const cfg = await getWabaConfig();
-  if (mode === "subscribe" && token && token === cfg.webhookVerifyToken) {
-    return new NextResponse(challenge ?? "", { status: 200 });
+  if (mode === "subscribe" && token) {
+    const cfg = await getWabaConfig();
+    if (cfg.webhookVerifyToken && token === cfg.webhookVerifyToken) {
+      return new NextResponse(challenge ?? "", { status: 200 });
+    }
+    const tenantWaba = await prisma.wabaAccount.findFirst({
+      where: { webhookVerifyToken: token },
+    });
+    if (tenantWaba) {
+      return new NextResponse(challenge ?? "", { status: 200 });
+    }
   }
   return new NextResponse("Forbidden", { status: 403 });
 }
@@ -27,7 +35,19 @@ export async function POST(req: Request) {
   const signature = req.headers.get("x-hub-signature-256");
 
   const cfg = await getWabaConfig();
-  const signatureValid = cfg.appSecret ? verifySignature(raw, signature, cfg.appSecret) : false;
+  let signatureValid = cfg.appSecret ? verifySignature(raw, signature, cfg.appSecret) : false;
+  if (!signatureValid && signature) {
+    const tenantAccounts = await prisma.wabaAccount.findMany({
+      where: { appSecret: { not: null } },
+      select: { appSecret: true },
+    });
+    for (const acc of tenantAccounts) {
+      if (acc.appSecret && verifySignature(raw, signature, acc.appSecret)) {
+        signatureValid = true;
+        break;
+      }
+    }
+  }
 
   let payload: unknown = null;
   try {
