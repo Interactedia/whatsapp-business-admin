@@ -119,13 +119,19 @@ describe("tenant-owned WABA/PhoneNumber routing", () => {
     phoneFindMany.mockResolvedValueOnce([ownedPhone]);
     await expect(resolveInboundPhoneNumber("meta-phone-1")).resolves.toEqual(ownedPhone);
 
-    // Foreign / Unknown (zero results) -> rejected
+    // Foreign / Unknown (zero results) -> rejected (TenantAuthorizationError
+    // is thrown by resolveInboundPhoneNumber with a descriptive message after
+    // the lazy-provision fallback also returns no match).
     phoneFindMany.mockResolvedValueOnce([]);
-    await expect(resolveInboundPhoneNumber("meta-unknown")).rejects.toThrow("Tenant access denied");
+    await expect(resolveInboundPhoneNumber("meta-unknown")).rejects.toThrow(
+      /resolve inbound phone number meta-unknown/,
+    );
 
     // Ambiguous (multiple results) -> rejected
     phoneFindMany.mockResolvedValueOnce([ownedPhone, { ...ownedPhone, id: "phone-2" }]);
-    await expect(resolveInboundPhoneNumber("meta-ambiguous")).rejects.toThrow("Tenant access denied");
+    await expect(resolveInboundPhoneNumber("meta-ambiguous")).rejects.toThrow(
+      /resolve inbound phone number meta-ambiguous/,
+    );
   });
 
   it("cross-tenant credential isolation: prevents using another tenant's credentials", async () => {
