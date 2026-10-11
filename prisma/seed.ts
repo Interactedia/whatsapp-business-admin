@@ -1,9 +1,25 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../src/lib/prisma";
 
+const DEMO_PASSWORD = "123456";
+
+function resolveSeedPassword() {
+  const configured = process.env.SEED_ADMIN_PASSWORD;
+  if (configured) return configured;
+
+  if (process.env.NODE_ENV === "test" || process.env.WBA_ALLOW_DEMO_SEED === "true") {
+    return DEMO_PASSWORD;
+  }
+
+  throw new Error(
+    "SEED_ADMIN_PASSWORD is required outside test/demo seed mode. " +
+      "Set WBA_ALLOW_DEMO_SEED=true only for isolated local fixtures.",
+  );
+}
+
 async function main() {
-  const defaultPassword = process.env.SEED_ADMIN_PASSWORD || "123456";
-  const passwordHash = await bcrypt.hash(defaultPassword, 10);
+  const seedPassword = resolveSeedPassword();
+  const passwordHash = await bcrypt.hash(seedPassword, 10);
 
   // 1. Ensure the two tenants exist
   const tenant1 = await prisma.tenant.upsert({
@@ -19,7 +35,7 @@ async function main() {
   });
 
   // 2. Seed SYSTEM_ADMIN
-  const superadmin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "admin@superadmin.com" },
     update: { role: "SYSTEM_ADMIN", passwordHash, active: true },
     create: {
@@ -55,9 +71,8 @@ async function main() {
   });
 
   // 5. Ensure memberships.
-  // The SYSTEM_ADMIN is a pure platform administrator: no tenant membership,
-  // no operational workspace. Tenant ADMINs are members of exactly one tenant.
-  await prisma.tenantMembership.deleteMany({ where: { userId: superadmin.id } });
+  // The SYSTEM_ADMIN is a pure platform administrator: this seed never creates
+  // tenant memberships for it. Tenant ADMINs are members of exactly one tenant.
   await prisma.tenantMembership.upsert({
     where: { userId_tenantId: { userId: defaultAdmin.id, tenantId: tenant1.id } },
     update: {},
@@ -77,9 +92,9 @@ async function main() {
   });
 
   console.log("Seeded administrative users successfully:");
-  console.log("  1. System Admin:     admin@superadmin.com (role: SYSTEM_ADMIN, pass: " + defaultPassword + ")");
-  console.log("  2. Default Org Admin: admin@default.com    (role: ADMIN,        pass: " + defaultPassword + ") -> [Default Organization]");
-  console.log("  3. Acme Corp Admin:   admin@acme.com       (role: ADMIN,        pass: " + defaultPassword + ") -> [Acme Corp]");
+  console.log("  1. System Admin:     admin@superadmin.com (role: SYSTEM_ADMIN, pass: " + seedPassword + ")");
+  console.log("  2. Default Org Admin: admin@default.com    (role: ADMIN,        pass: " + seedPassword + ") -> [Default Organization]");
+  console.log("  3. Acme Corp Admin:   admin@acme.com       (role: ADMIN,        pass: " + seedPassword + ") -> [Acme Corp]");
 }
 
 main()

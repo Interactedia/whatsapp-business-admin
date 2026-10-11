@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { handle, ok, requireAdmin } from "@/lib/api";
+import { handle, ok, requireAdmin, HttpError } from "@/lib/api";
 
 const PAGE_SIZE = 50;
 
@@ -10,7 +10,10 @@ const PAGE_SIZE = 50;
  * Supports ?page, ?related (api only), ?ok=true|false (api only).
  */
 export const GET = handle(async (req) => {
-  await requireAdmin();
+  const session = await requireAdmin();
+  if (session.user.role !== "SYSTEM_ADMIN") {
+    throw new HttpError(403, "System administrators only");
+  }
   const url = new URL(req.url);
   const type = url.searchParams.get("type") === "webhook" ? "webhook" : "api";
   const page = Math.max(1, Number(url.searchParams.get("page") || 1));
