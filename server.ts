@@ -21,6 +21,22 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
   const server = createServer((req, res) => {
+    // When running behind a tunnel (ngrok, cloudflared, localtunnel) or reverse
+    // proxy, the original Host / TLS info is forwarded via these headers.
+    // Next.js builds `request.nextUrl` from `req.headers.host`, so we must
+    // rewrite the Host header to the public host before handing off. Without
+    // this, login redirects, CSRF cookie domains, and callback URLs leak the
+    // local listen address (e.g. 0.0.0.0:4020) which the browser cannot
+    // resolve through the tunnel.
+    const xfHost = req.headers["x-forwarded-host"];
+    if (xfHost) {
+      req.headers.host = String(xfHost);
+    }
+    if (!req.headers["x-forwarded-proto"] && req.headers["x-forwarded-host"]) {
+      // Infer HTTPS when the request came through a public tunnel.
+      req.headers["x-forwarded-proto"] = "https";
+    }
+
     handle(req, res).catch((err) => {
       console.error("Request handler error:", err);
       res.statusCode = 500;
