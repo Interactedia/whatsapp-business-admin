@@ -66,7 +66,7 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
   const [search, setSearch] = useState("");
 
   const { data: conversations = [] } = useQuery({
-    queryKey: ["conversations", search],
+    queryKey: ["conversations", tenantId, search],
     queryFn: () => {
       const base = conversationsUrl;
       const qs = search ? `search=${encodeURIComponent(search)}` : "";
@@ -78,10 +78,10 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
   // Realtime: refresh lists + the open thread on any event for this tenant.
   useRealtime(tenantId || null, (msg) => {
     if (msg.type.startsWith("message:")) {
-      qc.invalidateQueries({ queryKey: ["conversations"] });
+      qc.invalidateQueries({ queryKey: ["conversations", tenantId] });
       const p = msg.payload as { conversationId?: string };
       if (p.conversationId && p.conversationId === activeId) {
-        qc.invalidateQueries({ queryKey: ["thread", activeId] });
+        qc.invalidateQueries({ queryKey: ["thread", tenantId, activeId] });
       }
     }
   });
@@ -164,7 +164,7 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["thread", conversationId],
+    queryKey: ["thread", tenantId, conversationId],
     queryFn: () => apiFetch<Thread>(`/api/tenants/${tenantId}/conversations/${conversationId}/messages`),
   });
 
@@ -175,12 +175,12 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
 
   // Opening a thread marks it read server-side; refresh the list to clear the badge.
   useEffect(() => {
-    qc.invalidateQueries({ queryKey: ["conversations"] });
-  }, [conversationId, qc]);
+    qc.invalidateQueries({ queryKey: ["conversations", tenantId] });
+  }, [conversationId, tenantId, qc]);
 
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["thread", conversationId] });
-    qc.invalidateQueries({ queryKey: ["conversations"] });
+    qc.invalidateQueries({ queryKey: ["thread", tenantId, conversationId] });
+    qc.invalidateQueries({ queryKey: ["conversations", tenantId] });
   };
 
   const sendText = useMutation({

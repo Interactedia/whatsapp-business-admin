@@ -58,8 +58,10 @@ export function OrganizationSelector({
   }, [pathname]);
 
   const handleSwitchTenant = (tenantId: string) => {
-    // Cancel pending queries and clear stale tenant data
+    // Drop ALL cached queries (not just invalidate) so no data from the
+    // previous tenant is briefly shown while the new tenant's data loads.
     qc.cancelQueries();
+    qc.removeQueries();
     qc.invalidateQueries();
 
     // Navigate to the new tenant workspace
