@@ -6,6 +6,7 @@ export interface CreateStatusReconciliationJobInput {
   wabaAccountId: string;
   phoneNumberId: string;
   messageId: string;
+  webhookEventId?: string;
   waMessageId?: string;
   producer?: ProducerIdentity;
   enqueuedAt?: string;
@@ -23,6 +24,7 @@ export function createStatusReconciliationJobPayload(input: CreateStatusReconcil
       wabaAccountId: input.wabaAccountId,
       phoneNumberId: input.phoneNumberId,
       messageId: input.messageId,
+      ...(input.webhookEventId ? { webhookEventId: input.webhookEventId } : {}),
       ...(input.waMessageId ? { waMessageId: input.waMessageId } : {}),
     },
     ...(input.reason ? { metadata: { reason: input.reason } } : {}),

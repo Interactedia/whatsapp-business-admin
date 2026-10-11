@@ -79,6 +79,7 @@ export function validateJobPayload(payload: unknown): KnownJobPayload {
       case JOB_TYPES.STATUS_RECONCILIATION:
         validatePhoneRef(payload.ref, errors);
         requiredId(payload.ref.messageId, "messageId", errors);
+        if (payload.ref.webhookEventId !== undefined) requiredId(payload.ref.webhookEventId, "webhookEventId", errors);
         if (payload.ref.waMessageId !== undefined) requiredId(payload.ref.waMessageId, "waMessageId", errors);
         break;
       case JOB_TYPES.BROADCAST_DISPATCH:

@@ -63,6 +63,7 @@ export interface OutboundMessageJobPayload extends BaseJobPayload<typeof JOB_TYP
 
 export interface StatusReconciliationJobPayload extends BaseJobPayload<typeof JOB_TYPES.STATUS_RECONCILIATION> {
   ref: PhoneScopedJobReference & {
+    webhookEventId?: string;
     messageId: string;
     waMessageId?: string;
   };

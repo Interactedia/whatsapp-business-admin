@@ -6,6 +6,8 @@ import { redactFlowWebhookPayload } from "@/lib/whatsapp/flow-submission";
 import { classifyWebhookPayload } from "@/lib/whatsapp/inbound/classify";
 import { isInboundAsyncEnabled } from "@/lib/whatsapp/inbound/config";
 import { persistInboundWebhookReceipt } from "@/lib/whatsapp/inbound/receipt";
+import { isStatusAsyncEnabled } from "@/lib/whatsapp/status/config";
+import { persistStatusWebhookReceipt } from "@/lib/whatsapp/status/receipt";
 
 /** Meta webhook verification handshake. */
 export async function GET(req: Request) {
@@ -84,6 +86,22 @@ export async function POST(req: Request) {
   if (canUseAsyncInbound) {
     await persistInboundWebhookReceipt({ payload, signatureValid });
     return NextResponse.json({ received: true });
+  }
+
+  const canUseAsyncStatus = isStatusAsyncEnabled()
+    && classification.hasStatuses
+    && !classification.hasInboundMessages
+    && !classification.hasTemplateStatuses
+    && !classification.hasFlowReplies;
+
+  if (canUseAsyncStatus) {
+    try {
+      await persistStatusWebhookReceipt({ payload, signatureValid });
+      return NextResponse.json({ received: true });
+    } catch {
+      // If async receipt cannot be safely stored (e.g. unknown message, multi-phone),
+      // fall through to legacy handling to preserve existing behavior and logging.
+    }
   }
 
   const event = await prisma.webhookEvent.create({
