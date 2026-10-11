@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,14 +28,19 @@ function LoginForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const res = await signIn("credentials", { email, password, redirect: false });
-    setLoading(false);
-    if (res?.error) {
-      setError("Invalid email or password.");
-      return;
+    try {
+      const res = await signIn("credentials", { email, password, redirect: false });
+      if (res?.error) {
+        setError("Correo electrónico o contraseña incorrectos.");
+        setLoading(false);
+        return;
+      }
+      router.push(params.get("callbackUrl") || "/");
+      router.refresh();
+    } catch {
+      setError("Error al iniciar sesión. Verifica tus credenciales.");
+      setLoading(false);
     }
-    router.push(params.get("callbackUrl") || "/");
-    router.refresh();
   }
 
   return (
@@ -74,9 +79,14 @@ function LoginForm() {
               required
             />
           </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && (
+            <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-2.5 text-xs font-medium text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? "Iniciando sesión…" : "Sign in"}
           </Button>
         </form>
       </div>
