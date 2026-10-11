@@ -31,7 +31,9 @@ export async function requireUser(): Promise<Session> {
 /** Get the session or throw 403 unless the user is an admin. */
 export async function requireAdmin(): Promise<Session> {
   const session = await requireUser();
-  if (session.user.role !== "ADMIN") throw new HttpError(403, "Admins only");
+  if (session.user.role !== "ADMIN" && session.user.role !== "SYSTEM_ADMIN") {
+    throw new HttpError(403, "Admins only");
+  }
   return session;
 }
 

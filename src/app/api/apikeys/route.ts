@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { handle, ok, requireUser, HttpError } from "@/lib/api";
+import { handle, ok, requireUser } from "@/lib/api";
 import { generateKey } from "@/lib/api-keys";
+import { requireTenantAdminApi } from "@/lib/tenant/page-guards";
 
 export const GET = handle(async () => {
   await requireUser();
@@ -22,13 +23,7 @@ export const POST = handle(async (req) => {
   const session = await requireUser();
   const { name, tenantId } = createSchema.parse(await req.json());
 
-  const membership = await prisma.tenantMembership.findUnique({
-    where: { userId_tenantId: { userId: session.user.id, tenantId } }
-  });
-
-  if (!membership) {
-    throw new HttpError(403, "Must be a member of the tenant to create an API key for it");
-  }
+  await requireTenantAdminApi(session.user.id, tenantId);
 
   const gen = generateKey();
 

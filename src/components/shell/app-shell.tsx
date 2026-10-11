@@ -21,7 +21,7 @@ import { OrganizationSelector } from "@/components/tenant/organization-selector"
 import type { TenantMembershipSummary } from "@/components/tenant/organization-selector";
 
 type Props = {
-  user: { name: string; email: string; role: "ADMIN" | "AGENT" };
+  user: { name: string; email: string; role: "SYSTEM_ADMIN" | "ADMIN" | "AGENT" };
   memberships: TenantMembershipSummary[];
   activeTenantId: string | null;
   wabaConnected: boolean;
@@ -32,7 +32,7 @@ type Props = {
 export function AppShell({ user, memberships, activeTenantId, wabaConnected, phoneNumber, children }: Props) {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const items = NAV_ITEMS.filter((i) => !i.adminOnly || user.role === "ADMIN");
+  const items = NAV_ITEMS.filter((i) => !i.adminOnly || user.role === "ADMIN" || user.role === "SYSTEM_ADMIN");
   const initials = user.name
     .split(" ")
     .map((s) => s[0])

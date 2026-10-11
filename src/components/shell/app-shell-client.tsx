@@ -5,7 +5,7 @@ import { AppShell } from "@/components/shell/app-shell";
 import type { TenantMembershipSummary } from "@/components/tenant/organization-selector";
 
 type Props = {
-  user: { name: string; email: string; role: "ADMIN" | "AGENT" };
+  user: { name: string; email: string; role: "SYSTEM_ADMIN" | "ADMIN" | "AGENT" };
   memberships: TenantMembershipSummary[];
   wabaConnected: boolean;
   phoneNumber: string | null;
