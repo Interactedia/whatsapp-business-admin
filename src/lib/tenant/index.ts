@@ -5,7 +5,8 @@ export type AuthenticatedPrincipal = {
   userId: string;
 };
 
-const trustedTenantContexts = new WeakSet<TenantContext>();
+const globalForTenant = globalThis as unknown as { __trustedTenantContexts?: WeakSet<TenantContext> };
+const trustedTenantContexts = (globalForTenant.__trustedTenantContexts ??= new WeakSet<TenantContext>());
 
 export type TenantContext = {
   tenantId: string;

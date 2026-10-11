@@ -25,6 +25,8 @@ export type GraphRequest = {
   related?: { type: string; id?: string };
   /** Provide a config to avoid a second DB read; otherwise loaded automatically. */
   config?: WabaConfig;
+  /** Optional AbortSignal for request-level cancellation/timeout. */
+  signal?: AbortSignal;
 };
 
 /**
@@ -61,6 +63,7 @@ export async function graphFetch<T = unknown>(req: GraphRequest): Promise<T> {
         ...(req.body && !multipart ? { "Content-Type": "application/json" } : {}),
       },
       body: req.body ? (multipart ? (req.body as FormData) : JSON.stringify(req.body)) : undefined,
+      signal: req.signal,
     });
     responseStatus = res.status;
     const text = await res.text();
