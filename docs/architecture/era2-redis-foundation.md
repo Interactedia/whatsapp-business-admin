@@ -145,17 +145,82 @@ Provides actionable errors (invalid URL format) without leaking credentials into
 
 ## 6. Testing
 
+### 6.1 Unit Tests (Mocked)
+
 | Test file | Coverage |
 |---|---|
-| `src/lib/redis/__tests__/config.test.ts` | Valid/missing/invalid config, credential redaction, retry bounds |
-| `src/lib/redis/__tests__/client.test.ts` | Lazy init, singleton reuse, connect/disconnect idempotency |
-| `src/lib/redis/__tests__/health.test.ts` | Ok/unavailable states, timeout, credential redaction |
+| `test/lib/redis/config.test.ts` | Valid/missing/invalid config, credential redaction, retry bounds |
+| `test/lib/redis/client.test.ts` | Lazy init, singleton reuse, connect/disconnect idempotency |
+| `test/lib/redis/health.test.ts` | Ok/unavailable states, timeout, credential redaction |
 
 All unit tests mock ioredis and do not require a live Redis instance.
 
+```bash
+# Run unit tests (no Redis required)
+npm run test
+
+# Run with coverage
+npm run test -- --coverage
+```
+
+### 6.2 Integration Tests (Real Redis)
+
+Integration tests run against a real Redis server and are **opt-in** (not included in `npm run test`).
+
+**Prerequisites:** A running Redis server. The development host has Redis 7.0.15 on `localhost:6379` without authentication.
+
+```bash
+# Verify Redis is reachable
+redis-cli PING
+# Expected: PONG
+
+# Run integration verification
+REDIS_URL=redis://127.0.0.1:6379 npx tsx test/integration/redis-integration.test.ts
+# Expected: 11/11 checks passed
+
+# Run failure-handling verification
+REDIS_URL=redis://127.0.0.1:6379 npx tsx test/integration/redis-failure-handling.test.ts
+# Expected: 7/7 checks passed
+```
+
+**Test isolation:** Integration tests use a unique key prefix (`wa:integration:<timestamp>:`) and clean up all keys after execution. No destructive operations (`FLUSHALL`, `FLUSHDB`, `KEYS *` on production patterns) are used.
+
+### 6.3 Real Redis Verification Results (2026-10-10)
+
+| Check | Result | Detail |
+|---|---|---|
+| PING returns PONG | ✓ PASS | Redis 7.0.15, `redis://127.0.0.1:6379` |
+| SET/GET correct value | ✓ PASS | `SET` stores, `GET` retrieves exact value |
+| DEL removes key | ✓ PASS | `GET` after `DEL` returns `null` |
+| Client status is ready | ✓ PASS | ioredis status = "ready" |
+| Multiple clients connect independently | ✓ PASS | Independent singleton instances per client object |
+| Original client still works after second connect | ✓ PASS | PONG returned after parallel connect |
+| QUIT succeeds | ✓ PASS | Graceful disconnect via `QUIT` command |
+| Repeated QUIT is safe | ✓ PASS | Second `QUIT` is idempotent (no exception) |
+| `loadRedisConfig` returns null without REDIS_URL | ✓ PASS | Config returns `null`, app does not crash |
+| `isRedisConfigured` returns false without REDIS_URL | ✓ PASS | Correct boolean response |
+| Error message does not leak credentials | ✓ PASS | `WRONGPASS` error does not contain `SecretPass123` |
+
+### 6.4 Failure Handling Verification Results (2026-10-10)
+
+| Check | Result | Detail |
+|---|---|---|
+| Unavailable host: error is connection-related | ✓ PASS | "Connection is closed." — bounded |
+| Health returns unavailable for unreachable Redis | ✓ PASS | `status: "unavailable"` |
+| Health provides reason for unavailable state | ✓ PASS | `reason: "not_connected"` |
+| Reconnection: initial PING succeeds | ✓ PASS | PONG on fresh connection |
+| After `disconnect()`, client reports closed/end status | ✓ PASS | Status = "end" |
+| Reconnection: PING succeeds after `reconnect()` | ✓ PASS | PONG after manual reconnect |
+| Bad port connect: throws on bad port | ✓ PASS | Error is caught, no unhandled rejection |
+
+### 6.5 Operational Limitations
+
+- **Recovery test:** A clean reconnection test was performed using `disconnect()` + `reconnect()`. Full crash-and-recover simulation (server-side kill) requires a dedicated Redis instance and is not performed in the shared development environment.
+- **No recovery test on shared instance:** The shared Redis instance is not stopped or restarted to avoid affecting other developers. The reconnection behavior is verified through programmatic disconnect/reconnect which exercises the same code path.
+
 ---
 
-## 7. Future BullMQ Integration Boundaries
+## 8. Future BullMQ Integration Boundaries
 
 When BullMQ is introduced in WA-ERA2-03:
 
