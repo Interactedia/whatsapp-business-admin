@@ -6,6 +6,12 @@ import { templateExampleComponents } from "@/lib/whatsapp/template-service";
 import { WhatsAppApiError } from "@/lib/whatsapp/client";
 import type { ApiComponent } from "@/lib/whatsapp/template-types";
 import { finishPreparedFlowLaunch, prepareTemplateFlowLaunch } from "@/lib/whatsapp/flow-launch";
+import {
+  isBroadcastAsyncEnabled,
+  dispatchBroadcast,
+} from "./broadcast/index";
+
+export * from "./broadcast/index";
 
 /**
  * Single in-process queue shared across requests (kept on globalThis so Next's
@@ -20,8 +26,23 @@ function queue(): PQueue {
   return g.__waBroadcastQueue;
 }
 
-/** Kick off sending for a broadcast. Returns immediately; work runs in the queue. */
+/**
+ * Kick off sending for a broadcast.
+ * When WHATSAPP_BROADCAST_ASYNC_ENABLED=true, routes through the durable Outbox + BullMQ pipeline.
+ * When disabled (default), uses the legacy in-process queue.
+ */
 export async function runBroadcast(broadcastId: string): Promise<void> {
+  if (isBroadcastAsyncEnabled()) {
+    await dispatchBroadcast(broadcastId);
+    return;
+  }
+  return runLegacyBroadcast(broadcastId);
+}
+
+/**
+ * Legacy in-process broadcast execution using PQueue.
+ */
+export async function runLegacyBroadcast(broadcastId: string): Promise<void> {
   const broadcast = await prisma.broadcast.findUnique({
     where: { id: broadcastId },
     include: { template: true, recipients: { include: { contact: true } } },

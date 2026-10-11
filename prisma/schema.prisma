@@ -336,6 +336,7 @@ model Message {
   sentBy         User?            @relation("SentBy", fields: [sentById], references: [id], onDelete: SetNull)
   flowLaunch     FlowLaunch?
   attempts       OutboundSendAttempt[]
+  broadcastRecipient BroadcastRecipient?
   timestamp      DateTime         @default(now())
 
   @@index([tenantId])
@@ -648,6 +649,8 @@ model BroadcastRecipient {
   contact     Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
   status      RecipientStatus @default(PENDING)
   waMessageId String?         @unique
+  messageId   String?         @unique
+  message     Message?        @relation(fields: [messageId], references: [id], onDelete: SetNull)
   error       String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt

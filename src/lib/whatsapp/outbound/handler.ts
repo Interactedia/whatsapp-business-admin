@@ -387,7 +387,7 @@ export async function handleOutboundMessage(
 // Failure classification and recording
 // ---------------------------------------------------------------------------
 
-class MetaResponseError extends Error {
+export class MetaResponseError extends Error {
   constructor(
     public readonly classification: "MISSING_MESSAGE_ID" | "PARSE_ERROR",
     message: string,
@@ -398,7 +398,7 @@ class MetaResponseError extends Error {
   }
 }
 
-interface FailureClassification {
+export interface FailureClassification {
   result: "failed" | "uncertain";
   errorCode: OutboundErrorCode;
   retryable: boolean;
@@ -406,7 +406,7 @@ interface FailureClassification {
   message: string;
 }
 
-function classifyError(err: unknown): FailureClassification {
+export function classifyError(err: unknown): FailureClassification {
   const errorMessage = err instanceof Error ? err.message : String(err);
 
   if (err instanceof MetaResponseError) {

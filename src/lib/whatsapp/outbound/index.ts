@@ -2,6 +2,7 @@
 export {
   getOrCreateOutboundAttempt,
   claimOutboundAttempt,
+  markOutboundMetaRequestStarted,
   markOutboundSent,
   markOutboundFailed,
   markOutboundUncertain,
@@ -12,6 +13,7 @@ export type {
   OutboundPrisma,
   ClaimOutboundAttemptInput,
   ClaimOutboundAttemptResult,
+  MarkOutboundMetaRequestStartedInput,
   MarkOutboundSentInput,
   MarkOutboundFailedInput,
   MarkOutboundUncertainInput,
