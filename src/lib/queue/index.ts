@@ -103,3 +103,15 @@ export type { QueueInspectionResult, QueueJobCounts } from "./inspection";
 
 // Lifecycle
 export { closeAllQueueResources } from "./lifecycle";
+
+// Failure classification
+export {
+  FAILURE_CATEGORY,
+  classifyFailure,
+  classifyInfrastructureError,
+} from "./failure-classification";
+export type { FailureCategory, FailureClassificationResult } from "./failure-classification";
+
+// Retry policy
+export { RETRY_POLICIES, isRetryable, computeBackoffDelay, DEFAULT_BULLMQ_JOB_OPTIONS, OUTBOX_BULLMQ_JOB_OPTIONS } from "./retry-policy";
+export type { RetryPolicy } from "./retry-policy";
