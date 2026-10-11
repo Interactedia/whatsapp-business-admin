@@ -18,9 +18,10 @@ async function getMemberships(userId: string) {
 }
 
 /**
- * Root dashboard — entry point that resolves the user's tenant context.
+ * Root entry — resolves the user's tenant context and sends them to the
+ * tenant-scoped Dashboard as the first screen.
  * - Zero memberships: show the empty state.
- * - One membership: auto-redirect to that tenant's inbox.
+ * - One membership: auto-redirect to that tenant's Dashboard.
  * - Multiple memberships: show the selection screen.
  */
 export default async function DashboardPage() {
@@ -34,8 +35,10 @@ export default async function DashboardPage() {
   }
 
   if (memberships.length === 1) {
-    redirect(`/t/${memberships[0].tenantId}/conversations`);
+    // Single membership: land on the tenant Dashboard (the first screen).
+    redirect(`/t/${memberships[0].tenantId}`);
   }
 
+  // Multiple memberships: pick before entering the workspace.
   return <TenantSelector memberships={memberships} resource="conversations" />;
 }
