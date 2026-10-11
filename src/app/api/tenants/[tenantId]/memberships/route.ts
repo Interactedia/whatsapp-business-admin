@@ -29,7 +29,11 @@ export const GET = handle(async (_req, { params }) => {
   }
 
   const members = await prisma.tenantMembership.findMany({
-    where: { tenantId },
+    where: {
+      tenantId,
+      // Exclude SYSTEM_ADMIN accounts - they have no tenant context
+      user: { role: { not: "SYSTEM_ADMIN" } },
+    },
     select: {
       id: true,
       userId: true,
@@ -75,13 +79,17 @@ export const POST = handle(async (req, { params }) => {
 
   const body = addMemberSchema.parse(await req.json());
 
-  // Verify target user exists and is active
+  // Verify target user exists, is active, and is not a SYSTEM_ADMIN
   const targetUser = await prisma.user.findUnique({
     where: { id: body.userId },
-    select: { id: true, active: true, name: true, email: true },
+    select: { id: true, active: true, name: true, email: true, role: true },
   });
   if (!targetUser || !targetUser.active) {
     throw new HttpError(404, "User not found or inactive");
+  }
+  // SYSTEM_ADMIN cannot be added to any tenant - they have no tenant context
+  if (targetUser.role === "SYSTEM_ADMIN") {
+    throw new HttpError(403, "System administrator accounts cannot be added to tenants");
   }
 
   // Prevent duplicate memberships

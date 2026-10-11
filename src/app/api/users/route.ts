@@ -41,8 +41,10 @@ export const GET = handle(async () => {
   });
   const uniqueUserIds = [...new Set(userIds.map((u) => u.userId))];
 
+  // Exclude SYSTEM_ADMIN accounts from tenant ADMIN view
+  // SYSTEM_ADMIN has no tenant context and should never be visible to tenant admins
   const users = await prisma.user.findMany({
-    where: { id: { in: uniqueUserIds } },
+    where: { id: { in: uniqueUserIds }, role: { not: "SYSTEM_ADMIN" } },
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
   });
