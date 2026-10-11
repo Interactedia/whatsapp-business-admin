@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2, KeyRound } from "lucide-react";
+import { Plus, Trash2, KeyRound, UserPlus, Check } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
 import { formatDateTime } from "@/lib/utils";
 import { PageHeader } from "@/components/shell/page-header";
@@ -27,15 +27,38 @@ type User = {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "AGENT";
+  role: "SYSTEM_ADMIN" | "ADMIN" | "AGENT";
   active: boolean;
   createdAt: string;
 };
 
-export function UsersClient({ currentUserId }: { currentUserId: string }) {
+type TenantMember = {
+  id: string;
+  userId: string;
+  tenantId: string;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: "SYSTEM_ADMIN" | "ADMIN" | "AGENT";
+    active: boolean;
+  };
+};
+
+export function UsersClient({
+  currentUserId,
+  tenantId,
+  tenantName,
+}: {
+  currentUserId: string;
+  tenantId?: string;
+  tenantName?: string;
+}) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [resetFor, setResetFor] = useState<User | null>(null);
 
   const { data: users = [], isLoading } = useQuery({
@@ -43,7 +66,20 @@ export function UsersClient({ currentUserId }: { currentUserId: string }) {
     queryFn: () => apiFetch<User[]>("/api/users"),
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["users"] });
+  const { data: tenantMembers = [] } = useQuery({
+    queryKey: ["tenants", tenantId, "memberships"],
+    queryFn: () => apiFetch<TenantMember[]>(`/api/tenants/${tenantId}/memberships`),
+    enabled: Boolean(tenantId),
+  });
+
+  const memberUserIds = new Set(tenantMembers.map((m) => m.userId));
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["users"] });
+    if (tenantId) {
+      qc.invalidateQueries({ queryKey: ["tenants", tenantId, "memberships"] });
+    }
+  };
 
   const patch = useMutation({
     mutationFn: (v: { id: string; body: Partial<User> }) =>
@@ -64,17 +100,41 @@ export function UsersClient({ currentUserId }: { currentUserId: string }) {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="Users"
-        description="Manage who can access this admin. Agents see only the inbox and contacts."
+        title={tenantName ? `Users & Members — ${tenantName}` : "Users"}
+        description={
+          tenantId
+            ? "Manage users and assign existing users as members of this tenant."
+            : "Manage who can access this admin. Agents see only the inbox and contacts."
+        }
         actions={
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="h-4 w-4" /> New user
-              </Button>
-            </DialogTrigger>
-            <CreateUserDialog onClose={() => setOpen(false)} onCreated={invalidate} />
-          </Dialog>
+          <div className="flex items-center gap-2">
+            {tenantId && (
+              <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <UserPlus className="h-4 w-4 mr-1" /> Add member to tenant
+                  </Button>
+                </DialogTrigger>
+                <AddTenantMemberDialog
+                  tenantId={tenantId}
+                  users={users.filter((u) => u.active && !memberUserIds.has(u.id))}
+                  onClose={() => setAddMemberOpen(false)}
+                  onAdded={() => {
+                    invalidate();
+                    setAddMemberOpen(false);
+                  }}
+                />
+              </Dialog>
+            )}
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="h-4 w-4" /> New user
+                </Button>
+              </DialogTrigger>
+              <CreateUserDialog onClose={() => setOpen(false)} onCreated={invalidate} />
+            </Dialog>
+          </div>
         }
       />
 
@@ -85,6 +145,7 @@ export function UsersClient({ currentUserId }: { currentUserId: string }) {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
+                {tenantId && <TableHead className="w-32">Tenant Access</TableHead>}
                 <TableHead className="w-32">Role</TableHead>
                 <TableHead className="w-24">Status</TableHead>
                 <TableHead className="w-40">Created</TableHead>
@@ -94,19 +155,31 @@ export function UsersClient({ currentUserId }: { currentUserId: string }) {
             <TableBody>
               {isLoading && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={tenantId ? 7 : 6} className="text-center text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
               )}
               {users.map((u) => {
                 const self = u.id === currentUserId;
+                const isMember = memberUserIds.has(u.id);
                 return (
                   <TableRow key={u.id}>
                     <TableCell data-label="Name" className="font-medium">
                       {u.name} {self && <span className="text-xs text-muted-foreground">(you)</span>}
                     </TableCell>
                     <TableCell data-label="Email" className="break-all text-muted-foreground">{u.email}</TableCell>
+                    {tenantId && (
+                      <TableCell data-label="Tenant Access">
+                        {isMember ? (
+                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300">
+                            <Check className="h-3 w-3 mr-1 inline" /> Member
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Not member</span>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell data-label="Role">
                       <Select
                         value={u.role}
@@ -267,6 +340,82 @@ function ResetPasswordDialog({ user, onDone }: { user: User; onDone: () => void 
         </Button>
         <Button size="sm" disabled={password.length < 8 || reset.isPending} onClick={() => reset.mutate()}>
           Update password
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  );
+}
+
+function AddTenantMemberDialog({
+  tenantId,
+  users,
+  onClose,
+  onAdded,
+}: {
+  tenantId: string;
+  users: User[];
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const { toast } = useToast();
+  const [selectedUserId, setSelectedUserId] = useState("");
+
+  const add = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/tenants/${tenantId}/memberships`, {
+        method: "POST",
+        body: JSON.stringify({ userId: selectedUserId }),
+      }),
+    onSuccess: () => {
+      toast({ title: "User assigned as tenant member" });
+      onAdded();
+    },
+    onError: (e: Error) => {
+      toast({ variant: "destructive", title: "Assignment failed", description: e.message });
+    },
+  });
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Add member to tenant</DialogTitle>
+        <DialogDescription>
+          Assign an existing user to this tenant so they can access its inbox, contacts, and resources.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-4 py-2">
+        {users.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            All active users are already assigned to this tenant.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <Label htmlFor="member-user-select">Select user</Label>
+            <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+              <SelectTrigger id="member-user-select">
+                <SelectValue placeholder="Choose an active user..." />
+              </SelectTrigger>
+              <SelectContent>
+                {users.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.name} ({u.email}) — {u.role}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+      <DialogFooter>
+        <Button variant="outline" size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          disabled={!selectedUserId || add.isPending || users.length === 0}
+          onClick={() => add.mutate()}
+        >
+          {add.isPending ? "Adding..." : "Add member"}
         </Button>
       </DialogFooter>
     </DialogContent>

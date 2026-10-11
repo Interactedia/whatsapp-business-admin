@@ -32,7 +32,11 @@ type Props = {
 export function AppShell({ user, memberships, activeTenantId, wabaConnected, phoneNumber, children }: Props) {
   const pathname = usePathname();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const items = NAV_ITEMS.filter((i) => !i.adminOnly || user.role === "ADMIN" || user.role === "SYSTEM_ADMIN");
+  const items = NAV_ITEMS.filter((i) => {
+    if (i.systemAdminOnly) return user.role === "SYSTEM_ADMIN";
+    if (i.adminOnly) return user.role === "ADMIN" || user.role === "SYSTEM_ADMIN";
+    return true;
+  });
   const initials = user.name
     .split(" ")
     .map((s) => s[0])

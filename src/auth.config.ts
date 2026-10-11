@@ -5,13 +5,15 @@ import type { NextAuthConfig } from "next-auth";
  * the full server config in `auth.ts`. Providers are added in `auth.ts`.
  */
 const protectedTenantReadPattern =
-  /^\/api\/tenants\/[^/]+\/(?:contacts|conversations)\/[^/]+$/;
+  /^\/api\/tenants\/[^/]+\/(?:contacts|conversations|memberships)\/[^/]+$/;
 const protectedTenantListPattern =
-  /^\/api\/tenants\/[^/]+\/(?:contacts|conversations)\/?$/;
+  /^\/api\/tenants\/?$|^\/api\/tenants\/[^/]+\/(?:contacts|conversations|memberships)\/?$/;
 const protectedTenantMessageHistoryPattern =
   /^\/api\/tenants\/[^/]+\/conversations\/[^/]+\/messages\/?$/;
 /** Tenant-scoped write endpoints (POST/PATCH/DELETE) that need auth protection. */
 const protectedTenantWritePatterns = [
+  /^\/api\/tenants\/?$/,                                          // POST tenant
+  /^\/api\/tenants\/[^/]+\/memberships\/?$/,                      // POST membership
   /^\/api\/tenants\/[^/]+\/contacts\/?$/,                         // POST contact
   /^\/api\/tenants\/[^/]+\/contacts\/[^/]+\/?$/,                // PATCH/DELETE contact
   /^\/api\/tenants\/[^/]+\/conversations\/?$/,                  // POST conversation
@@ -112,7 +114,7 @@ export const authConfig: NextAuthConfig = {
     session({ session, token }) {
       if (session.user) {
         session.user.id = token.sub as string;
-        session.user.role = (token.role as "ADMIN" | "AGENT") ?? "AGENT";
+        session.user.role = (token.role as "SYSTEM_ADMIN" | "ADMIN" | "AGENT") ?? "AGENT";
       }
       return session;
     },

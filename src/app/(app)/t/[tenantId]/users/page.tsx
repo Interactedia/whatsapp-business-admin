@@ -13,5 +13,11 @@ export default async function TenantUsersPage({
     return <TenantSelector memberships={memberships} />;
   }
 
-  return <UsersClient currentUserId={session.user.id} />;
+  return (
+    <UsersClient
+      currentUserId={session.user.id}
+      tenantId={tenantId}
+      tenantName={membership.tenant.name}
+    />
+  );
 }

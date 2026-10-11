@@ -1,0 +1,362 @@
+"use client";
+
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, Users, Building2, UserPlus } from "lucide-react";
+import { apiFetch } from "@/lib/fetcher";
+import { formatDateTime } from "@/lib/utils";
+import { PageHeader } from "@/components/shell/page-header";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/components/ui/use-toast";
+
+type Tenant = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    tenantMemberships: number;
+    contacts: number;
+    conversations: number;
+  };
+};
+
+type Membership = {
+  id: string;
+  userId: string;
+  tenantId: string;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role: "SYSTEM_ADMIN" | "ADMIN" | "AGENT";
+    active: boolean;
+  };
+};
+
+type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: "SYSTEM_ADMIN" | "ADMIN" | "AGENT";
+  active: boolean;
+};
+
+export function AdminTenantsClient() {
+  const qc = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
+
+  const { data: tenants = [], isLoading } = useQuery({
+    queryKey: ["admin", "tenants"],
+    queryFn: () => apiFetch<Tenant[]>("/api/tenants"),
+  });
+
+  const invalidateTenants = () => qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
+
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader
+        title="Tenant Administration"
+        description="Centralized organization and tenant management for system administrators."
+        actions={
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1" /> New tenant
+              </Button>
+            </DialogTrigger>
+            <CreateTenantDialog
+              onClose={() => setCreateOpen(false)}
+              onCreated={() => {
+                invalidateTenants();
+                setCreateOpen(false);
+              }}
+            />
+          </Dialog>
+        }
+      />
+
+      <div className="flex-1 overflow-auto p-6">
+        <div className="rounded-lg border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Organization / Tenant</TableHead>
+                <TableHead>Tenant ID</TableHead>
+                <TableHead>Members</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    Loading tenants...
+                  </TableCell>
+                </TableRow>
+              ) : tenants.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    No tenants found. Click &quot;New tenant&quot; to create one.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                tenants.map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <span>{t.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{t.id}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">
+                        <Users className="h-3 w-3 mr-1 inline" />
+                        {t._count?.tenantMemberships ?? 0}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatDateTime(t.createdAt)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedTenant(t)}
+                      >
+                        <Users className="h-4 w-4 mr-1" /> Member detail
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+
+      {selectedTenant && (
+        <TenantMembersDialog
+          tenant={selectedTenant}
+          onClose={() => {
+            setSelectedTenant(null);
+            invalidateTenants();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [name, setName] = useState("");
+  const { toast } = useToast();
+
+  const create = useMutation({
+    mutationFn: (body: { name: string }) =>
+      apiFetch<Tenant>("/api/tenants", { method: "POST", body: JSON.stringify(body) }),
+    onSuccess: () => {
+      toast({ title: "Tenant created successfully" });
+      onCreated();
+    },
+    onError: (err: Error) => {
+      toast({ variant: "destructive", title: "Failed to create tenant", description: err.message });
+    },
+  });
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Create new tenant</DialogTitle>
+        <DialogDescription>
+          Organizations provide strict tenant isolation for WhatsApp assets, contacts, and conversations.
+        </DialogDescription>
+      </DialogHeader>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!name.trim()) return;
+          create.mutate({ name: name.trim() });
+        }}
+        className="space-y-4"
+      >
+        <div className="space-y-2">
+          <Label htmlFor="tenant-name">Tenant name</Label>
+          <Input
+            id="tenant-name"
+            placeholder="e.g. Acme Corporation"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={create.isPending || !name.trim()}>
+            {create.isPending ? "Creating..." : "Create tenant"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
+  );
+}
+
+function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [addOpen, setAddOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
+
+  const { data: members = [], isLoading: loadingMembers } = useQuery({
+    queryKey: ["admin", "tenants", tenant.id, "memberships"],
+    queryFn: () => apiFetch<Membership[]>(`/api/tenants/${tenant.id}/memberships`),
+  });
+
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => apiFetch<User[]>("/api/users"),
+  });
+
+  const invalidateMembers = () => {
+    qc.invalidateQueries({ queryKey: ["admin", "tenants", tenant.id, "memberships"] });
+    qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
+  };
+
+  const addMember = useMutation({
+    mutationFn: (userId: string) =>
+      apiFetch<Membership>(`/api/tenants/${tenant.id}/memberships`, {
+        method: "POST",
+        body: JSON.stringify({ userId }),
+      }),
+    onSuccess: () => {
+      toast({ title: "User added to tenant" });
+      setSelectedUserId("");
+      setAddOpen(false);
+      invalidateMembers();
+    },
+    onError: (err: Error) => {
+      toast({ variant: "destructive", title: "Failed to add member", description: err.message });
+    },
+  });
+
+  // Filter users who are not already members
+  const memberUserIds = new Set(members.map((m) => m.userId));
+  const availableUsers = allUsers.filter((u) => u.active && !memberUserIds.has(u.id));
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Member detail — {tenant.name}</DialogTitle>
+          <DialogDescription>
+            Tenant ID: <span className="font-mono text-xs">{tenant.id}</span>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold">Active Members ({members.length})</h4>
+            <Button size="sm" onClick={() => setAddOpen(true)} disabled={availableUsers.length === 0}>
+              <UserPlus className="h-4 w-4 mr-1" /> Add member
+            </Button>
+          </div>
+
+          {addOpen && (
+            <div className="rounded-md border p-3 bg-muted/30 space-y-3">
+              <Label htmlFor="select-user">Select existing user to assign as tenant member</Label>
+              <div className="flex items-center gap-2">
+                <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                  <SelectTrigger id="select-user" className="flex-1">
+                    <SelectValue placeholder="Choose a user..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.name} ({u.email}) — {u.role}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  disabled={!selectedUserId || addMember.isPending}
+                  onClick={() => addMember.mutate(selectedUserId)}
+                >
+                  {addMember.isPending ? "Adding..." : "Confirm"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setAddOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-md border max-h-72 overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Added</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loadingMembers ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                      Loading members...
+                    </TableCell>
+                  </TableRow>
+                ) : members.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                      No members assigned to this tenant yet.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  members.map((m) => (
+                    <TableRow key={m.id}>
+                      <TableCell className="font-medium">{m.user.name}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{m.user.email}</TableCell>
+                      <TableCell>
+                        <Badge variant={m.user.role === "ADMIN" || m.user.role === "SYSTEM_ADMIN" ? "default" : "secondary"}>
+                          {m.user.role}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{formatDateTime(m.createdAt)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

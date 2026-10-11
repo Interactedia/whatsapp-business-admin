@@ -10,6 +10,7 @@ import {
   UserCog,
   ListChecks,
   Workflow,
+  Building2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -22,6 +23,8 @@ export type NavItem = {
   icon: LucideIcon;
   /** Restrict the item to ADMIN users. */
   adminOnly?: boolean;
+  /** Restrict the item to SYSTEM_ADMIN users. */
+  systemAdminOnly?: boolean;
   /** True when this item is a tenant-scoped workspace resource. */
   tenantScoped?: boolean;
   /** True when the item is the dashboard and is never tenant-scoped. */
@@ -45,6 +48,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "settings", label: "Settings", icon: Settings, adminOnly: true, tenantScoped: true },
   { key: "developer", label: "API", icon: Code2, adminOnly: true, tenantScoped: true },
   { key: "users", label: "Users", icon: UserCog, adminOnly: true, tenantScoped: true },
+  { key: "/admin/tenants", label: "Tenants", icon: Building2, systemAdminOnly: true, global: true },
 ];
 
 /**
