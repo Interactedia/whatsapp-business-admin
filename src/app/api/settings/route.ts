@@ -3,13 +3,18 @@ import crypto from "node:crypto";
 import { handle, ok, requireAdmin } from "@/lib/api";
 import { getWabaConfig, updateWabaConfig } from "@/lib/settings";
 import { maskSecret } from "@/lib/crypto";
+import { publicBaseUrlFromRequest } from "@/lib/public-url";
 
-function callbackUrl(): string {
-  const base = process.env.APP_URL || "http://localhost:3000";
-  return `${base.replace(/\/$/, "")}/api/webhook`;
+function callbackUrl(req: Request): string {
+  // Build the webhook URL from the request's public host so the value the
+  // user copies in Settings matches the URL Meta will actually call
+  // (e.g. https://greatly-outgoing-jennet.ngrok-free.app/api/webhook when
+  // reached through ngrok, not http://localhost:3000/api/webhook).
+  const base = publicBaseUrlFromRequest(req).replace(/\/$/, "");
+  return `${base}/api/webhook`;
 }
 
-export const GET = handle(async () => {
+export const GET = handle(async (req) => {
   await requireAdmin();
   const cfg = await getWabaConfig();
   return ok({
@@ -23,7 +28,7 @@ export const GET = handle(async () => {
     accessTokenSet: Boolean(cfg.accessToken),
     accessTokenMasked: maskSecret(cfg.accessToken),
     appSecretSet: Boolean(cfg.appSecret),
-    callbackUrl: callbackUrl(),
+    callbackUrl: callbackUrl(req),
     connected: Boolean(cfg.phoneNumberId && cfg.accessToken),
   });
 });
@@ -43,7 +48,8 @@ export const PUT = handle(async (req) => {
   await requireAdmin();
   const body = updateSchema.parse(await req.json());
 
-  // Auto-generate a verify token if the user left it blank.
+  // Auto-generate a verify token if the user left it blank. This is the
+  // canonical source of truth for the token; the UI just surfaces it.
   let verifyToken = body.webhookVerifyToken;
   if (verifyToken !== undefined && verifyToken.trim() === "") {
     verifyToken = crypto.randomBytes(16).toString("hex");
@@ -55,10 +61,34 @@ export const PUT = handle(async (req) => {
     phoneNumberId: body.phoneNumberId,
     apiVersion: body.apiVersion,
     webhookVerifyToken: verifyToken,
-    // Only overwrite the token/secret when a non-empty value is supplied.
-    accessToken: body.accessToken && body.accessToken.length > 0 ? body.accessToken : undefined,
-    appSecret: body.appSecret && body.appSecret.length > 0 ? body.appSecret : undefined,
+    // Only overwrite the token/secret when a non-empty value is provided.
+    accessToken:
+      body.accessToken === undefined
+        ? undefined
+        : body.accessToken === ""
+        ? null
+        : body.accessToken,
+    appSecret:
+      body.appSecret === undefined
+        ? undefined
+        : body.appSecret === ""
+        ? null
+        : body.appSecret,
   });
 
-  return ok({ saved: true });
+  const cfg = await getWabaConfig();
+  return ok({
+    wabaId: cfg.wabaId ?? "",
+    metaAppId: cfg.metaAppId ?? "",
+    phoneNumberId: cfg.phoneNumberId ?? "",
+    phoneNumberDisplay: cfg.phoneNumberDisplay ?? "",
+    businessName: cfg.businessName ?? "",
+    apiVersion: cfg.apiVersion,
+    webhookVerifyToken: cfg.webhookVerifyToken ?? "",
+    accessTokenSet: Boolean(cfg.accessToken),
+    accessTokenMasked: maskSecret(cfg.accessToken),
+    appSecretSet: Boolean(cfg.appSecret),
+    callbackUrl: callbackUrl(req),
+    connected: Boolean(cfg.phoneNumberId && cfg.accessToken),
+  });
 });
