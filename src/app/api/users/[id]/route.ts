@@ -10,6 +10,32 @@ const updateSchema = z.object({
   password: z.string().min(8).optional(),
 });
 
+/**
+ * Check if the caller (session) is authorized to manage the target user.
+ * SYSTEM_ADMIN can manage all users.
+ * Tenant ADMIN can only manage users who are members of their tenant.
+ */
+async function canManageUser(session: { user: { id: string; role: string } }, targetUserId: string): Promise<boolean> {
+  if (session.user.role === "SYSTEM_ADMIN") return true;
+
+  // Get caller's tenant memberships
+  const callerMemberships = await prisma.tenantMembership.findMany({
+    where: { userId: session.user.id },
+    select: { tenantId: true },
+  });
+  const callerTenantIds = callerMemberships.map((m) => m.tenantId);
+
+  if (callerTenantIds.length === 0) return false;
+
+  // Check if target user is member of any of the caller's tenants
+  const targetMemberships = await prisma.tenantMembership.findMany({
+    where: { userId: targetUserId, tenantId: { in: callerTenantIds } },
+    select: { userId: true },
+  });
+
+  return targetMemberships.length > 0;
+}
+
 export const PATCH = handle(async (req, { params }) => {
   const session = await requireAdmin();
   const { id } = await params;
@@ -23,6 +49,11 @@ export const PATCH = handle(async (req, { params }) => {
   const isSystemAdmin = session.user.role === "SYSTEM_ADMIN";
   if (!isSystemAdmin && (body.role === "SYSTEM_ADMIN" || target.role === "SYSTEM_ADMIN")) {
     throw new HttpError(403, "Only a system administrator can manage system administrator accounts");
+  }
+
+  // Tenant isolation: tenant ADMIN can only modify users in their tenant
+  if (!isSystemAdmin && !(await canManageUser(session, id))) {
+    throw new HttpError(403, "You can only manage users in your organization");
   }
 
   // Guard: don't let an admin lock themselves out (demote/deactivate self).
@@ -53,6 +84,10 @@ export const DELETE = handle(async (_req, { params }) => {
   // Only a SYSTEM_ADMIN can delete another SYSTEM_ADMIN account.
   if (target.role === "SYSTEM_ADMIN" && session.user.role !== "SYSTEM_ADMIN") {
     throw new HttpError(403, "Only a system administrator can manage system administrator accounts");
+  }
+  // Tenant isolation: tenant ADMIN can only delete users in their tenant
+  if (session.user.role !== "SYSTEM_ADMIN" && !(await canManageUser(session, id))) {
+    throw new HttpError(403, "You can only manage users in your organization");
   }
   await prisma.user.delete({ where: { id } });
   return ok({ deleted: true });

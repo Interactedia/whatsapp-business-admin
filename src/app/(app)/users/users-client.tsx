@@ -115,7 +115,7 @@ export function UsersClient({
         }
         actions={
           <div className="flex items-center gap-2">
-            {tenantId && (
+            {tenantId && currentRole === "SYSTEM_ADMIN" && (
               <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
                 <DialogTrigger asChild>
                   <Button size="sm" variant="outline">

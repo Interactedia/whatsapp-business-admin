@@ -11,8 +11,38 @@ const createSchema = z.object({
 });
 
 export const GET = handle(async () => {
-  await requireAdmin();
+  const session = await requireAdmin();
+
+  // SYSTEM_ADMIN sees all users globally
+  if (session.user.role === "SYSTEM_ADMIN") {
+    const users = await prisma.user.findMany({
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
+    });
+    return ok(users);
+  }
+
+  // Tenant ADMIN sees only users who are members of their tenant
+  const memberships = await prisma.tenantMembership.findMany({
+    where: { userId: session.user.id },
+    select: { tenantId: true },
+  });
+  const tenantIds = memberships.map((m) => m.tenantId);
+
+  if (tenantIds.length === 0) {
+    // ADMIN with no tenant membership sees nothing
+    return ok([]);
+  }
+
+  // Get users who are members of any of the caller's tenants
+  const userIds = await prisma.tenantMembership.findMany({
+    where: { tenantId: { in: tenantIds } },
+    select: { userId: true },
+  });
+  const uniqueUserIds = [...new Set(userIds.map((u) => u.userId))];
+
   const users = await prisma.user.findMany({
+    where: { id: { in: uniqueUserIds } },
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
   });
@@ -36,5 +66,20 @@ export const POST = handle(async (req) => {
     data: { name: body.name, email: body.email, role: body.role, passwordHash },
     select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
   });
+
+  // Tenant ADMIN: auto-add new user to the caller's tenant
+  if (session.user.role !== "SYSTEM_ADMIN") {
+    const memberships = await prisma.tenantMembership.findMany({
+      where: { userId: session.user.id },
+      select: { tenantId: true },
+    });
+    if (memberships.length > 0) {
+      // Add to the first tenant (ADMIN should typically be in one tenant)
+      await prisma.tenantMembership.create({
+        data: { userId: user.id, tenantId: memberships[0].tenantId },
+      });
+    }
+  }
+
   return ok(user, 201);
 });
