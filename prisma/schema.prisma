@@ -199,7 +199,7 @@ model Contact {
   id            String    @id @default(cuid())
   tenantId      String?
   tenant        Tenant?   @relation("TenantContacts", fields: [tenantId], references: [id], onDelete: Restrict)
-  waId          String    @unique // E.164 digits, no '+'
+  waId          String    // E.164 digits, no '+'; unique per tenant when tenantId is set
   name          String?
   profileName   String? // name supplied by WhatsApp
   tags          String[]  @default([])
@@ -208,10 +208,11 @@ model Contact {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  conversation        Conversation?
+  conversations       Conversation[]
   broadcastRecipients BroadcastRecipient[]
   flowLaunches        FlowLaunch[]
 
+  @@unique([tenantId, waId])
   @@index([tenantId])
 }
 
@@ -224,7 +225,7 @@ model Conversation {
   id             String             @id @default(cuid())
   tenantId       String?
   tenant         Tenant?            @relation("TenantConversations", fields: [tenantId], references: [id], onDelete: Restrict)
-  contactId      String             @unique
+  contactId      String
   contact        Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
   phoneNumberId  String?
   phoneNumber    PhoneNumber?       @relation(fields: [phoneNumberId], references: [id], onDelete: Restrict)
@@ -241,7 +242,9 @@ model Conversation {
   messages     Message[]
   flowLaunches FlowLaunch[]
 
+  @@unique([tenantId, phoneNumberId, contactId])
   @@index([tenantId])
+  @@index([contactId])
   @@index([phoneNumberId])
   @@index([lastMessageAt])
 }

@@ -54,6 +54,16 @@ export async function runLegacyBroadcast(broadcastId: string): Promise<void> {
   }
 
   const config = await getWabaConfig();
+  if (!config.phoneNumberId) {
+    throw new WhatsAppApiError(400, "WhatsApp is not connected.");
+  }
+  const phone = await prisma.phoneNumber.findFirst({
+    where: { metaPhoneNumberId: config.phoneNumberId },
+    include: { wabaAccount: true },
+  });
+  if (!phone) {
+    throw new WhatsAppApiError(400, "Authorized sender phone number not found.");
+  }
   const components = templateExampleComponents(
     broadcast.template.components as unknown as ApiComponent[],
     broadcast.template.category,
@@ -67,7 +77,11 @@ export async function runLegacyBroadcast(broadcastId: string): Promise<void> {
     queue().add(async () => {
       let preparedLaunchId: string | undefined;
       try {
-        const { contact, conversation } = await ensureConversation(recipient.contact.waId, recipient.contact.name ?? undefined);
+        const { contact, conversation } = await ensureConversation(
+          recipient.contact.waId,
+          recipient.contact.name ?? undefined,
+          phone
+        );
         if (contact.tenantId !== broadcast.tenantId || conversation.tenantId !== broadcast.tenantId) throw new WhatsAppApiError(403, "Broadcast recipient tenant mismatch.");
         const prepared = await prepareTemplateFlowLaunch({
           templateComponents: broadcast.template.components as unknown as ApiComponent[],

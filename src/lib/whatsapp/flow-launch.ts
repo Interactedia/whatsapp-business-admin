@@ -25,7 +25,19 @@ export async function launchFlow(input: {
   const json = publishedVersion.flowJson as unknown as FlowJson;
   const entryScreen = input.entryScreen || json.screens[0]?.id;
   if (!entryScreen || !json.screens.some((screen) => screen.id === entryScreen)) throw new WhatsAppApiError(400, "Entry screen does not exist in this Flow.");
-  const { contact, conversation } = await ensureConversation(input.to);
+  const tenantId = input.tenantId ?? flow.tenantId;
+  const phone = tenantId
+    ? await prisma.phoneNumber?.findFirst?.({
+        where: { wabaAccount: { tenantId } },
+        include: { wabaAccount: true },
+        orderBy: { id: "asc" },
+      })
+    : await prisma.phoneNumber?.findFirst?.({
+        include: { wabaAccount: true },
+        orderBy: { id: "asc" },
+      });
+
+  const { contact, conversation } = await ensureConversation(input.to, undefined, phone ?? undefined);
   if (input.tenantId && (contact.tenantId !== input.tenantId || conversation.tenantId !== input.tenantId)) throw new WhatsAppApiError(404, "Conversation not found.");
   if (!isWithinSessionWindow(conversation.lastInboundAt)) {
     throw new WhatsAppApiError(403, "Direct Flows can only be sent within the 24-hour window. Use an approved message template outside it.");

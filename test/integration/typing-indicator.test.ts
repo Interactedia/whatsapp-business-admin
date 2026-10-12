@@ -38,7 +38,7 @@ async function main() {
     const contact = await prisma.contact.findFirst({
       where: { tenantId: "acme", waId: "5219999921444" },
       include: {
-        conversation: {
+        conversations: {
           include: {
             phoneNumber: true,
             messages: {
@@ -53,7 +53,7 @@ async function main() {
     check("Acme Corp test contact 5219999921444 exists", !!contact, contact?.waId);
     if (!contact) throw new Error("Test contact 5219999921444 not found");
 
-    const conversation = contact.conversation;
+    const conversation = contact.conversations[0];
     check("Conversation exists for test contact", !!conversation, conversation?.id);
     if (!conversation) throw new Error("Conversation not found for test contact");
 

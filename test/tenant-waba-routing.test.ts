@@ -5,7 +5,9 @@ const membershipFindUnique = vi.hoisted(() => vi.fn());
 const phoneFindFirst = vi.hoisted(() => vi.fn());
 const phoneFindMany = vi.hoisted(() => vi.fn());
 const wabaFindFirst = vi.hoisted(() => vi.fn());
+const conversationFindFirst = vi.hoisted(() => vi.fn());
 const conversationFindUnique = vi.hoisted(() => vi.fn());
+const contactFindFirst = vi.hoisted(() => vi.fn());
 const contactFindUnique = vi.hoisted(() => vi.fn());
 const contactUpdate = vi.hoisted(() => vi.fn());
 const contactUpsert = vi.hoisted(() => vi.fn());
@@ -23,8 +25,8 @@ vi.mock("@/lib/prisma", () => ({
     phoneNumber: { findFirst: phoneFindFirst, findMany: phoneFindMany },
     wabaAccount: { findFirst: wabaFindFirst },
     wabaSettings: { findUnique: vi.fn().mockResolvedValue({}) },
-    conversation: { findUnique: conversationFindUnique, create: conversationCreate, update: conversationUpdate },
-    contact: { findFirst: vi.fn(), findUnique: contactFindUnique, update: contactUpdate, create: contactCreate, upsert: contactUpsert },
+    conversation: { findFirst: conversationFindFirst, findUnique: conversationFindUnique, create: conversationCreate, update: conversationUpdate },
+    contact: { findFirst: contactFindFirst, findUnique: contactFindUnique, update: contactUpdate, create: contactCreate, upsert: contactUpsert },
     message: { findUnique: vi.fn(), create: messageCreate, update: messageUpdate },
     template: { findUnique: templateFindUnique },
     apiLog: { create: apiLogCreate },
@@ -102,9 +104,9 @@ describe("tenant-owned WABA/PhoneNumber routing", () => {
     // Success case
     phoneFindFirst.mockResolvedValueOnce(ownedPhone);
     const existingContact = { id: "contact-1", tenantId: "tenant-1" };
-    contactFindUnique.mockResolvedValueOnce(null);
+    contactFindFirst.mockResolvedValueOnce(null);
     contactCreate.mockResolvedValueOnce(existingContact);
-    conversationFindUnique.mockResolvedValueOnce(null);
+    conversationFindFirst.mockResolvedValueOnce(null);
     conversationCreate.mockResolvedValueOnce({ id: "conv-1" });
 
     await expect(
@@ -158,14 +160,14 @@ describe("tenant-owned WABA/PhoneNumber routing", () => {
     // 1. Existing unbound conversation fails closed if we try to rebind silently.
     phoneFindMany.mockResolvedValueOnce([ownedPhone]);
     contactUpsert.mockResolvedValueOnce({ id: "contact-1", tenantId: "tenant-1" });
-    conversationFindUnique.mockResolvedValueOnce({ id: "conv-hist", phoneNumberId: null });
+    conversationFindFirst.mockResolvedValueOnce({ id: "conv-hist", phoneNumberId: null });
 
     await expect(processWebhook(payload)).rejects.toThrow("Inbound conversation is unbound");
 
     // 2. Conflicting existing binding fails closed
     phoneFindMany.mockResolvedValueOnce([ownedPhone]);
     contactUpsert.mockResolvedValueOnce({ id: "contact-1", tenantId: "tenant-1" });
-    conversationFindUnique.mockResolvedValueOnce({ id: "conv-hist", phoneNumberId: "different-phone-id" });
+    conversationFindFirst.mockResolvedValueOnce({ id: "conv-hist", phoneNumberId: "different-phone-id" });
 
     await expect(processWebhook(payload)).rejects.toThrow("Inbound conversation sender mismatch");
   });

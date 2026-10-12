@@ -157,9 +157,17 @@ export async function handleBroadcastDispatch(
 
   // 4. Conversation and Flow setup
   const config = await getWabaConfig();
+  const phone = (config.phoneNumberId && db.phoneNumber?.findFirst)
+    ? await db.phoneNumber.findFirst({
+        where: { metaPhoneNumberId: config.phoneNumberId },
+        include: { wabaAccount: true },
+      })
+    : null;
+
   const { conversation } = await ensureConversation(
     recipient.contact.waId,
-    recipient.contact.name ?? undefined
+    recipient.contact.name ?? undefined,
+    phone ?? undefined
   );
 
   if (conversation.tenantId && conversation.tenantId !== broadcast.tenantId) {

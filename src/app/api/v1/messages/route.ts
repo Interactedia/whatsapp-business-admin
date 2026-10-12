@@ -74,11 +74,11 @@ export const POST = v1Handle(async (req) => {
   const context = await resolveApiKeyTenantContext(principal);
   // Reuse the sender bound to an existing conversation; otherwise pick the
   // tenant's first phone number deterministically.
-  const existingContact = await prisma.contact.findUnique({
-    where: { waId: body.to },
-    select: { conversation: { select: { phoneNumberId: true } } },
+  const existingContact = await prisma.contact.findFirst({
+    where: { tenantId: context.tenantId, waId: body.to },
+    select: { conversations: { select: { phoneNumberId: true }, take: 1 } },
   });
-  const boundPhoneId = existingContact?.conversation?.phoneNumberId ?? null;
+  const boundPhoneId = existingContact?.conversations?.[0]?.phoneNumberId ?? null;
   const phoneNumber = boundPhoneId
     ? await prisma.phoneNumber.findFirst({
         where: { id: boundPhoneId, wabaAccount: { tenantId: context.tenantId } },

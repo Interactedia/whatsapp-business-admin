@@ -25,7 +25,9 @@ export async function startTenantConversation(input: {
 }) {
   assertTrustedTenantContext(input.context);
   const phone = await resolveTenantPhoneNumber(input.context, input.phoneNumberId);
-  const existingContact = await prisma.contact.findUnique({ where: { waId: input.waId } });
+  const existingContact = await prisma.contact.findFirst({
+    where: { tenantId: input.context.tenantId, waId: input.waId },
+  });
   const contact = existingContact
     ? await prisma.contact.update({
         where: { id: existingContact.id },
@@ -39,12 +41,10 @@ export async function startTenantConversation(input: {
 }
 
 async function createBoundConversation(context: TenantContext, contactId: string, phoneNumberId: string) {
-  const existing = await prisma.conversation.findUnique({ where: { contactId } });
-  if (existing) {
-    if (existing.tenantId !== context.tenantId) throw new TenantAuthorizationError();
-    if (existing.phoneNumberId !== phoneNumberId) throw new TenantAuthorizationError("Conversation sender mismatch");
-    return existing;
-  }
+  const existing = await prisma.conversation.findFirst({
+    where: { tenantId: context.tenantId, contactId, phoneNumberId },
+  });
+  if (existing) return existing;
 
   return prisma.conversation.create({
     data: { tenantId: context.tenantId, contactId, phoneNumberId },

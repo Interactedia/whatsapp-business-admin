@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { WabaConfig } from "@/lib/settings";
 import { graphFetch, WhatsAppApiError } from "@/lib/whatsapp/client";
-import { phoneNumberConfig } from "@/lib/tenant/waba";
+import { phoneNumberConfig, type OwnedPhoneNumber } from "@/lib/tenant/waba";
 import { publish } from "@/server/realtime";
 import { serializeMessage } from "@/lib/whatsapp/webhook";
 import type { MessageType, Prisma } from "@/generated/prisma/client";
@@ -12,17 +12,38 @@ import type { KnownJobPayload } from "@/lib/queue";
 
 export { isWithinSessionWindow } from "@/lib/whatsapp/window";
 
-/** Get or create the contact + conversation for a wa_id. */
-export async function ensureConversation(waId: string, name?: string) {
-  const contact = await prisma.contact.upsert({
-    where: { waId },
-    update: name ? { name } : {},
-    create: { waId, name },
-  });
-  const conversation = await prisma.conversation.upsert({
-    where: { contactId: contact.id },
-    update: {},
-    create: { contactId: contact.id },
+/** Get or create the tenant-scoped contact + phone-scoped conversation for a wa_id. */
+export async function ensureConversation(
+  waId: string,
+  name?: string,
+  senderPhone?: Pick<OwnedPhoneNumber, "id" | "wabaAccount">
+) {
+  if (senderPhone) {
+    const tenantId = senderPhone.wabaAccount.tenantId;
+    const contact = await prisma.contact.upsert({
+      where: { tenantId_waId: { tenantId, waId } },
+      update: name ? { name } : {},
+      create: { waId, name, tenantId },
+    });
+    const existingConversation = await prisma.conversation.findFirst({
+      where: { tenantId, contactId: contact.id, phoneNumberId: senderPhone.id },
+    });
+    const conversation = existingConversation ?? await prisma.conversation.create({
+      data: { tenantId, contactId: contact.id, phoneNumberId: senderPhone.id },
+    });
+    return { contact, conversation };
+  }
+
+  // Backwards-compatible path: resolve phone number or fallback to existing record
+  const existingContact = await prisma.contact.findFirst({ where: { waId } });
+  const tenantId = existingContact?.tenantId ?? undefined;
+  const contact = existingContact
+    ? (name ? await prisma.contact.update({ where: { id: existingContact.id }, data: { name } }) : existingContact)
+    : await prisma.contact.create({ data: { waId, name: name ?? null, tenantId } });
+
+  const existingConversation = await prisma.conversation.findFirst({ where: { contactId: contact.id } });
+  const conversation = existingConversation ?? await prisma.conversation.create({
+    data: { contactId: contact.id, tenantId },
   });
   return { contact, conversation };
 }

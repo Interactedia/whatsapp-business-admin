@@ -75,16 +75,12 @@ describe("WA-01-02 tenant ownership foundation for messaging data", () => {
     expect(broadcast).toContain("@@index([tenantId])");
   });
 
-  it("keeps existing uniqueness semantics unchanged", () => {
-    expect(modelBlock("Contact")).toContain("waId          String    @unique");
-    expect(modelBlock("Conversation")).toContain("contactId      String             @unique");
+  it("documents tenant-scoped uniqueness transitions", () => {
+    // WA-ERA2-11A updated Contact & Conversation uniqueness to be tenant-scoped
+    expect(modelBlock("Contact")).toContain("@@unique([tenantId, waId])");
+    expect(modelBlock("Conversation")).toContain("@@unique([tenantId, phoneNumberId, contactId])");
     expect(modelBlock("Message")).toContain("waMessageId    String?          @unique");
     expect(modelBlock("Template")).toContain("@@unique([name, language])");
-
-    expect(modelBlock("Contact")).not.toContain("@@unique([tenantId");
-    expect(modelBlock("Conversation")).not.toContain("@@unique([tenantId");
-    expect(modelBlock("Message")).not.toContain("@@unique([tenantId");
-    expect(modelBlock("Template")).not.toContain("@@unique([tenantId");
   });
 
   it("uses a strictly additive migration with nullable columns and foreign keys", () => {

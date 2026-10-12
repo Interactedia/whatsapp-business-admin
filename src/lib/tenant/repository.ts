@@ -34,6 +34,7 @@ export type TenantPrisma = {
   conversation: {
     findFirst(args: unknown): Promise<unknown>;
     findMany(args: unknown): Promise<unknown[]>;
+    create?(args: unknown): Promise<unknown>;
     upsert(args: unknown): Promise<unknown>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
@@ -230,7 +231,7 @@ export function createTenantMessagingRepository(db: TenantPrisma = prisma) {
       const tenant = tenantId(context);
       // Upsert contact with explicit tenant ownership.
       const contact = await db.contact.upsert({
-        where: { waId: data.waId },
+        where: { tenantId_waId: { tenantId: tenant, waId: data.waId } },
         update: data.name ? { name: data.name } : {},
         create: {
           waId: data.waId,
@@ -239,18 +240,27 @@ export function createTenantMessagingRepository(db: TenantPrisma = prisma) {
         },
       }) as { id: string; tenantId: string | null };
       // Only upsert a conversation for contacts owned by this tenant.
-      // A null-owned contact (created before tenant isolation) cannot receive a conversation here.
       if (contact.tenantId !== tenant) {
         throw new TenantAuthorizationError();
       }
-      const conversation = await db.conversation.upsert({
-        where: { contactId: contact.id },
-        update: {},
-        create: {
-          contactId: contact.id,
-          tenantId: tenant,
-        },
+      const existingConv = await db.conversation.findFirst({
+        where: { tenantId: tenant, contactId: contact.id },
       });
+      const conversation = existingConv ?? (db.conversation.create
+        ? await db.conversation.create({
+            data: {
+              contactId: contact.id,
+              tenantId: tenant,
+            },
+          })
+        : await db.conversation.upsert({
+            where: { contactId: contact.id },
+            update: {},
+            create: {
+              contactId: contact.id,
+              tenantId: tenant,
+            },
+          }));
       return { conversation, contact };
     },
 

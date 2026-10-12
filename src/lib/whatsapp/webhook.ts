@@ -142,23 +142,28 @@ async function handleInboundMessage(
   const waId = msg.from;
   const ts = new Date(Number(msg.timestamp) * 1000);
 
+  const tenantId = businessPhone.wabaAccount.tenantId;
+
   // Upsert tenant-owned contact.
   const contact = await prisma.contact.upsert({
-    where: { waId },
+    where: { tenantId_waId: { tenantId, waId } },
     update: { profileName: profileName ?? undefined, lastInboundAt: ts },
-    create: { waId, profileName, lastInboundAt: ts, tenantId: businessPhone.wabaAccount.tenantId },
+    create: { waId, profileName, lastInboundAt: ts, tenantId },
   });
-  if (contact.tenantId !== businessPhone.wabaAccount.tenantId) throw new Error("Inbound contact tenant mismatch");
+  if (contact.tenantId !== tenantId) throw new Error("Inbound contact tenant mismatch");
 
   // Upsert conversation without rebinding historical unbound rows.
   const preview = summarizeText(msg);
-  const existingConversation = await prisma.conversation.findUnique({ where: { contactId: contact.id } });
-  if (existingConversation?.phoneNumberId && existingConversation.phoneNumberId !== businessPhone.id) {
+  const existingByContact = await prisma.conversation.findFirst({ where: { contactId: contact.id } });
+  if (existingByContact?.phoneNumberId && existingByContact.phoneNumberId !== businessPhone.id) {
     throw new Error("Inbound conversation sender mismatch");
   }
-  if (existingConversation && !existingConversation.phoneNumberId) {
+  if (existingByContact && !existingByContact.phoneNumberId) {
     throw new Error("Inbound conversation is unbound");
   }
+  const existingConversation = (await prisma.conversation.findFirst({
+    where: { tenantId, contactId: contact.id, phoneNumberId: businessPhone.id },
+  })) ?? existingByContact;
   const conversation = existingConversation
     ? await prisma.conversation.update({
         where: { id: existingConversation.id },
@@ -173,7 +178,7 @@ async function handleInboundMessage(
     : await prisma.conversation.create({
         data: {
           contactId: contact.id,
-          tenantId: businessPhone.wabaAccount.tenantId,
+          tenantId,
           phoneNumberId: businessPhone.id,
           lastMessageAt: ts,
           lastInboundAt: ts,
