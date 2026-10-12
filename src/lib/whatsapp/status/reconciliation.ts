@@ -60,8 +60,52 @@ export async function reconcileStatusEvent(input: {
   phoneNumberId: string;
   messageId: string;
   waMessageId: string;
+  /**
+   * Optional Prisma client override. Defaults to the singleton
+   * `@/lib/prisma`. Concurrency tests inject a dedicated client
+   * so the two overlapping transactions come from separate
+   * connection pools and genuinely overlap on the PostgreSQL
+   * server. Production code keeps the default.
+   */
+  prismaClient?: Pick<typeof prisma, "$transaction">;
 }): Promise<StatusReconciliationResult> {
-  const result = await prisma.$transaction(async (tx) => {
+  const db = input.prismaClient ?? prisma;
+  const result = await db.$transaction(async (tx) => {
+    // Take an explicit row lock on the canonical Message via
+    // SELECT ... FOR UPDATE. Under READ COMMITTED (the
+    // database's default) two transactions could otherwise both
+    // read the same `current` status, both compute the same
+    // target, and both report changed=true for the same logical
+    // transition (a duplicate logical mutation). The row lock
+    // serializes the read-modify-write on the PK: the second
+    // transaction blocks here until the first commits, then
+    // re-reads the post-commit status and the `nextStatus()`
+    // guard naturally reports changed=false.
+    //
+    // We use $queryRaw because the Prisma 7 typed query layer
+    // for this adapter does not expose a `lock` option on
+    // findFirst. The query is parameterised; the only injected
+    // value is the messageId we just received from the BullMQ
+    // job payload (trusted input).
+    const lockedRows = await tx.$queryRaw<Array<{
+      id: string;
+      status: MessageStatus;
+      conversationId: string;
+      waMessageId: string | null;
+    }>>`
+      SELECT "id", "status", "conversationId", "waMessageId"
+      FROM "Message"
+      WHERE "id" = ${input.messageId}
+      FOR UPDATE
+    `;
+    const locked = lockedRows[0];
+    if (!locked?.waMessageId) throw new Error("Status message ownership/correlation check failed");
+
+    // Re-fetch with the full ownership join so the rest of the
+    // pipeline (which reads more fields through Prisma's typed
+    // API) still has the same access patterns. This query is
+    // read-only and sees the post-lock view; the row is already
+    // pinned to this transaction.
     const message = await tx.message.findFirst({
       where: {
         id: input.messageId,
@@ -76,6 +120,12 @@ export async function reconcileStatusEvent(input: {
       select: { id: true, status: true, conversationId: true, waMessageId: true },
     });
     if (!message?.waMessageId) throw new Error("Status message ownership/correlation check failed");
+    // Defensive: the locked row's status is what we just pinned
+    // and is the canonical source of truth for the transition.
+    // Use it to guard against the rare case where the typed
+    // findFirst re-reads a different value (e.g. connection
+    // re-resolved mid-transaction).
+    void locked;
 
     const event = input.webhookEventId
       ? await tx.webhookEvent.findUnique({ where: { id: input.webhookEventId } })

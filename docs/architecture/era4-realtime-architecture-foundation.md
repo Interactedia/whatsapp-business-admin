@@ -983,3 +983,193 @@ To add a new event type without breaking compatibility:
 ---
 
 *Section 14 added by WA-ERA4-04. Earlier sections remain at their original baseline; they document the architecture foundation, not the hardened contract.*
+
+---
+
+## 15. WA-ERA4-06 — Delivery/Read Receipts Concurrency Guarantees
+
+**Task ID:** WA-ERA4-06
+**Status:** Documented
+**Scope:** Verify and harden the canonical status reconciliation path under concurrent PostgreSQL transactions; preserve the existing public wire contract.
+
+### 15.1 Actual PostgreSQL Concurrency Guarantees
+
+The canonical status reconciliation lives in
+`src/lib/whatsapp/status/reconciliation.ts` and is invoked by the
+BullMQ status worker for every webhook whose payload contains a
+`statuses[]` entry. The transaction runs under PostgreSQL's
+default isolation level, `READ COMMITTED`.
+
+**Row-level lock.** The transaction takes an explicit
+`SELECT ... FOR UPDATE` on the `Message` row identified by
+`waMessageId` before any other read in the same transaction.
+The lock is held until the transaction commits or rolls back.
+Concurrent reconciliations on the same `Message.id` therefore
+serialize at the row-lock: the second transaction blocks at the
+`SELECT FOR UPDATE` until the first commits, then re-reads the
+post-commit state through the rest of the typed findFirst.
+
+**Why `SELECT FOR UPDATE`, not `SERIALIZABLE` isolation.**
+`SERIALIZABLE` would produce the same end-state for the canonical
+DB row but cannot be applied to the typed `tx.message.findFirst`
+Prisma 7 query (the adapter does not surface the conflict
+consistently for read-modify-write on a single PK under the
+PrismaPg adapter — verified empirically, see the lock probe
+artefacts in the WA-ERA4-06 commit history). The row lock is
+the smallest bounded change that closes the race without
+introducing retry loops, schema changes, or a new
+distributed-consistency model.
+
+**No read-skew on a single row.** Under the row lock, two
+transactions that both read and write the same `Message.id` are
+serialized; no third value can be observed. This is verified by
+`test/integration/status-reconciliation-concurrency.test.ts`
+case C (concurrent duplicate READ events on a DELIVERED row),
+which proves that exactly one of the two reconcile calls reports
+`changed=true` and exactly one `message:status` is published.
+
+**Cross-row concurrency is unaffected.** The row lock is
+scoped to the `Message.id` of the reconciliation; two
+reconciliations on different messages run in parallel. This is
+verified by case E (concurrent updates from different tenants),
+where each tenant's reconciliation commits to its own row
+independently and each tenant's fake WebSocket client receives
+exactly one `message:status` for its own message, never the
+other's.
+
+**No phantom reads across tables.** The reconciliation only
+reads from `Message`, `OutboundSendAttempt`, `WebhookEvent`,
+`Conversation`, and `PhoneNumber`. The `WebhookEvent` lookup
+uses `findUnique` by PK; the `Conversation`/`PhoneNumber`
+joins are immutable for the duration of the transaction under
+the canonical tenant-WABA-phone binding. There is no read pattern
+that could observe a phantom row.
+
+### 15.2 Transaction Isolation Assumptions
+
+- The database default isolation level is `READ COMMITTED`
+  (verified: `SHOW default_transaction_isolation` returns
+  `read committed`).
+- The row lock is the only mechanism that closes the
+  read-modify-write race; `nextStatus()` does not see uncommitted
+  data from other transactions.
+- The transaction uses a single `prisma.$transaction(async (tx)
+  => ...)` block; the lock is acquired at the start, the
+  `tx.message.update` and `tx.outboundSendAttempt.updateMany`
+  finish inside the same block, and the publish guard runs
+  after `prisma.$transaction` resolves. There is no window in
+  which the lock is released before the DB write completes.
+
+### 15.3 Proven Behavior of Concurrent Receipts
+
+`test/integration/status-reconciliation-concurrency.test.ts` uses
+two independent Prisma clients (each with its own connection
+pool) so the two reconciliations run in parallel PostgreSQL
+sessions on the same DB. The Hub is exercised through a fake
+WebSocket attached to `globalThis.__waRealtime.connections`,
+which receives the exact same `JSON.stringify` payload that
+real browser clients see. The cases prove:
+
+| Case | Initial | Concurrent webhooks | Final DB | Publishes | Invariant |
+|------|---------|---------------------|----------|-----------|-----------|
+| A | SENT | DELIVERED + READ | READ | DELIVERED, READ (monotonic) | Both transitions commit in order; no regression below SENT |
+| B | DELIVERED | DELIVERED (no-op) + READ | READ | READ | Exactly one `changed=true`; no-op absorbs the duplicate |
+| C | DELIVERED | READ + READ | READ | exactly one `message:status` | No duplicate logical mutation for the same transition |
+| D | DELIVERED | FAILED + READ | READ or DELIVERED | per order | FAILED never wins over a higher rank |
+| E | PENDING (tenant A) + PENDING (tenant B) | DELIVERED (A) + READ (B) | A: DELIVERED, B: READ | one per tenant | Strict tenant isolation; no cross-tenant payload leak |
+
+`test/integration/status-publication-semantics.test.ts`
+exercises the post-commit publication guarantees on a single
+transaction:
+
+1. `changed=false` produces zero `message:status` frames.
+2. The DB row is at the post-commit value when
+   `reconcileStatusEvent()` resolves; publish() runs after the
+   transaction closes.
+3. A transaction that throws (missing `WebhookEvent` id)
+   rolls back: the DB row is unchanged, no frame is delivered.
+4. An empty Hub connection set does not roll back the
+   committed DB row. `publish()` is best-effort; failures are
+   isolated per connection by
+   `src/lib/realtime/local-delivery.ts`.
+
+### 15.4 Post-Commit Publication Limitations
+
+- **No exactly-once delivery guarantee.** A network partition,
+  a Redis Pub/Sub redelivery, or a worker crash after commit
+  but before publish can cause the same canonical transition to
+  be published zero, one, or two times across the cluster.
+  Clients must reconcile against the canonical PostgreSQL state
+  (or against a later webhook). The Inbox client uses
+  `OrderingGuard` and `SeenSet` (`src/lib/realtime/sync.ts`) to
+  absorb duplicates and out-of-order events.
+- **No automatic replay.** A dropped publish is not retried by
+  the worker; the durable evidence is the DB row, and a later
+  webhook (or a refetch triggered by the client) will catch up
+  any client that missed a frame.
+- **No cross-tenant replay.** Each `message:status` is routed
+  to the tenantId of the reconciliation; a Hub crash that
+  redelivers an event to the wrong tenant is prevented by the
+  `deliverTenantEventToLocal` tenant filter.
+- **Best-effort transport.** `publish()` never throws. A
+  broken client connection does not block other clients; the
+  per-send try/catch in `local-delivery.ts` is the isolation
+  boundary. A broken Redis Pub/Sub adapter does not undo the DB
+  commit either: the `publish()` call returns successfully even
+  if the fan-out silently drops the envelope.
+
+### 15.5 Failure / Recovery Limitations
+
+- The status worker uses BullMQ's at-least-once delivery. A
+  worker crash mid-transaction produces a BullMQ retry; the
+  retry sees the rolled-back DB row and runs the reconciliation
+  again from scratch.
+- A row lock held by a crashed transaction is released by
+  PostgreSQL when the connection is closed; the next
+  reconciliation can proceed without manual intervention.
+- The `prismaClient` injection point on
+  `reconcileStatusEvent()` is test-only; production code uses
+  the singleton. This is documented in the source.
+- The lock is on `Message.id` (PK). If the same `waMessageId`
+  is later found to map to multiple `Message.id`s in the
+  schema (it cannot today, but the WA-ERA4-07 unread
+  reconciliation may revisit this), the lock would need to be
+  revisited; the `reconciliation.ts` location and the
+  concurrency test are the canonical places to update.
+
+### 15.6 Status Transition Inventory (rework)
+
+`nextStatus(current, incoming)` is unchanged. The row lock
+guarantees the function sees a consistent `current`; the
+function itself remains the single authority on what ranks
+are accepted.
+
+| current | incoming | result | notes |
+|---------|----------|--------|-------|
+| PENDING | SENT | SENT | normal advance |
+| SENT | DELIVERED | DELIVERED | normal advance |
+| DELIVERED | READ | READ | normal advance |
+| SENT | FAILED | FAILED | rank 1 == rank 1, accepted |
+| DELIVERED | FAILED | DELIVERED | rank 1 < rank 2, kept |
+| READ | FAILED | READ | rank 1 < rank 3, kept |
+| READ | SENT | READ | rank 1 < rank 3, kept |
+| DELIVERED | SENT | DELIVERED | rank 1 < rank 2, kept |
+| any | same as current | current | `changed=false`, no publish |
+
+The webhook-side `STATUS_MAP` (provider string → canonical enum)
+and the publication wire payload
+(`{type: "message:status", payload: {conversationId, waMessageId, status}}`)
+are unchanged. No new event types, no new payload fields, no
+schema changes. ERAs 1/2/3 are not touched.
+
+### 15.7 Tests Added (rework)
+
+- `test/integration/status-reconciliation-concurrency.test.ts`
+  — 18 checks against real PostgreSQL using two independent
+  Prisma clients and a Hub-attached fake WebSocket.
+- `test/integration/status-publication-semantics.test.ts` —
+  10 checks against real PostgreSQL for post-commit
+  publication, rollback, and best-effort transport.
+- Pre-existing `test/integration/status-worker.test.ts`
+  continues to pass; the row lock and the existing outbox
+  pipeline are compatible.

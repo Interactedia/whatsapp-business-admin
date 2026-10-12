@@ -131,6 +131,27 @@ function makeWebhookPayload(waMessageId: string, providerStatus: string) {
 
 function makeTx() {
   return {
+    $queryRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      // The reconciliation code does a `SELECT id, status,
+      // conversationId, waMessageId FROM "Message" WHERE id = $1
+      // FOR UPDATE`. In the in-memory mock we just look up the
+      // message by id and return the same shape the typed
+      // findFirst would return.
+      const id = values[0] as string;
+      for (const m of messages.values()) {
+        if (m.id === id) {
+          return [
+            {
+              id: m.id,
+              status: m.status,
+              conversationId: m.conversationId,
+              waMessageId: m.waMessageId,
+            },
+          ];
+        }
+      }
+      return [];
+    },
     message: {
       findFirst: async ({ where }: { where: MessageWhere }) => {
         for (const m of messages.values()) {
