@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma, type MessageStatus } from "@/generated/prisma/client";
+import { publish } from "@/server/realtime";
 
 const STATUS_MAP: Record<string, MessageStatus> = {
   sent: "SENT",
@@ -60,7 +61,7 @@ export async function reconcileStatusEvent(input: {
   messageId: string;
   waMessageId: string;
 }): Promise<StatusReconciliationResult> {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const message = await tx.message.findFirst({
       where: {
         id: input.messageId,
@@ -132,10 +133,32 @@ export async function reconcileStatusEvent(input: {
 
     return {
       messageId: message.id,
+      conversationId: message.conversationId,
       waMessageId: input.waMessageId,
       status: finalStatus,
       changed,
       summary: changed ? `status updated to ${finalStatus}` : `status already ${finalStatus}`,
     };
   });
+
+  // Post-commit realtime notification. The DB write above is durable
+  // by the time we reach this point; failures here are best-effort
+  // (publish() never throws) and never affect canonical state.
+  // Only emit when the canonical status actually changed; duplicate
+  // and out-of-order-but-equal notifications are suppressed.
+  if (result.changed) {
+    publish(
+      {
+        type: "message:status",
+        payload: {
+          conversationId: result.conversationId,
+          waMessageId: result.waMessageId,
+          status: result.status,
+        },
+      },
+      input.tenantId,
+    );
+  }
+
+  return result;
 }

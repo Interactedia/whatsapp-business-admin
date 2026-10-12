@@ -97,7 +97,10 @@ export const EVENT_PRODUCER_MAP: Readonly<
     scope: "tenant",
   },
   "message:status": {
-    producerFiles: ["src/lib/whatsapp/webhook.ts"],
+    producerFiles: [
+      "src/lib/whatsapp/webhook.ts",
+      "src/lib/whatsapp/status/reconciliation.ts",
+    ],
     scope: "tenant",
   },
   "message:image-enriched": {
