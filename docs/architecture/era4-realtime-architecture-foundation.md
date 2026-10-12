@@ -1173,3 +1173,175 @@ schema changes. ERAs 1/2/3 are not touched.
 - Pre-existing `test/integration/status-worker.test.ts`
   continues to pass; the row lock and the existing outbox
   pipeline are compatible.
+
+---
+
+## 16. WA-ERA4-08 — Multi-Operator Coordination
+
+**Task ID:** WA-ERA4-08
+**Status:** PASS
+**Date:** 2026-10-12
+**Baseline:** 98eef25
+**Scope:** Read-only inspection + targeted regression tests. No
+implementation changes to production code.
+
+### 16.1 Coordination model (AS-IS)
+
+The Inbox is a multi-operator shared workspace. Each operator connects
+to the WebSocket Hub with a session cookie and a tenantId; the Hub
+binds every WebSocket connection to a single `(userId, tenantId)`
+pair. The same tenant can have many operators connected concurrently.
+
+Operator-to-operator coordination today happens through two paths:
+
+1. **Shared conversation list query** — every operator's React Query
+   cache holds `["conversations", tenantId]`. The PATCH handler at
+   `src/app/api/tenants/[tenantId]/conversations/[conversationId]/route.ts`
+   mutates the row and returns the updated record; the originating
+   operator's `useMutation.onSuccess` invalidates the local list
+   cache. A *non-originating* operator reconciles only on the next
+   `useQuery` refetch (background poll / revalidation) — there is no
+   server-pushed event for assignment or status changes.
+2. **Realtime event stream** — `message:new`, `message:status`,
+   `message:image-enriched`, `flow:submission`, `template:status`.
+   These cover messages and template workflow; they do not cover
+   `assignedUserId` or `ConversationStatus` mutations.
+
+**The catalog is intentionally closed** (WA-ERA4-04): producers may
+emit new event types, but the canonical validators only strengthen
+the *known* set. Adding `conversation:assigned` or `conversation:status`
+would be a new public event type, which the ERA 4 packet forbids.
+
+### 16.2 Assignment semantics
+
+| Aspect | Behavior |
+|--------|----------|
+| Mutating endpoint | `PATCH /api/tenants/:tenantId/conversations/:id` (body: `{ assignedUserId?, status?, unreadCount? }`) |
+| Repository call | `tenantMessagingRepository.updateConversation(ctx, id, { assignedUserId })` |
+| SQL statement | `UPDATE Conversation SET assignedUserId = $1 WHERE id = $2 AND tenantId = $3 AND contact.tenantId = $3` |
+| Authorization | `resolveTenantContext()` requires a `TenantMembership` row for `(userId, tenantId)`. ADMIN role does NOT bypass membership. |
+| Cross-tenant attempt | `updateMany` reports `count=0`; repository returns `null`; handler returns 404. The row is untouched. |
+| Idempotency | A repeated identical PATCH reports `count=1` both times; the row reflects the requested value. The handler has no idempotency key, so client retries that land between two operator actions will apply the latest submitted value. |
+| Conflict policy | **Last-write-wins.** No row-level lock, no application-level compare-and-swap, no version column. Two operators racing to assign the same conversation: whichever commit lands last wins. The losing operator's `useMutation` has no rollback (the PATCH succeeded server-side; the local list is invalidated and the next refetch shows the canonical state). |
+| Optimization policy | None. The `updateMany` is a single SQL statement; the database decides the final state. No outbox, no event published. |
+| Coordinator handoff | None. The PATCH handler does not call `publish()`. Operators on the same tenant see the change on the next `useQuery` refetch (TanStack background poll or 60s Hub revalidate). |
+| Self-assignment | Allowed. A user can assign a conversation to themselves. There is no policy restricting this in the PATCH body; the `assignedUserId` is whatever the client submitted, as long as Zod validates it. |
+
+### 16.3 Conversation status transitions
+
+| Aspect | Behavior |
+|--------|----------|
+| Mutating endpoint | Same PATCH endpoint, body: `{ status: "OPEN" \| "CLOSED" }` |
+| Repository call | `tenantMessagingRepository.updateConversation(ctx, id, { status })` |
+| Allowed values | `OPEN`, `CLOSED` (Prisma enum `ConversationStatus`) |
+| Transition policy | The repository does not check the previous status. Any valid value can replace any other. |
+| Conflict policy | Same as assignment: last-write-wins. |
+| Concurrent identity | Two operators racing to set the same status end up with whichever committed last; an operator racing close vs. leave-open ends with one of the two. The row remains valid (`status ∈ {OPEN, CLOSED}`). |
+| Effect on `unreadCount` | Not affected by status changes. Unread is governed by WA-ERA4-07. |
+| Effect on `assignedUserId` | Not affected by status changes. Independent field. |
+
+### 16.4 Authorization boundaries
+
+| Boundary | Enforcement point | Test |
+|----------|-------------------|------|
+| Authenticated session | `auth()` in PATCH handler; no session → 401. | `returns 401 when no session exists` |
+| Tenant membership | `resolveTenantContext()` checks `TenantMembership`; missing → 403. | `returns 403 when authenticated user has no tenant membership` |
+| ADMIN bypass | The application does not check `session.user.role` for tenant access. ADMIN without membership still gets 403. | `returns 403 when ADMIN has no tenant membership (ADMIN cannot bypass)` |
+| Cross-tenant conversation | Repository's `updateMany` filters on `tenantId + contact.tenantId`. Count=0 means no row matched; the row is untouched. | `returns 404 when the repository reports the conversation is not visible to this tenant`, integration G |
+| Body field allowlist | Zod schema `updateSchema` rejects `id`, `tenantId`, `contactId` (and any other non-allowlisted field). The repository is never called with attacker-controlled identity fields. | `ignores identity fields (id, tenantId, contactId) submitted in the body` |
+| Body field semantics | The Zod schema restricts `status` to `"OPEN" \| "CLOSED"` and `unreadCount` to a number. No boolean / string coercion. | Tested by `tenant-conversation-http.test.ts` PATCH suite. |
+
+### 16.5 Post-commit publication discipline
+
+The PATCH handler commits the database write and returns the updated
+record. It does NOT call `publish()`. This is consistent with the
+"realtime notifications are ephemeral and best-effort" invariant
+(ADR-0002 / AGENTS.md §4). Operators reconcile via refetch, not via
+push. If a future change attempts to publish from the PATCH handler,
+`test/multi-agent-coordination.test.ts` fails closed.
+
+### 16.6 Multi-operator client synchronization
+
+Two independent operator clients (separate `QueryClient` instances,
+separate WebSocket connections) on the same tenant observe the
+following:
+
+- A `message:new` notification triggers a list invalidation on both.
+  See `test/realtime-client-sync-integration.test.ts` for the harness.
+- An assignment or status change (PATCH) does NOT trigger a list
+  invalidation on the non-originating operator. The non-originating
+  operator sees the change on the next refetch.
+- The originating operator's `useMutation.onSuccess` invalidates the
+  local list, so the originator sees the change immediately.
+
+There is no two-consumer integration test that specifically covers a
+PATCH-driven assignment or status change, because no event is published
+to drive a deterministic re-render. The
+`test/realtime-client-sync-integration.test.ts` suite already covers
+the `message:*` and `flow:*` events; the only thing missing is a
+`conversation:*` event, which the ERA 4 packet forbids.
+
+### 16.7 Optimistic UI
+
+The Inbox client does NOT use optimistic updates for assignment or
+status changes. The mutations it does perform (`sendText`, `sendMedia`,
+`sendTemplate`, `sendFlow`) each invalidate the list/thread cache in
+`onSuccess` and surface a destructive toast in `onError`. A failed
+mutation does not appear confirmed because the cache is only
+invalidated on success.
+
+### 16.8 Failure semantics
+
+| Failure | Effect |
+|---------|--------|
+| Database failure during PATCH | The `updateMany` throws. The handler does not catch generic errors; the framework returns 500. No `publish()` is called. No partial state. |
+| Transaction rollback | If the caller's transaction rolls back, the `updateMany` inside it is rolled back. PostgreSQL guarantees atomicity; integration test E demonstrates this with a simulated `throw` inside `$transaction`. |
+| Redis outage | The PATCH handler does not call `publish()` or `publishGlobal()`. A Redis outage cannot affect the canonical state. The next list refetch (HTTP) is independent of Redis. |
+| Duplicate notifications | Not applicable: PATCH does not publish. |
+| Client HTTP failure | The originating operator's `useMutation.onError` shows a destructive toast. The cache is NOT invalidated; the operator sees the previous state until they retry. |
+| Canonical refetch restores correct state | Yes. The repository returns the current row on every successful PATCH; the response is the new canonical state. The originating operator's cache is invalidated and refetched. Non-originating operators see the new state on their next background poll. |
+
+### 16.9 Remaining limitations (intentional)
+
+- No realtime event for assignment or status changes. Operators on
+  the same tenant reconcile via HTTP refetch. To change this, a new
+  public event type would be required (e.g.
+  `conversation:assigned` / `conversation:status`), which the ERA 4
+  packet explicitly forbids.
+- No row-level lock on assignment/status. Two operators racing to
+  assign the same conversation produce last-write-wins. To change
+  this, either a `version` column on `Conversation` (Prisma schema
+  change, forbidden by packet) or a `SELECT … FOR UPDATE` row lock
+  would be needed. The integration test A demonstrates that this
+  policy is consistent and predictable.
+- No client UI to invoke the PATCH for assignment or status today.
+  The handler exists and is exercised by the test suite. UI is
+  out of scope for WA-ERA4-08.
+- No `realtime` event is published for `message:status` updates to
+  the conversation list (already covered by WA-ERA4-07). Assignment
+  and status mutations on the conversation row are out of scope for
+  the realtime event contract by design.
+
+### 16.10 Tests added
+
+- `test/multi-agent-coordination.test.ts` — 13 checks covering:
+  - PATCH HTTP layer: 401, 403 (no membership), 403 (ADMIN without
+    membership), 400 (empty body), 404 (cross-tenant), identity-field
+    rejection, no-publish-after-success.
+  - Repository layer: WHERE clause shape, DATA column allowlist,
+    cross-tenant count=0, empty-data no-op.
+  - Concurrent semantics: two parallel `updateMany` calls each succeed,
+    repository does not call `publish()`.
+- `test/integration/multi-agent-coordination.test.ts` — 7 checks
+  against real PostgreSQL using two independent Prisma clients:
+  - A. Concurrent assignment: both succeed, final assignee is one of
+    the two, `tenantId` unchanged.
+  - B. Concurrent status: both succeed, final status is valid.
+  - C. Cross-tenant update: `count=0`, row untouched.
+  - D. Repeated identical PATCH: both succeed, row reflects value.
+  - E. Transaction rollback: status restored to OPEN after throw.
+  - F. No publish() side effect (structural witness).
+  - G. Tenant isolation under concurrent cross-tenant attempt.
+
+No production code changed. ERAs 1/2/3 are not modified. The
+`tenantMessagingRepository` and PATCH handler are unchanged.
