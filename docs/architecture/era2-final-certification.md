@@ -4,7 +4,8 @@
 **Status:** FROZEN
 **Date:** 2026-10-11
 **Pre-certification baseline:** `93c39319e4ad880c2023cb1b2ae0683af6029c92` (WA-ERA2-13 final commit)
-**Frozen commit:** `dc8e84f23bd5dfd9c48a912beb5f2384967b5555` (includes the observability import fix and this certification record)
+**Frozen code boundary:** `dc8e84f23bd5dfd9c48a912beb5f2384967b5555` (freeze declaration; includes the observability import fix; last commit touching production code)
+**Freeze record completion:** documentation-only commits may amend this record after the code freeze without altering the frozen code boundary (no production code changed after `dc8e84f`). A document cannot embed its own terminal commit SHA; the definitive terminal frozen commit is identified in the WA-ERA2-14 execution RUN_REPORT.
 **Certification Layer:** layer-2-workers
 **Executor:** autonomous implementation
 
@@ -252,12 +253,14 @@ ERA 2 FROZEN establishes the following explicit boundaries:
 Decision: ERA 2 FROZEN
 Date:     2026-10-11
 Baseline: 93c39319e4ad880c2023cb1b2ae0683af6029c92 (WA-ERA2-13 final commit)
-Frozen:   dc8e84f23bd5dfd9c48a912beb5f2384967b5555 (WA-ERA2-14 certification commit)
+Frozen:   dc8e84f23bd5dfd9c48a912beb5f2384967b5555 (WA-ERA2-14 freeze declaration; production code boundary)
 Gates:    All 18 required acceptance gates PASS
 Tests:    577/577 unit tests PASS
 Suites:   19/19 integration suites PASS (re-executed against final frozen code)
 Checks:   217/217 integration checks PASS (re-executed against final frozen code)
 ```
+
+The frozen production code boundary is `dc8e84f`. Documentation-only reconciliation commits completing this freeze record do not modify the frozen code boundary. The terminal frozen commit SHA (including this completed record) is reported in the WA-ERA2-14 execution RUN_REPORT.
 
 ERA 2 is technically certified for its defined scope. Production deployment and async feature activation are separate decisions requiring additional authorization.
 
