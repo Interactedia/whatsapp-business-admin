@@ -2,10 +2,12 @@ import http from "node:http";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AnyExternalEvent } from "@/lib/events";
 import {
+  classifyCanonicalDeliveryResult,
   deliverCanonicalEventHttp,
   runCanonicalDeliveryWorker,
   type CanonicalWebhookDestination,
 } from "@/lib/events/delivery";
+import { nextRetryDecision, retryAfterDelayMs } from "@/lib/events/retry-policy";
 import type { CanonicalEventOutboxRecord } from "@/lib/events/outbox";
 
 const ISO = "2026-10-11T12:00:00.000Z";
@@ -153,6 +155,25 @@ describe("canonical event HTTP delivery", () => {
       await redirect.close();
       await target.close();
     }
+  });
+
+  it("classifies retryable and terminal results", () => {
+    expect(classifyCanonicalDeliveryResult({ status: "accepted", eventId: "e", destinationId: "d", tenantId, httpStatus: 202 }).attemptResult).toBe("ACCEPTED");
+    expect(classifyCanonicalDeliveryResult({ status: "rejected", eventId: "e", destinationId: "d", tenantId, httpStatus: 408 }).attemptResult).toBe("RETRYABLE");
+    expect(classifyCanonicalDeliveryResult({ status: "rejected", eventId: "e", destinationId: "d", tenantId, httpStatus: 429 }).attemptResult).toBe("RETRYABLE");
+    expect(classifyCanonicalDeliveryResult({ status: "rejected", eventId: "e", destinationId: "d", tenantId, httpStatus: 503 }).attemptResult).toBe("RETRYABLE");
+    expect(classifyCanonicalDeliveryResult({ status: "rejected", eventId: "e", destinationId: "d", tenantId, httpStatus: 400 }).attemptResult).toBe("TERMINAL");
+    expect(classifyCanonicalDeliveryResult({ status: "network_error", eventId: "e", destinationId: "d", tenantId, error: "ECONNRESET" }).attemptResult).toBe("RETRYABLE");
+    expect(classifyCanonicalDeliveryResult({ status: "timeout", eventId: "e", destinationId: "d", tenantId, timeoutMs: 1 }).attemptResult).toBe("RETRYABLE");
+  });
+
+  it("bounds exponential backoff and Retry-After", () => {
+    const now = new Date("2026-10-11T12:00:00.000Z");
+    expect(retryAfterDelayMs("2", now, 10_000)).toBe(2_000);
+    expect(retryAfterDelayMs("bad", now, 10_000)).toBeNull();
+    expect(nextRetryDecision(2, null, { now, baseDelayMs: 1_000, maxDelayMs: 3_000, maxAttempts: 5 }).delayMs).toBe(2_000);
+    expect(nextRetryDecision(5, null, { now, maxAttempts: 5 }).exhausted).toBe(true);
+    expect(nextRetryDecision(1, "120", { now, maxDelayMs: 5_000, maxAttempts: 5 }).delayMs).toBe(5_000);
   });
 });
 

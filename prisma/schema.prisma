@@ -91,10 +91,11 @@ model Tenant {
   flows             Flow[]         @relation("TenantFlows")
   broadcasts        Broadcast[]    @relation("TenantBroadcasts")
   tenantMemberships TenantMembership[]
-  apiKeys           ApiKey[]
-  outboxEvents      OutboxEvent[]
-  canonicalEventOutbox CanonicalEventOutbox[]
-  outboundAttempts  OutboundSendAttempt[]
+  apiKeys                ApiKey[]
+  outboxEvents           OutboxEvent[]
+  canonicalEventOutbox   CanonicalEventOutbox[]
+  canonicalDeliveries    CanonicalEventDelivery[]
+  outboundAttempts       OutboundSendAttempt[]
 }
 
 // Persistence foundation only. Membership does not grant tenant authorization.
@@ -326,8 +327,71 @@ model CanonicalEventOutbox {
   recordedAt      DateTime
   createdAt       DateTime @default(now())
 
+  deliveries CanonicalEventDelivery[]
+
   @@index([tenantId, createdAt])
   @@index([tenantId, eventType, createdAt])
+}
+
+enum CanonicalEventDeliveryState {
+  PENDING
+  IN_PROGRESS
+  RETRY_PENDING
+  ACCEPTED
+  FAILED_TERMINAL
+}
+
+enum CanonicalEventDeliveryAttemptResult {
+  ACCEPTED
+  RETRYABLE
+  TERMINAL
+  INTERRUPTED
+}
+
+model CanonicalEventDelivery {
+  id             String                      @id @default(cuid())
+  tenantId       String
+  tenant         Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  eventId        String
+  event          CanonicalEventOutbox        @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  destinationId  String
+  state          CanonicalEventDeliveryState @default(PENDING)
+  attemptCount   Int                         @default(0)
+  maxAttempts    Int                         @default(5)
+  nextAttemptAt  DateTime                    @default(now())
+  leaseOwner     String?
+  leaseExpiresAt DateTime?
+  lastError      String?
+  acceptedAt     DateTime?
+  terminalAt     DateTime?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  attempts CanonicalEventDeliveryAttempt[]
+
+  @@unique([tenantId, eventId, destinationId])
+  @@index([state, nextAttemptAt, createdAt])
+  @@index([state, leaseExpiresAt])
+  @@index([tenantId, state, nextAttemptAt])
+}
+
+model CanonicalEventDeliveryAttempt {
+  id             String                              @id @default(cuid())
+  deliveryId     String
+  delivery       CanonicalEventDelivery              @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  leaseOwner     String
+  attemptNumber  Int
+  startedAt      DateTime
+  completedAt    DateTime?
+  httpStatus     Int?
+  result         CanonicalEventDeliveryAttemptResult @default(INTERRUPTED)
+  errorSummary   String?
+  nextRetryAt    DateTime?
+  createdAt      DateTime                            @default(now())
+
+  @@unique([deliveryId, attemptNumber])
+  @@index([deliveryId, startedAt])
+  @@index([result, createdAt])
 }
 
 model Message {
