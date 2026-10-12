@@ -173,6 +173,9 @@ export async function sendMessage(opts: {
   content: OutboundContent;
   sentById?: string;
   config?: WabaConfig;
+  /** External idempotency binding (POST /api/v1/messages). */
+  idempotencyKey?: string;
+  idempotencyFingerprint?: string;
 }) {
   const conversation = await prisma.conversation.findUnique({
     where: { id: opts.conversationId },
@@ -219,6 +222,8 @@ export async function sendMessage(opts: {
       templateId: opts.content.kind === "template" ? opts.content.templateId : undefined,
       payload: templateContent ? { templateContent } : opts.content.kind === "flow" ? { flowId: opts.content.flowId, cta: opts.content.cta } : undefined,
       sentById: opts.sentById,
+      idempotencyKey: opts.idempotencyKey,
+      idempotencyFingerprint: opts.idempotencyFingerprint,
     },
   });
 
@@ -261,6 +266,9 @@ export interface EnqueueOutboundMessageOptions {
   content: OutboundContent;
   sentById?: string;
   config?: WabaConfig;
+  /** External idempotency binding (POST /api/v1/messages). */
+  idempotencyKey?: string;
+  idempotencyFingerprint?: string;
 }
 
 /**
@@ -352,6 +360,8 @@ export async function enqueueOutboundMessage(
         templateId: opts.content.kind === "template" ? opts.content.templateId : undefined,
         payload: Object.keys(storedPayload).length > 0 ? (storedPayload as unknown as Prisma.InputJsonValue) : undefined,
         sentById: opts.sentById,
+        idempotencyKey: opts.idempotencyKey,
+        idempotencyFingerprint: opts.idempotencyFingerprint,
       },
     });
 

@@ -444,6 +444,14 @@ model Message {
   broadcastRecipient BroadcastRecipient?
   timestamp      DateTime         @default(now())
 
+  // External client idempotency for POST /api/v1/messages.
+  // Both nullable: requests without a key never participate in uniqueness.
+  idempotencyKey         String?
+  idempotencyFingerprint String?
+
+  // Tenant-scoped external idempotency. PostgreSQL treats NULLs as distinct,
+  // so unkeyed rows never collide; a key can never deduplicate across tenants.
+  @@unique([tenantId, idempotencyKey])
   @@index([tenantId])
   @@index([conversationId, timestamp])
 }

@@ -150,6 +150,10 @@ A critical analysis was conducted across every boundary where failures or proces
 - Outbound requests **do not accept or generate** an idempotency key prior to invoking Meta's API.
 - `Message` is created with `status: "PENDING"` only on the type enum level; in practice, `sendMessage` directly creates it as `status: "SENT"` with the returned Meta `wamid`.
 
+> **Update (WA-REMEDIATION-1A).** The outbound idempotency gap above is now closed for
+> `POST /api/v1/messages`: callers may supply a durable, tenant-scoped `Idempotency-Key`.
+> See [external-outbound-idempotency.md](external-outbound-idempotency.md).
+
 ---
 
 ## 6. Tenant and WABA Context Isolation

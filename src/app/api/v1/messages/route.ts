@@ -10,6 +10,7 @@ import { templateExampleComponents, templateRuntimeComponents } from "@/lib/what
 import type { ApiComponent } from "@/lib/whatsapp/template-types";
 import { finishPreparedFlowLaunch, prepareTemplateFlowLaunch } from "@/lib/whatsapp/flow-launch";
 import { isOutboundAsyncEnabled } from "@/lib/whatsapp/outbound/config";
+import { parseIdempotencyKey, computeIdempotencyFingerprint, runIdempotent, type IdempotencyKeyBinding } from "@/lib/idempotency";
 
 const mediaSchema = z.object({
   link: z.string().url().optional(),
@@ -64,6 +65,14 @@ const MEDIA_TYPES = ["image", "video", "audio", "document"] as const;
  *             "header_media":{ "type":"image", "link":"https://…/banner.jpg" },
  *             "buttons":[{ "type":"url", "index":0, "value":"order/123" }] }
  * Template with named variables: "body_variables":{"first_name":"Priya","order_number":"#A123"}
+ *
+ * Optional external idempotency: send an `Idempotency-Key` header.
+ *   - first request: unchanged semantics (201 sync / 202 async);
+ *   - equivalent duplicate: 200 `{ id, to, duplicate:true, message_status, message_id? }`
+ *     with the original identity and no new message, queue job or provider send;
+ *   - same key with a different payload: 409 `{ code:"IDEMPOTENCY_KEY_CONFLICT" }`.
+ * `message_id` is only present when a Meta wamid was actually persisted.
+ * See docs/architecture/external-outbound-idempotency.md.
  */
 export const POST = v1Handle(async (req) => {
   const raw = await parseJsonBody(req);
@@ -72,6 +81,8 @@ export const POST = v1Handle(async (req) => {
   if (!principal.tenantId) throw new ApiError(403, "API key is not tenant-scoped");
 
   const context = await resolveApiKeyTenantContext(principal);
+  // Optional external idempotency key (Idempotency-Key header). Malformed keys are rejected early.
+  const idempotencyKey = parseIdempotencyKey(req);
   // Reuse the sender bound to an existing conversation; otherwise pick the
   // tenant's first phone number deterministically.
   const existingContact = await prisma.contact.findFirst({
@@ -96,6 +107,34 @@ export const POST = v1Handle(async (req) => {
     phoneNumberId: phoneNumber.id,
   });
 
+  // Deterministic canonical fingerprint over the material request fields
+  // (channel/account, recipient, conversation, message content). Transport
+  // metadata and server-generated flow tokens are deliberately excluded.
+  const idempotencyFingerprint = idempotencyKey
+    ? computeIdempotencyFingerprint({
+        tenantId: context.tenantId,
+        phoneNumberId: phoneNumber.id,
+        conversationId: conversation.id,
+        to: body.to,
+        type,
+        text: body.text,
+        media: body.media,
+        template: body.template,
+        language: body.language,
+        variables: body.variables,
+        body_variables: body.body_variables,
+        header_text: body.header_text,
+        header_media: body.header_media,
+        buttons: body.buttons,
+        components: body.components,
+        flow_data: body.flow_data,
+      })
+    : null;
+  const binding: IdempotencyKeyBinding =
+    idempotencyKey && idempotencyFingerprint
+      ? { idempotencyKey, idempotencyFingerprint }
+      : {};
+
   const windowOpen = async () => {
     const fresh = await prisma.conversation.findUnique({ where: { id: conversation.id } });
     return isWithinSessionWindow(fresh?.lastInboundAt ?? null);
@@ -110,47 +149,72 @@ export const POST = v1Handle(async (req) => {
   // Set WHATSAPP_OUTBOUND_ASYNC_ENABLED=true to route through the durable outbox.
   const useAsync = isOutboundAsyncEnabled();
 
-  // ---- Text ----
-  if (type === "text") {
-    if (!body.text) throw new ApiError(400, "`text` is required for text messages");
-    if (!(await windowOpen())) throw outsideWindowError();
+  const execute = async (): Promise<Response> => {
+    // ---- Text ----
+    if (type === "text") {
+      if (!body.text) throw new ApiError(400, "`text` is required for text messages");
+      if (!(await windowOpen())) throw outsideWindowError();
 
-    if (useAsync) {
-      const msg = await enqueueOutboundMessage({
+      if (useAsync) {
+        const msg = await enqueueOutboundMessage({
+          conversationId: conversation.id,
+          to: body.to,
+          ...binding,
+          content: { kind: "text", text: body.text },
+        });
+        return apiOk(
+          { id: msg.id, status: msg.status, to: body.to, accepted: true },
+          202,
+        );
+      }
+
+      const msg = await sendMessage({
         conversationId: conversation.id,
         to: body.to,
+        ...binding,
         content: { kind: "text", text: body.text },
       });
-      return apiOk(
-        { id: msg.id, status: msg.status, to: body.to, accepted: true },
-        202,
-      );
+      return apiOk({ message_id: msg.waMessageId, id: msg.id, to: body.to }, 201);
     }
 
-    const msg = await sendMessage({
-      conversationId: conversation.id,
-      to: body.to,
-      content: { kind: "text", text: body.text },
-    });
-    return apiOk({ message_id: msg.waMessageId, id: msg.id, to: body.to }, 201);
-  }
+    // ---- Media (image / video / audio / document) ----
+    if ((MEDIA_TYPES as readonly string[]).includes(type)) {
+      const media = body.media;
+      if (!media || (!media.link && !media.id)) {
+        throw new ApiError(400, "`media.link` or `media.id` is required for media messages");
+      }
+      if (!(await windowOpen())) throw outsideWindowError();
 
-  // ---- Media (image / video / audio / document) ----
-  if ((MEDIA_TYPES as readonly string[]).includes(type)) {
-    const media = body.media;
-    if (!media || (!media.link && !media.id)) {
-      throw new ApiError(400, "`media.link` or `media.id` is required for media messages");
-    }
-    if (!(await windowOpen())) throw outsideWindowError();
+      // Best-effort local copy (only when sent by link) so the inbox renders it.
+      let stored: { path: string; mime: string } | null = null;
+      if (media.link) stored = await storeFromLink(media.link);
 
-    // Best-effort local copy (only when sent by link) so the inbox renders it.
-    let stored: { path: string; mime: string } | null = null;
-    if (media.link) stored = await storeFromLink(media.link);
+      if (useAsync) {
+        const msg = await enqueueOutboundMessage({
+          conversationId: conversation.id,
+          to: body.to,
+          ...binding,
+          content: {
+            kind: "media",
+            mediaType: type as "image" | "video" | "audio" | "document",
+            mediaLink: media.link,
+            mediaId: media.id,
+            caption: media.caption,
+            filename: media.filename,
+            mediaPath: stored?.path,
+            mediaMime: stored?.mime,
+          },
+        });
+        return apiOk(
+          { id: msg.id, status: msg.status, to: body.to, accepted: true },
+          202,
+        );
+      }
 
-    if (useAsync) {
-      const msg = await enqueueOutboundMessage({
+      const msg = await sendMessage({
         conversationId: conversation.id,
         to: body.to,
+        ...binding,
         content: {
           kind: "media",
           mediaType: type as "image" | "video" | "audio" | "document",
@@ -162,93 +226,94 @@ export const POST = v1Handle(async (req) => {
           mediaMime: stored?.mime,
         },
       });
-      return apiOk(
-        { id: msg.id, status: msg.status, to: body.to, accepted: true },
-        202,
-      );
+      return apiOk({ message_id: msg.waMessageId, id: msg.id, to: body.to }, 201);
     }
 
-    const msg = await sendMessage({
-      conversationId: conversation.id,
-      to: body.to,
-      content: {
-        kind: "media",
-        mediaType: type as "image" | "video" | "audio" | "document",
-        mediaLink: media.link,
-        mediaId: media.id,
-        caption: media.caption,
-        filename: media.filename,
-        mediaPath: stored?.path,
-        mediaMime: stored?.mime,
+    // ---- Template ----
+    if (!body.template) throw new ApiError(400, "`template` (name) is required for template messages");
+    const template = await prisma.template.findFirst({
+      where: {
+        name: body.template,
+        status: "APPROVED",
+        ...(body.language ? { language: body.language } : {}),
       },
     });
-    return apiOk({ message_id: msg.waMessageId, id: msg.id, to: body.to }, 201);
-  }
+    if (!template) {
+      throw new ApiError(404, `No approved template named "${body.template}"${body.language ? ` (${body.language})` : ""}`);
+    }
 
-  // ---- Template ----
-  if (!body.template) throw new ApiError(400, "`template` (name) is required for template messages");
-  const template = await prisma.template.findFirst({
-    where: {
-      name: body.template,
-      status: "APPROVED",
-      ...(body.language ? { language: body.language } : {}),
-    },
-  });
-  if (!template) {
-    throw new ApiError(404, `No approved template named "${body.template}"${body.language ? ` (${body.language})` : ""}`);
-  }
-
-  const normalizedButtons = body.components?.length
-    ? body.buttons
-    : normalizeTemplateButtonInputs(template.components as unknown as ApiComponent[], body.buttons);
-  let components = buildTemplateComponents({
-    body_variables: body.body_variables,
-    variables: body.variables,
-    header_text: body.header_text,
-    header_media: body.header_media,
-    buttons: normalizedButtons,
-    components: body.components,
-  });
-  const suppliedBodyVariables = body.body_variables ?? body.variables;
-  if (template.category === "AUTHENTICATION" && suppliedBodyVariables && !body.components?.length) {
-    const stringVariables = Array.isArray(suppliedBodyVariables)
-      ? suppliedBodyVariables.map(String)
-      : Object.fromEntries(Object.entries(suppliedBodyVariables).map(([name, value]) => [name, String(value)]));
-    components = templateRuntimeComponents(
-      template.components as unknown as ApiComponent[],
-      template.category,
-      stringVariables,
-    );
-  }
-  // If the caller supplied no parameters, fall back to the template's saved
-  // sample values so a bare { template, to } call still works.
-  if (components.length === 0) {
-    components = templateExampleComponents(
-      template.components as unknown as ApiComponent[],
-      template.category,
-    );
-  }
-  const prepared = await prepareTemplateFlowLaunch({
-    templateComponents: template.components as unknown as ApiComponent[],
-    contactId: conversation.contactId,
-    conversationId: conversation.id,
-    initialData: body.flow_data,
-  });
-  if (prepared) {
-    // The server always owns Flow tokens; never accept a caller-supplied token
-    // through raw template components.
-    components = components.filter((component) => {
-      const value = component as { type?: string; sub_type?: string };
-      return !(value.type === "button" && value.sub_type === "flow");
+    const normalizedButtons = body.components?.length
+      ? body.buttons
+      : normalizeTemplateButtonInputs(template.components as unknown as ApiComponent[], body.buttons);
+    let components = buildTemplateComponents({
+      body_variables: body.body_variables,
+      variables: body.variables,
+      header_text: body.header_text,
+      header_media: body.header_media,
+      buttons: normalizedButtons,
+      components: body.components,
     });
-    components.push(prepared.sendComponent);
-  }
+    const suppliedBodyVariables = body.body_variables ?? body.variables;
+    if (template.category === "AUTHENTICATION" && suppliedBodyVariables && !body.components?.length) {
+      const stringVariables = Array.isArray(suppliedBodyVariables)
+        ? suppliedBodyVariables.map(String)
+        : Object.fromEntries(Object.entries(suppliedBodyVariables).map(([name, value]) => [name, String(value)]));
+      components = templateRuntimeComponents(
+        template.components as unknown as ApiComponent[],
+        template.category,
+        stringVariables,
+      );
+    }
+    // If the caller supplied no parameters, fall back to the template's saved
+    // sample values so a bare { template, to } call still works.
+    if (components.length === 0) {
+      components = templateExampleComponents(
+        template.components as unknown as ApiComponent[],
+        template.category,
+      );
+    }
+    const prepared = await prepareTemplateFlowLaunch({
+      templateComponents: template.components as unknown as ApiComponent[],
+      contactId: conversation.contactId,
+      conversationId: conversation.id,
+      initialData: body.flow_data,
+    });
+    if (prepared) {
+      // The server always owns Flow tokens; never accept a caller-supplied token
+      // through raw template components.
+      components = components.filter((component) => {
+        const value = component as { type?: string; sub_type?: string };
+        return !(value.type === "button" && value.sub_type === "flow");
+      });
+      components.push(prepared.sendComponent);
+    }
 
-  try {
-    if (useAsync) {
-      const msg = await enqueueOutboundMessage({
+    try {
+      if (useAsync) {
+        const msg = await enqueueOutboundMessage({
+          conversationId: conversation.id,
+          to: body.to,
+          ...binding,
+          content: {
+            kind: "template",
+            templateId: template.id,
+            templateName: template.name,
+            language: template.language,
+            components,
+            templateComponents: template.components,
+          },
+        });
+        if (prepared) await finishPreparedFlowLaunch(prepared.launchId, msg.id);
+        return apiOk(
+          { id: msg.id, status: msg.status, to: body.to, accepted: true, ...(prepared ? { flow_launch_id: prepared.launchId } : {}) },
+          202,
+        );
+      }
+
+      const msg = await sendMessage({
         conversationId: conversation.id,
         to: body.to,
+        ...binding,
         content: {
           kind: "template",
           templateId: template.id,
@@ -260,30 +325,22 @@ export const POST = v1Handle(async (req) => {
       });
       if (prepared) await finishPreparedFlowLaunch(prepared.launchId, msg.id);
       return apiOk(
-        { id: msg.id, status: msg.status, to: body.to, accepted: true, ...(prepared ? { flow_launch_id: prepared.launchId } : {}) },
-        202,
+        { message_id: msg.waMessageId, id: msg.id, to: body.to, ...(prepared ? { flow_launch_id: prepared.launchId } : {}) },
+        201,
       );
+    } catch (error) {
+      if (prepared) await finishPreparedFlowLaunch(prepared.launchId, undefined, error);
+      throw error;
     }
+  };
 
-    const msg = await sendMessage({
-      conversationId: conversation.id,
+  return runIdempotent(
+    {
+      tenantId: context.tenantId,
+      key: idempotencyKey,
+      fingerprint: idempotencyFingerprint,
       to: body.to,
-      content: {
-        kind: "template",
-        templateId: template.id,
-        templateName: template.name,
-        language: template.language,
-        components,
-        templateComponents: template.components,
-      },
-    });
-    if (prepared) await finishPreparedFlowLaunch(prepared.launchId, msg.id);
-    return apiOk(
-      { message_id: msg.waMessageId, id: msg.id, to: body.to, ...(prepared ? { flow_launch_id: prepared.launchId } : {}) },
-      201,
-    );
-  } catch (error) {
-    if (prepared) await finishPreparedFlowLaunch(prepared.launchId, undefined, error);
-    throw error;
-  }
+    },
+    execute,
+  );
 });
