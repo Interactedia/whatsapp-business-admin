@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 
+function isUniqueViolation(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
+}
+
 async function main() {
   const { prisma } = await import("@/lib/prisma");
+  const { TenantAuthorizationError, resolveTenantContext } = await import("@/lib/tenant");
+  const { createTenantConversation, startTenantConversation } = await import("@/lib/tenant/conversations");
 
   const runId = `identity_${Date.now()}`;
   const tenantA = `${runId}_tA`;
@@ -115,10 +121,69 @@ async function main() {
     assert.equal(conv2.phoneNumberId, phone2);
 
     console.log("✓ Multi-phone conversation isolation verified successfully.");
+
+    const userId = `${runId}_user`;
+    const membershipA = `${runId}_membership_a`;
+    const membershipB = `${runId}_membership_b`;
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "User" ("id", "email", "name", "passwordHash", "updatedAt") VALUES ($1, $2, $3, $4, NOW())`,
+      userId,
+      `${runId}@example.test`,
+      "Identity Test User",
+      "not-used"
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "TenantMembership" ("id", "userId", "tenantId") VALUES ($1, $2, $3), ($4, $5, $6)`,
+      membershipA,
+      userId,
+      tenantA,
+      membershipB,
+      userId,
+      tenantB
+    );
+    const contextA = await resolveTenantContext({ userId }, tenantA);
+    const contextB = await resolveTenantContext({ userId }, tenantB);
+
+    let crossTenantRejected = false;
+    try {
+      await createTenantConversation({ context: contextB, contactId: contactA.id, phoneNumberId: phone1 });
+    } catch (error) {
+      crossTenantRejected = error instanceof TenantAuthorizationError;
+    }
+    assert.ok(crossTenantRejected, "Cross-tenant contact resolution must fail closed");
+
+    const concurrentWaId = `${sharedWaId}77`;
+    const contactResults = await Promise.allSettled(
+      Array.from({ length: 2 }, () => startTenantConversation({ context: contextA, waId: concurrentWaId, name: "Concurrent Contact", phoneNumberId: phone1 }))
+    );
+    const concurrentContacts = await prisma.contact.findMany({ where: { tenantId: tenantA, waId: concurrentWaId } });
+    assert.equal(concurrentContacts.length, 1, "Concurrent contact creation must leave one tenant-scoped contact");
+    assert.equal(contactResults.filter((result) => result.status === "fulfilled").length, 1, "One concurrent creator should win");
+    assert.ok(
+      contactResults.some((result) => result.status === "rejected" && isUniqueViolation(result.reason)),
+      "Concurrent losing contact creator must fail on the unique constraint"
+    );
+
+    const conversationWaId = `${sharedWaId}88`;
+    const conversationContact = await prisma.contact.create({ data: { tenantId: tenantA, waId: conversationWaId, name: "Concurrent Conversation" } });
+    const conversationResults = await Promise.allSettled(
+      Array.from({ length: 2 }, () => createTenantConversation({ context: contextA, contactId: conversationContact.id, phoneNumberId: phone2 }))
+    );
+    const concurrentConversations = await prisma.conversation.findMany({ where: { tenantId: tenantA, contactId: conversationContact.id, phoneNumberId: phone2 } });
+    assert.equal(concurrentConversations.length, 1, "Concurrent conversation resolution must leave one tenant-phone-contact conversation");
+    assert.equal(conversationResults.filter((result) => result.status === "fulfilled").length, 2, "Concurrent conversation resolution should be idempotent when the row already exists");
+    assert.ok(
+      conversationResults.every((result) => result.status === "fulfilled" && result.value.id === concurrentConversations[0]?.id),
+      "Concurrent conversation callers must resolve the same row"
+    );
+
+    console.log("✓ Cross-tenant rejection and concurrent uniqueness verified successfully.");
   } finally {
     // Cleanup
     await prisma.$executeRawUnsafe(`DELETE FROM "Conversation" WHERE "tenantId" IN ($1, $2)`, tenantA, tenantB);
     await prisma.$executeRawUnsafe(`DELETE FROM "Contact" WHERE "tenantId" IN ($1, $2)`, tenantA, tenantB);
+    await prisma.$executeRawUnsafe(`DELETE FROM "TenantMembership" WHERE "tenantId" IN ($1, $2)`, tenantA, tenantB);
+    await prisma.$executeRawUnsafe(`DELETE FROM "User" WHERE "id" = $1`, `${runId}_user`);
     await prisma.$executeRawUnsafe(`DELETE FROM "PhoneNumber" WHERE "wabaAccountId" LIKE '${runId}%'`);
     await prisma.$executeRawUnsafe(`DELETE FROM "WabaAccount" WHERE "id" LIKE '${runId}%'`);
     await prisma.$executeRawUnsafe(`DELETE FROM "Tenant" WHERE "id" IN ($1, $2)`, tenantA, tenantB);
