@@ -198,6 +198,15 @@ class Harness {
     return call;
   }
 
+  /** Reject the latest in-flight thread call. Mirrors a server error
+   *  on the thread endpoint (e.g. 500, network failure). The call
+   *  does NOT mark the server-side conversation as read. */
+  rejectLatestThread(err: unknown): ThreadCall | undefined {
+    const call = this.inflightThread[this.inflightThread.length - 1];
+    if (call) call.deferred.reject(err);
+    return call;
+  }
+
   /** Resolve every in-flight call with a benign default. Called
    *  during teardown so the CancelledError raised by qc.clear()
    *  does not surface as an unhandled rejection. */
@@ -609,5 +618,74 @@ describe("WA-ERA4-07 — unread state synchronization", () => {
     a.resolveLatestList([{ id: "c1", lastPreview: "hi", lastMessageAt: "t", unreadCount: 0 }]);
     const data = await p2;
     expect(data[0].unreadCount).toBe(0);
+  });
+
+  it("a failed thread request does not fabricate unreadCount=0 in the list", async () => {
+    // The mark-read side effect only runs on a successful server response.
+    // If the thread endpoint fails (e.g. 500 or network error), the
+    // unreadCount in PostgreSQL is unchanged. The list cache must NOT
+    // be reset to 0 by the client just because the client attempted a
+    // load.
+    const a = new Harness("t1", "c1");
+    const p1 = a.loadList();
+    a.resolveLatestList([{ id: "c1", lastPreview: "hi", lastMessageAt: "t", unreadCount: 4 }]);
+    await p1;
+    const beforeUnread = a.qc.getQueryData<List>(["conversations", "t1", ""])?.[0].unreadCount;
+    expect(beforeUnread).toBe(4);
+
+    // Attempt to open the thread — server returns an error.
+    const threadP = a.loadThread("c1");
+    a.rejectLatestThread(new Error("HTTP 500"));
+    await expect(threadP).rejects.toThrow("HTTP 500");
+
+    // The list cache is still 4. The client did NOT fabricate a 0.
+    const afterUnread = a.qc.getQueryData<List>(["conversations", "t1", ""])?.[0].unreadCount;
+    expect(afterUnread).toBe(4);
+  });
+
+  it("a successful refetch after a failed thread recovers canonical state", async () => {
+    // The canonical source (server/PostgreSQL) is unaffected by the
+    // client failure. A subsequent successful refetch must recover the
+    // true state — even if the list is stale during the failure window.
+    const a = new Harness("t1", "c1");
+    const p1 = a.loadList();
+    a.resolveLatestList([{ id: "c1", lastPreview: "hi", lastMessageAt: "t", unreadCount: 4 }]);
+    await p1;
+
+    // Failed thread attempt.
+    const threadP = a.loadThread("c1");
+    a.rejectLatestThread(new Error("network"));
+    await expect(threadP).rejects.toThrow("network");
+
+    // Later, another list refetch — server reports the still-unread
+    // state (mark-read never happened).
+    const p2 = a.loadList();
+    a.resolveLatestList([{ id: "c1", lastPreview: "hi", lastMessageAt: "t", unreadCount: 4 }]);
+    const data = await p2;
+    expect(data[0].unreadCount).toBe(4);
+  });
+
+  it("repeated message:new notifications do not cause list-refetch loops", async () => {
+    // Multiple identical notifications (Redis at-least-once delivery)
+    // for the same logical message must not trigger a list-refetch
+    // loop in the client. The SeenSet dedups by stable message id, and
+    // a second notification for the same id is ignored without calling
+    // invalidateQueries.
+    const a = new Harness("t1", "c1");
+    const p1 = a.loadList();
+    a.resolveLatestList([{ id: "c1", lastPreview: "hi", lastMessageAt: "t", unreadCount: 0 }]);
+    await p1;
+
+    // First notification: admitted, triggers list refetch path.
+    a.handleRealtime(msg("m1", "c1", "2026-01-01T00:00:05Z"));
+    // Five duplicates of the same notification: all rejected by SeenSet.
+    for (let i = 0; i < 5; i++) {
+      a.handleRealtime(msg("m1", "c1", "2026-01-01T00:00:05Z"));
+    }
+    // The list cache is still the initial one. The duplicates did not
+    // each trigger an additional refetch chain.
+    const stillInitial = a.qc.getQueryData<List>(["conversations", "t1", ""]);
+    expect(stillInitial?.[0].lastPreview).toBe("hi");
+    expect(stillInitial?.[0].unreadCount).toBe(0);
   });
 });
