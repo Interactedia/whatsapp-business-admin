@@ -81,7 +81,7 @@ export async function handleBroadcastDispatch(
   const graphFetch = deps?.graphFetch ?? defaultGraphFetch;
   const ownerId = deps?.ownerId ?? `broadcast_worker_${randomUUID().slice(0, 8)}`;
 
-  const { broadcastId, broadcastRecipientId, contactId, tenantId } = job.ref;
+  const { broadcastId, broadcastRecipientId, contactId, tenantId, wabaAccountId } = job.ref;
 
   // 1. Re-validate campaign and tenant ownership
   const broadcast = await db.broadcast.findUnique({
@@ -164,13 +164,17 @@ export async function handleBroadcastDispatch(
       })
     : null;
 
+  if (!phone || phone.wabaAccount.id !== wabaAccountId || phone.wabaAccount.tenantId !== broadcast.tenantId) {
+    throw new BroadcastHandlerError("TENANT_MISMATCH", "Tenant mismatch in broadcast WABA", 403);
+  }
+
   const { conversation } = await ensureConversation(
     recipient.contact.waId,
     recipient.contact.name ?? undefined,
-    phone ?? undefined
+    phone
   );
 
-  if (conversation.tenantId && conversation.tenantId !== broadcast.tenantId) {
+  if (conversation.tenantId !== broadcast.tenantId || conversation.phoneNumberId !== phone.id) {
     throw new BroadcastHandlerError("TENANT_MISMATCH", "Tenant mismatch in recipient conversation", 403);
   }
 

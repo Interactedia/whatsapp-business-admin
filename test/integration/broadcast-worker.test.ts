@@ -103,7 +103,7 @@ async function main() {
     );
     await prisma.$executeRawUnsafe(
       `INSERT INTO "WabaSettings" ("id", "phoneNumberId", "accessTokenEnc", "apiVersion", "updatedAt")
-       VALUES ('singleton', $1, $2, 'v21.0', NOW())
+       VALUES ('default', $1, $2, 'v21.0', NOW())
        ON CONFLICT ("id") DO UPDATE SET "phoneNumberId" = $1, "accessTokenEnc" = $2`,
       metaPhoneId,
       encrypt("token_test_123")
@@ -394,15 +394,80 @@ async function main() {
 
     check("T6.1. cross-tenant job rejected without calling Meta", graphFetchCalls === callsBeforeIsolation);
 
+    // -------------------------------------------------------------------------
+    // TEST 7: Forged WABA reference is rejected before Meta invocation
+    // -------------------------------------------------------------------------
+    const otherWabaId = `${runId}_other_waba`;
+    const otherPhoneId = `${runId}_other_phone`;
+    const otherMetaPhoneId = `meta_${runId}_other_phone`;
+    const bc5Id = `${runId}_bc5`;
+    const c5Id = `${runId}_c5`;
+    const r5Id = `${runId}_r5`;
+    const callsBeforeForgedWaba = graphFetchCalls;
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "WabaAccount" ("id", "tenantId", "metaWabaId", "name", "updatedAt") VALUES ($1, $2, $3, 'Tenant B WABA', NOW())`,
+      otherWabaId,
+      tenantB,
+      `${runId}_other_meta_waba`
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "PhoneNumber" ("id", "wabaAccountId", "metaPhoneNumberId", "updatedAt") VALUES ($1, $2, $3, NOW())`,
+      otherPhoneId,
+      otherWabaId,
+      otherMetaPhoneId
+    );
+    await prisma.wabaSettings.update({ where: { id: "default" }, data: { phoneNumberId: otherMetaPhoneId } });
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "Contact" ("id", "tenantId", "waId", "name", "updatedAt") VALUES ($1, $2, '15551005', 'Contact 5', NOW())`,
+      c5Id,
+      tenantA
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "Broadcast" ("id", "tenantId", "name", "templateId", "status", "total", "updatedAt")
+       VALUES ($1, $2, 'Campaign 5', $3, 'RUNNING', 1, NOW())`,
+      bc5Id,
+      tenantA,
+      templateId
+    );
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "BroadcastRecipient" ("id", "broadcastId", "contactId", "status", "updatedAt")
+       VALUES ($1, $2, $3, 'PENDING', NOW())`,
+      r5Id,
+      bc5Id,
+      c5Id
+    );
+
+    const payloadForgedWaba = createBroadcastDispatchJobPayload({
+      tenantId: tenantA,
+      wabaAccountId: wabaId,
+      broadcastId: bc5Id,
+      broadcastRecipientId: r5Id,
+      contactId: c5Id,
+      producer: "integration-test",
+    });
+
+    await queue.add("test-forged-waba", payloadForgedWaba, { jobId: `test-forged-waba-${randomUUID()}` });
+    await new Promise((r) => setTimeout(r, 1000));
+    const r5 = await prisma.broadcastRecipient.findUnique({ where: { id: r5Id } });
+    const campaign5Messages = await prisma.message.count({ where: { tenantId: tenantA, text: "Broadcast: Campaign 5" } });
+    check(
+      "T7.1. forged WABA/phone correlation rejected before Meta call",
+      r5?.messageId === null && campaign5Messages === 0 && graphFetchCalls === callsBeforeForgedWaba,
+      `calls=${graphFetchCalls - callsBeforeForgedWaba}`
+    );
+
+    await prisma.wabaSettings.update({ where: { id: "default" }, data: { phoneNumberId: metaPhoneId } });
+
   } finally {
     if (worker) await worker.close();
     await prisma.$executeRaw`DELETE FROM "OutboxEvent" WHERE "tenantId" IN (${tenantA}, ${tenantB})`;
-    await prisma.$executeRaw`DELETE FROM "BroadcastRecipient" WHERE "broadcastId" IN (${`${runId}_bc1`}, ${`${runId}_bc2`}, ${`${runId}_bc3`}, ${`${runId}_bc4`})`;
+    await prisma.$executeRaw`DELETE FROM "BroadcastRecipient" WHERE "broadcastId" IN (${`${runId}_bc1`}, ${`${runId}_bc2`}, ${`${runId}_bc3`}, ${`${runId}_bc4`}, ${`${runId}_bc5`})`;
     await prisma.$executeRaw`DELETE FROM "Broadcast" WHERE "tenantId" IN (${tenantA}, ${tenantB})`;
     await prisma.$executeRaw`DELETE FROM "Contact" WHERE "tenantId" IN (${tenantA}, ${tenantB})`;
     await prisma.$executeRaw`DELETE FROM "Template" WHERE "tenantId" IN (${tenantA}, ${tenantB})`;
-    await prisma.$executeRaw`DELETE FROM "PhoneNumber" WHERE "id" = ${phoneId}`;
-    await prisma.$executeRaw`DELETE FROM "WabaAccount" WHERE "id" = ${wabaId}`;
+    await prisma.$executeRaw`DELETE FROM "PhoneNumber" WHERE "id" IN (${phoneId}, ${`${runId}_other_phone`})`;
+    await prisma.$executeRaw`DELETE FROM "WabaAccount" WHERE "id" IN (${wabaId}, ${`${runId}_other_waba`})`;
     await prisma.$executeRaw`DELETE FROM "Tenant" WHERE "id" IN (${tenantA}, ${tenantB})`;
     if (queue) await queue.obliterate({ force: true });
     await closeAllQueueResources();

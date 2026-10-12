@@ -13,7 +13,7 @@ vi.mock("@/lib/settings", () => ({
 
 vi.mock("@/lib/whatsapp/send", () => ({
   ensureConversation: vi.fn().mockResolvedValue({
-    conversation: { id: "conv_1", tenantId: "t1" },
+    conversation: { id: "conv_1", tenantId: "t1", phoneNumberId: "phone_db_1" },
   }),
 }));
 
@@ -143,6 +143,9 @@ describe("broadcast worker handler", () => {
         create: vi.fn().mockResolvedValue({ id: "msg_1" }),
         update: vi.fn().mockResolvedValue({}),
       },
+      phoneNumber: {
+        findFirst: vi.fn().mockResolvedValue({ id: "phone_db_1", wabaAccount: { id: "waba1", tenantId: "t1" } }),
+      },
       conversation: {
         update: vi.fn().mockResolvedValue({}),
       },
@@ -194,6 +197,9 @@ describe("broadcast worker handler", () => {
         create: vi.fn().mockResolvedValue({ id: "msg_1" }),
         update: vi.fn().mockResolvedValue({}),
       },
+      phoneNumber: {
+        findFirst: vi.fn().mockResolvedValue({ id: "phone_db_1", wabaAccount: { id: "waba1", tenantId: "t1" } }),
+      },
       outboundSendAttempt: {
         findFirst: vi.fn().mockResolvedValue(null),
       },
@@ -240,6 +246,9 @@ describe("broadcast worker handler", () => {
       message: {
         create: vi.fn().mockResolvedValue({ id: "msg_1" }),
         update: vi.fn().mockResolvedValue({}),
+      },
+      phoneNumber: {
+        findFirst: vi.fn().mockResolvedValue({ id: "phone_db_1", wabaAccount: { id: "waba1", tenantId: "t1" } }),
       },
       outboundSendAttempt: {
         findFirst: vi.fn().mockResolvedValue(null),
