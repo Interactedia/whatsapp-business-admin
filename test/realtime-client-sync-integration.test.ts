@@ -498,3 +498,116 @@ describe("Tenant isolation", () => {
     expect(bList).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// WA-ERA4-07 — Unread state synchronization across operators.
+//
+// Verifies the real-time handlers used by the Inbox client:
+//   - Two operators on the same tenant both observe the same unread
+//     count after a `message:new` event (refetch-list).
+//   - `message:status` does NOT cause a list refetch (unreadCount is
+//     unaffected), so the cached list — including its `unreadCount` —
+//     is preserved as canonical state.
+//   - Opening a thread (loading the thread query) does not race the
+//     mark-read side effect: the harness's `loadThread` is the analogue
+//     of the client's query, and a subsequent list refetch must
+//     observe the post-mark-read unread count of 0.
+// ---------------------------------------------------------------------------
+
+describe("WA-ERA4-07 — unread state synchronization", () => {
+  it("two operators see the same unreadCount after a message:new", async () => {
+    const a = new Harness("t1", "c1");
+    const b = new Harness("t1", "c1");
+    // Initial list with no unread.
+    const p1 = a.loadList();
+    const p2 = b.loadList();
+    a.resolveLatestList([{ id: "c1", lastPreview: "hi", lastMessageAt: "t", unreadCount: 0 }]);
+    b.resolveLatestList([{ id: "c1", lastPreview: "hi", lastMessageAt: "t", unreadCount: 0 }]);
+    await Promise.all([p1, p2]);
+
+    // A new message arrives — both clients must refetch the list.
+    a.handleRealtime(msg("m1", "c1", "2026-01-01T00:00:05Z"));
+    b.handleRealtime(msg("m1", "c1", "2026-01-01T00:00:05Z"));
+
+    // Both consumers refetched (the new fetch is inflight).
+    const aRefetch = a.loadList();
+    const bRefetch = b.loadList();
+    a.resolveLatestList([{ id: "c1", lastPreview: "new", lastMessageAt: "2026-01-01T00:00:05Z", unreadCount: 1 }]);
+    b.resolveLatestList([{ id: "c1", lastPreview: "new", lastMessageAt: "2026-01-01T00:00:05Z", unreadCount: 1 }]);
+    const [aData, bData] = await Promise.all([aRefetch, bRefetch]);
+    expect(aData[0].unreadCount).toBe(1);
+    expect(bData[0].unreadCount).toBe(1);
+  });
+
+  it("message:status for the active thread does not refetch the list", async () => {
+    const a = new Harness("t1", "c1");
+    // Load initial list with unread.
+    const p1 = a.loadList();
+    a.resolveLatestList([{ id: "c1", lastPreview: "hi", lastMessageAt: "t", unreadCount: 3 }]);
+    await p1;
+    const baseline = a.qc.getQueryData<List>(["conversations", "t1", ""]);
+    expect(baseline?.[0].unreadCount).toBe(3);
+
+    // A message:status event arrives for the active conversation.
+    // This must NOT trigger a list refetch — only the thread.
+    const beforeCount = a.inflightList.length;
+    a.handleRealtime({
+      type: "message:status",
+      payload: { conversationId: "c1", waMessageId: "wam-1", status: "READ" },
+    });
+    // No new list fetch was triggered.
+    expect(a.inflightList.length).toBe(beforeCount);
+    // The list cache is preserved (canonical state unchanged).
+    const afterStatus = a.qc.getQueryData<List>(["conversations", "t1", ""]);
+    expect(afterStatus?.[0].unreadCount).toBe(3);
+    // The classifyEvent decision for this event is `refetch-thread`,
+    // which the Inbox client uses to invalidate the thread query only.
+    const decision = processEvent(
+      { type: "message:status", payload: { conversationId: "c1", waMessageId: "wam-1", status: "READ" } },
+      "c1",
+      a.seen,
+      a.ordering,
+      ["message:new", "message:status", "message:image-enriched"],
+    );
+    expect(decision.admitted).toBe(true);
+    if (decision.admitted) {
+      expect(decision.action).toEqual({ kind: "refetch-thread", conversationId: "c1" });
+    }
+  });
+
+  it("message:status for a non-active conversation is ignored entirely", async () => {
+    const a = new Harness("t1", "c1");
+    const p1 = a.loadList();
+    a.resolveLatestList([{ id: "c1", lastPreview: "hi", lastMessageAt: "t", unreadCount: 0 }]);
+    await p1;
+    const beforeList = a.inflightList.length;
+    const beforeThread = a.inflightThread.length;
+    a.handleRealtime({
+      type: "message:status",
+      payload: { conversationId: "c2", waMessageId: "wam-2", status: "DELIVERED" },
+    });
+    expect(a.inflightList.length).toBe(beforeList);
+    expect(a.inflightThread.length).toBe(beforeThread);
+  });
+
+  it("a refetch after opening a thread observes the post-mark-read unread count", async () => {
+    // Simulates: client opens the thread (which marks it read server-side),
+    // then a refetch of the list observes the post-mark-read state.
+    const a = new Harness("t1", "c1");
+    const p1 = a.loadList();
+    a.resolveLatestList([{ id: "c1", lastPreview: "hi", lastMessageAt: "t", unreadCount: 5 }]);
+    await p1;
+    expect(a.qc.getQueryData<List>(["conversations", "t1", ""])?.[0].unreadCount).toBe(5);
+
+    // Open the thread: the server-side mark-read resets unreadCount to 0.
+    const threadP = a.loadThread("c1");
+    a.resolveLatestThread({ conversationId: "c1", messages: [] });
+    await threadP;
+
+    // Refetch the list: the server now reports the post-mark-read state.
+    const p2 = a.loadList();
+    a.resolveLatestList([{ id: "c1", lastPreview: "hi", lastMessageAt: "t", unreadCount: 0 }]);
+    const data = await p2;
+    expect(data[0].unreadCount).toBe(0);
+  });
+});

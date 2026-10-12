@@ -1,5 +1,6 @@
 /**
- * WA-ERA4-05 — Client-side synchronization helpers for realtime events.
+ * WA-ERA4-05 / WA-ERA4-07 — Client-side synchronization helpers for
+ * realtime events.
  *
  * Pure functions consumed by the Inbox client. They decide what local
  * state to invalidate/refetch when a realtime event arrives and protect
@@ -15,6 +16,10 @@
  *  4. Targeted updates: the list is only invalidated when the event
  *     actually affects the visible conversation; a focused thread
  *     refetch is issued otherwise.
+ *  5. WA-ERA4-07: `message:status` events do NOT mutate the conversation
+ *     list (they only update a per-message delivery status). They are
+ *     narrowed to thread-only refetches to avoid overwriting canonical
+ *     `unreadCount` with stale cached values from the list query.
  *
  * No persistent state. No new public event fields. No new public APIs.
  * The shape of the on-the-wire RealtimeEvent is unchanged.
@@ -54,6 +59,15 @@ const SEEN_LIMIT = 512;
 /**
  * Decide which canonical refetch is required for an inbound event.
  * Returns `ignore` for unknown or non-data events.
+ *
+ * WA-ERA4-07: `message:new` (and `message:image-enriched`) can change
+ * the conversation's `lastPreview`, `lastMessageAt`, and `unreadCount`,
+ * so the list must be refetched. `message:status` only changes the
+ * per-message delivery status — it does not affect `unreadCount` or
+ * the conversation list ordering, so we narrow its decision to a
+ * targeted thread refetch when the active conversation matches. This
+ * avoids unnecessary list refetches that could overwrite canonical
+ * state with a stale cached value.
  */
 export function classifyEvent(
   event: SyncEvent,
@@ -62,12 +76,18 @@ export function classifyEvent(
   if (!event || typeof event !== "object" || typeof event.type !== "string") {
     return { kind: "ignore" };
   }
-  // Per WA-ERA4-05, message:* events affect the conversation list. We
-  // always need a list refetch (the conversation's `lastPreview`,
-  // `lastMessageAt`, and `unreadCount` may change), and we additionally
-  // refetch the open thread when the event targets it. This replaces
-  // the previous blanket invalidation with a targeted decision that
-  // also gates on whether the payload is well-formed.
+  if (event.type === "message:status") {
+    // Status updates do not change unreadCount. Only the open thread
+    // needs a refetch when the event targets it.
+    const p = event.payload;
+    if (!p || typeof p !== "object") return { kind: "ignore" };
+    const convId = (p as Record<string, unknown>).conversationId;
+    if (typeof convId !== "string" || convId.length === 0) return { kind: "ignore" };
+    if (activeConversationId && activeConversationId === convId) {
+      return { kind: "refetch-thread", conversationId: convId };
+    }
+    return { kind: "ignore" };
+  }
   if (event.type.startsWith(TENANT_MESSAGE_PREFIX)) {
     const p = event.payload;
     if (!p || typeof p !== "object") {

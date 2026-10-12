@@ -1,5 +1,5 @@
 /**
- * WA-ERA4-05 — Client-side realtime synchronization regression tests.
+ * WA-ERA4-05 / WA-ERA4-07 — Client-side realtime synchronization regression tests.
  *
  * Deterministic, no I/O. Locks in the bounded synchronization
  * guarantees enforced by the Inbox client:
@@ -17,6 +17,9 @@
  *    cannot leak into the active window.
  *  - Request tokens detect a stale HTTP response: a response whose
  *    token is not the current one is rejected.
+ *  - WA-ERA4-07: `message:status` does NOT trigger a list refetch
+ *    (it never changes `unreadCount`); it only refetches the open
+ *    thread when targeted, or is ignored when not.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -261,5 +264,104 @@ describe("tenant/conversation switching isolation", () => {
     const next = t.next();
     expect(t.isCurrent(inflight)).toBe(false);
     expect(t.isCurrent(next)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WA-ERA4-07 — Unread state realtime synchronization regression tests.
+//
+// Locks in the bounded behavior of `classifyEvent` for `message:status`,
+// which does NOT change `Conversation.unreadCount`. A list refetch in
+// response to a status event would re-read the list and could race
+// with the mark-read side effect of opening a thread, leaving the
+// visible badge stale. The contract is:
+//   - `message:status` for the active conversation: refetch thread only.
+//   - `message:status` for a non-active conversation: ignore (status
+//     does not affect the conversation list at all).
+//   - `message:status` with no `conversationId` in payload: ignore.
+//   - `message:new` and `message:image-enriched` still refetch the list
+//     because they may change `unreadCount` / `lastPreview` / `lastMessageAt`.
+// ---------------------------------------------------------------------------
+
+describe("WA-ERA4-07 — message:status does not refetch the list (unread safety)", () => {
+  it("message:status for the active conversation: refetch-thread only", () => {
+    const action = classifyEvent(
+      { type: "message:status", payload: { conversationId: "c1", waMessageId: "wam-1", status: "READ" } },
+      "c1",
+    );
+    expect(action).toEqual({ kind: "refetch-thread", conversationId: "c1" });
+  });
+  it("message:status for a non-active conversation: ignore", () => {
+    const action = classifyEvent(
+      { type: "message:status", payload: { conversationId: "c2", waMessageId: "wam-2", status: "READ" } },
+      "c1",
+    );
+    expect(action).toEqual({ kind: "ignore" });
+  });
+  it("message:status with no active conversation: ignore", () => {
+    const action = classifyEvent(
+      { type: "message:status", payload: { conversationId: "c1", waMessageId: "wam-1", status: "READ" } },
+      null,
+    );
+    expect(action).toEqual({ kind: "ignore" });
+  });
+  it("message:status with malformed payload: ignore", () => {
+    const action = classifyEvent(
+      { type: "message:status", payload: null },
+      "c1",
+    );
+    expect(action).toEqual({ kind: "ignore" });
+  });
+  it("message:status without conversationId in payload: ignore", () => {
+    const action = classifyEvent(
+      { type: "message:status", payload: { waMessageId: "wam-1", status: "READ" } },
+      "c1",
+    );
+    expect(action).toEqual({ kind: "ignore" });
+  });
+  it("message:new still refetches the list (unreadCount may change)", () => {
+    const action = classifyEvent(
+      { type: "message:new", payload: { conversationId: "c1", message: { id: "m1", timestamp: "t" } } },
+      null,
+    );
+    expect(action).toEqual({ kind: "refetch-list" });
+  });
+  it("message:image-enriched still refetches the list (unreadCount may change)", () => {
+    const action = classifyEvent(
+      { type: "message:image-enriched", payload: { conversationId: "c1", messageId: "m1" } },
+      null,
+    );
+    expect(action).toEqual({ kind: "refetch-list" });
+  });
+});
+
+describe("WA-ERA4-07 — processEvent admits message:status without double-counting", () => {
+  it("message:status events are admitted (refetch-thread), not ignored as duplicates", () => {
+    // Two identical message:status events must both reach refetch-thread
+    // because the wire does not assign a per-event id to status frames.
+    // The list cache cannot regress because classifyEvent returns
+    // refetch-thread (not refetch-list) for these.
+    const s = new SeenSet();
+    const o = new OrderingGuard();
+    const event = {
+      type: "message:status" as const,
+      payload: { conversationId: "c1", waMessageId: "wam-1", status: "DELIVERED" },
+    };
+    const v1 = processEvent(event, "c1", s, o, KNOWN);
+    expect(v1.admitted).toBe(true);
+    if (v1.admitted) expect(v1.action.kind).toBe("refetch-thread");
+    const v2 = processEvent(event, "c1", s, o, KNOWN);
+    expect(v2.admitted).toBe(true);
+    if (v2.admitted) expect(v2.action.kind).toBe("refetch-thread");
+  });
+  it("message:status for a non-active conversation is ignored without refetch", () => {
+    const s = new SeenSet();
+    const o = new OrderingGuard();
+    const event = {
+      type: "message:status" as const,
+      payload: { conversationId: "c2", waMessageId: "wam-2", status: "READ" },
+    };
+    const v = processEvent(event, "c1", s, o, KNOWN);
+    expect(v.admitted).toBe(false);
   });
 });

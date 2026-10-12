@@ -250,9 +250,16 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
   }, [data?.messages.length]);
 
   // Opening a thread marks it read server-side; refresh the list to clear the badge.
+  // WA-ERA4-07: gate the list invalidation on the thread data being
+  // loaded, so the refetch runs AFTER the server-side mark-read has
+  // committed. This avoids a race where the list is refetched before
+  // the unreadCount is reset to 0 in the database, which would leave
+  // the visible badge stale until the next poll.
   useEffect(() => {
-    qc.invalidateQueries({ queryKey: ["conversations", tenantId] });
-  }, [conversationId, tenantId, qc]);
+    if (data && Array.isArray(data.messages)) {
+      qc.invalidateQueries({ queryKey: ["conversations", tenantId] });
+    }
+  }, [data, tenantId, qc]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["thread", tenantId, conversationId] });
