@@ -90,7 +90,7 @@ function contactRow(overrides: Record<string, unknown> = {}) {
     lastInboundAt: new Date("2026-01-01"),
     createdAt: new Date("2026-01-01"),
     updatedAt: new Date("2026-01-01"),
-    conversation: { id: "conv-1" },
+    conversations: [{ id: "conv-1" }],
     ...overrides,
   };
 }

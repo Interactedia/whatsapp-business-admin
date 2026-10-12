@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 import { visibleNavItems, isNavActive, navHref, NAV_ITEMS } from "@/components/shell/nav";
 
 describe("SYSTEM_ADMIN navigation scope", () => {
-  it("SYSTEM_ADMIN sees only the administration section (Dashboard, Tenants, Users)", () => {
+  it("SYSTEM_ADMIN sees only the administration section", () => {
     const items = visibleNavItems("SYSTEM_ADMIN");
     const labels = items.map((i) => `${i.label}:${navHref(i, null)}`).sort();
-    expect(labels).toEqual(["Dashboard:/admin", "Tenants:/admin/tenants", "Users:/admin/users"]);
+    expect(labels).toEqual([
+      "Dashboard:/admin",
+      "Queues:/admin/queue-observability",
+      "Tenants:/admin/tenants",
+      "Users:/admin/users",
+    ]);
     // No operational workspace menus leak to SYSTEM_ADMIN.
     expect(items.some((i) => i.tenantScoped)).toBe(false);
   });

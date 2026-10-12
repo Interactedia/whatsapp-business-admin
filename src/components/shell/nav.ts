@@ -49,6 +49,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "users", label: "Users", icon: UserCog, adminOnly: true, tenantScoped: true },
   // System administration (SYSTEM_ADMIN only — no operational menus)
   { key: "/admin", label: "Dashboard", icon: LayoutDashboard, systemAdminOnly: true, global: true },
+  { key: "/admin/queue-observability", label: "Queues", icon: ListChecks, systemAdminOnly: true, global: true },
   { key: "/admin/tenants", label: "Tenants", icon: Building2, systemAdminOnly: true, global: true },
   { key: "/admin/users", label: "Users", icon: UserCog, systemAdminOnly: true, global: true },
 ];

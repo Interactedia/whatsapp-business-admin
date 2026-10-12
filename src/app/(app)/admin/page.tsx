@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/shell/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, UserCog, Users, MessageSquare } from "lucide-react";
+import { Building2, UserCog, Users, MessageSquare, ListChecks } from "lucide-react";
 
 /**
  * System Administration Dashboard — exclusive to SYSTEM_ADMIN.
@@ -29,6 +29,7 @@ export default async function SystemAdminDashboardPage() {
     { label: "Active Users", value: activeUserCount, href: "/admin/users", icon: Users },
     { label: "Memberships", value: membershipCount, href: "/admin/tenants", icon: Users },
     { label: "Conversations (all tenants)", value: conversationCount, href: "/admin/tenants", icon: MessageSquare },
+    { label: "Queues & Outbox", value: "View", href: "/admin/queue-observability", icon: ListChecks },
   ];
 
   return (
