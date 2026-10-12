@@ -3,8 +3,9 @@ import { auth } from "@/auth";
 import { LogsClient } from "@/app/(app)/logs/logs-client";
 
 /**
- * Platform logs contain legacy global audit records without tenant ownership.
- * Until those records have proven ownership, only SYSTEM_ADMIN may view them.
+ * System-wide API and webhook logs.
+ * Only SYSTEM_ADMIN may access this page; tenant ADMIN and AGENT are redirected.
+ * Logs are sourced from existing ApiLog and WebhookEvent records.
  */
 export default async function LogsPage() {
   const session = await auth();

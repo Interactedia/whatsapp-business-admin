@@ -7,6 +7,7 @@ describe("SYSTEM_ADMIN navigation scope", () => {
     const labels = items.map((i) => `${i.label}:${navHref(i, null)}`).sort();
     expect(labels).toEqual([
       "Dashboard:/admin",
+      "Logs:/logs",
       "Queues:/admin/queue-observability",
       "Tenants:/admin/tenants",
       "Users:/admin/users",

@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
 import { formatDateTime } from "@/lib/utils";
 import { PageHeader } from "@/components/shell/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -38,31 +40,78 @@ type WebhookEvent = {
 
 type Feed<T> = { type: string; items: T[]; total: number; page: number; pageSize: number };
 
+// ---- sanitized display: never expose raw request/response bodies to the browser ----
+type SanitizedApiLog = Omit<ApiLog, "requestBody" | "responseBody">;
+
+function buildApiUrl(tab: "api" | "webhook", page: number, filters: Record<string, string>): string {
+  const params = new URLSearchParams({ type: tab, page: String(page) });
+  for (const [k, v] of Object.entries(filters)) {
+    if (v) params.set(k, v);
+  }
+  return `/api/logs?${params.toString()}`;
+}
+
 export function LogsClient() {
   const [tab, setTab] = useState<"api" | "webhook">("api");
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<{ title: string; body: unknown } | null>(null);
 
+  // API log filters
+  const [method, setMethod] = useState("");
+  const [endpoint, setEndpoint] = useState("");
+  const [okFilter, setOkFilter] = useState("");
+  const [related, setRelated] = useState("");
+
+  // Webhook filters
+  const [sig, setSig] = useState("");
+  const [processed, setProcessed] = useState("");
+
+  // Date filters (shared)
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const apiFilters: Record<string, string> = {};
+  if (from) apiFilters.from = from;
+  if (to) apiFilters.to = to;
+  if (tab === "api") {
+    if (method) apiFilters.method = method;
+    if (endpoint) apiFilters.endpoint = endpoint;
+    if (okFilter) apiFilters.ok = okFilter;
+    if (related) apiFilters.related = related;
+  } else {
+    if (sig) apiFilters.sig = sig;
+    if (processed) apiFilters.processed = processed;
+  }
+
   const { data, isLoading } = useQuery({
-    queryKey: ["logs", tab, page],
-    queryFn: () => apiFetch<Feed<ApiLog | WebhookEvent>>(`/api/logs?type=${tab}&page=${page}`),
+    queryKey: ["logs", tab, page, apiFilters],
+    queryFn: () => apiFetch<Feed<SanitizedApiLog | WebhookEvent>>(buildApiUrl(tab, page, apiFilters)),
   });
 
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+
+  function switchTab(t: "api" | "webhook") {
+    setTab(t);
+    setPage(1);
+    setMethod("");
+    setEndpoint("");
+    setOkFilter("");
+    setRelated("");
+    setSig("");
+    setProcessed("");
+    setFrom("");
+    setTo("");
+  }
+
+  const hasFilters = from || to || method || endpoint || okFilter || related || sig || processed;
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Logs"
-        description="Every outbound API call and inbound webhook, stored in full."
+        description="Operational visibility into outbound API calls and inbound webhook events."
         actions={
-          <Tabs
-            value={tab}
-            onValueChange={(v) => {
-              setTab(v as "api" | "webhook");
-              setPage(1);
-            }}
-          >
+          <Tabs value={tab} onValueChange={(v) => switchTab(v as "api" | "webhook")}>
             <TabsList>
               <TabsTrigger value="api">API calls</TabsTrigger>
               <TabsTrigger value="webhook">Webhooks</TabsTrigger>
@@ -71,6 +120,53 @@ export function LogsClient() {
         }
       />
 
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+        {tab === "api" ? (
+          <>
+            <FilterInput placeholder="Method" value={method} onChange={setMethod} />
+            <FilterInput placeholder="Endpoint… (partial match)" value={endpoint} onChange={setEndpoint} />
+            <FilterSelect value={okFilter} onValueChange={setOkFilter} placeholder="Status">
+              <SelectItem value="true">Success</SelectItem>
+              <SelectItem value="false">Failed</SelectItem>
+            </FilterSelect>
+            <FilterSelect value={related} onValueChange={setRelated} placeholder="Related">
+              <SelectItem value="template">Template</SelectItem>
+              <SelectItem value="message">Message</SelectItem>
+              <SelectItem value="broadcast">Broadcast</SelectItem>
+              <SelectItem value="media-upload">Media</SelectItem>
+            </FilterSelect>
+          </>
+        ) : (
+          <>
+            <FilterSelect value={sig} onValueChange={setSig} placeholder="Signature">
+              <SelectItem value="valid">Valid</SelectItem>
+              <SelectItem value="invalid">Unverified</SelectItem>
+            </FilterSelect>
+            <FilterSelect value={processed} onValueChange={setProcessed} placeholder="Processed">
+              <SelectItem value="ok">OK</SelectItem>
+              <SelectItem value="error">Error</SelectItem>
+            </FilterSelect>
+          </>
+        )}
+        <FilterInput type="datetime-local" placeholder="From" value={from} onChange={setFrom} />
+        <FilterInput type="datetime-local" placeholder="To" value={to} onChange={setTo} />
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1 text-muted-foreground"
+            onClick={() => {
+              setMethod(""); setEndpoint(""); setOkFilter(""); setRelated("");
+              setSig(""); setProcessed(""); setFrom(""); setTo("");
+            }}
+          >
+            <X className="h-3 w-3" /> Clear
+          </Button>
+        )}
+      </div>
+
+      {/* Table */}
       <div className="flex-1 p-3 sm:p-4">
         <div className="rounded-lg border">
           {tab === "api" ? (
@@ -87,20 +183,16 @@ export function LogsClient() {
               </TableHeader>
               <TableBody>
                 {isLoading && <Empty cols={6} text="Loading…" />}
-                {!isLoading && data?.items.length === 0 && <Empty cols={6} text="No API calls yet." />}
-                {(data?.items as ApiLog[] | undefined)?.map((log) => (
-                  <TableRow
-                    key={log.id}
-                    className="cursor-pointer"
-                    onClick={() => setDetail({ title: `${log.method} ${log.endpoint}`, body: { request: log.requestBody, response: log.responseBody } })}
-                  >
+                {!isLoading && data?.items.length === 0 && <Empty cols={6} text="No API calls match the filters." />}
+                {(data?.items as SanitizedApiLog[] | undefined)?.map((log) => (
+                  <TableRow key={log.id}>
                     <TableCell data-label="Time" className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</TableCell>
                     <TableCell data-label="Method"><Badge variant="outline">{log.method}</Badge></TableCell>
                     <TableCell data-label="Endpoint" className="max-w-0 break-all font-mono text-xs md:truncate">{log.endpoint}</TableCell>
                     <TableCell data-label="Status">
                       <Badge variant={log.ok ? "success" : "destructive"}>{log.responseStatus ?? "—"}</Badge>
                     </TableCell>
-                    <TableCell data-label="Duration" className="text-xs text-muted-foreground">{log.durationMs ?? "—"} ms</TableCell>
+                    <TableCell data-label="Duration" className="text-xs text-muted-foreground">{log.durationMs != null ? `${log.durationMs} ms` : "—"}</TableCell>
                     <TableCell data-label="Related" className="text-xs text-muted-foreground">{log.relatedType ?? "—"}</TableCell>
                   </TableRow>
                 ))}
@@ -118,13 +210,9 @@ export function LogsClient() {
               </TableHeader>
               <TableBody>
                 {isLoading && <Empty cols={4} text="Loading…" />}
-                {!isLoading && data?.items.length === 0 && <Empty cols={4} text="No webhooks received yet." />}
+                {!isLoading && data?.items.length === 0 && <Empty cols={4} text="No webhooks match the filters." />}
                 {(data?.items as WebhookEvent[] | undefined)?.map((ev) => (
-                  <TableRow
-                    key={ev.id}
-                    className="cursor-pointer"
-                    onClick={() => setDetail({ title: "Webhook payload", body: ev.payload })}
-                  >
+                  <TableRow key={ev.id}>
                     <TableCell data-label="Time" className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(ev.createdAt)}</TableCell>
                     <TableCell data-label="Summary" className="text-xs">{ev.eventSummary || ev.error || "—"}</TableCell>
                     <TableCell data-label="Signature">
@@ -140,15 +228,14 @@ export function LogsClient() {
           )}
         </div>
 
+        {/* Pagination */}
         <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-          <span>{data?.total ?? 0} total</span>
+          <span>{data?.total ?? 0} total · page size {data?.pageSize}</span>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <span>
-              Page {page} / {totalPages}
-            </span>
+            <span>Page {page} / {totalPages}</span>
             <Button variant="outline" size="icon" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -169,6 +256,29 @@ export function LogsClient() {
         )}
       </Dialog>
     </div>
+  );
+}
+
+function FilterInput({ placeholder, value, onChange, type }: { placeholder: string; value: string; onChange: (v: string) => void; type?: string }) {
+  return (
+    <Input
+      type={type ?? "text"}
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-8 w-36"
+    />
+  );
+}
+
+function FilterSelect({ value, onValueChange, placeholder, children }: { value: string; onValueChange: (v: string) => void; placeholder: string; children: React.ReactNode }) {
+  return (
+    <Select value={value || undefined} onValueChange={(v) => { onValueChange(v); }}>
+      <SelectTrigger className="h-8 w-32">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>{children}</SelectContent>
+    </Select>
   );
 }
 

@@ -10,6 +10,7 @@ import {
   ListChecks,
   Workflow,
   Building2,
+  ScrollText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -50,6 +51,7 @@ export const NAV_ITEMS: NavItem[] = [
   // System administration (SYSTEM_ADMIN only — no operational menus)
   { key: "/admin", label: "Dashboard", icon: LayoutDashboard, systemAdminOnly: true, global: true },
   { key: "/admin/queue-observability", label: "Queues", icon: ListChecks, systemAdminOnly: true, global: true },
+  { key: "/logs", label: "Logs", icon: ScrollText, systemAdminOnly: true, global: true },
   { key: "/admin/tenants", label: "Tenants", icon: Building2, systemAdminOnly: true, global: true },
   { key: "/admin/users", label: "Users", icon: UserCog, systemAdminOnly: true, global: true },
 ];
