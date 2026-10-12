@@ -15,6 +15,29 @@ export type WabaConfig = {
 
 const SETTINGS_ID = "default";
 
+/**
+ * Decrypt the access token, degrading to null on any crypto failure. The
+ * encrypted blob is sensitive to the ENCRYPTION_KEY: if the key changed
+ * (rotation, restored from a different environment, or corrupted) the
+ * GCM auth-tag check throws. We must not let that throw surface as a 500
+ * for callers that only need non-secret fields (e.g. the webhook
+ * verification handshake only reads `webhookVerifyToken`, which is stored
+ * in cleartext). The error is logged so the operator can rotate the
+ * token; the caller receives a config with `accessToken: null`.
+ */
+function safeDecryptAccessToken(enc: string | null | undefined): string | null {
+  if (!enc) return null;
+  try {
+    return decrypt(enc);
+  } catch (err) {
+    console.warn(
+      "[settings] access token decrypt failed (ENCRYPTION_KEY mismatch or corrupted blob); returning null. Original error:",
+      (err as Error).message,
+    );
+    return null;
+  }
+}
+
 /** Load settings with the access token decrypted. Server-side only. */
 export async function getWabaConfig(): Promise<WabaConfig> {
   const row = await prisma.wabaSettings.findUnique({ where: { id: SETTINGS_ID } });
@@ -24,7 +47,7 @@ export async function getWabaConfig(): Promise<WabaConfig> {
     phoneNumberId: row?.phoneNumberId ?? null,
     phoneNumberDisplay: row?.phoneNumberDisplay ?? null,
     businessName: row?.businessName ?? null,
-    accessToken: row?.accessTokenEnc ? decrypt(row.accessTokenEnc) : null,
+    accessToken: safeDecryptAccessToken(row?.accessTokenEnc),
     appSecret: row?.appSecret ?? null,
     webhookVerifyToken: row?.webhookVerifyToken ?? null,
     apiVersion: row?.apiVersion ?? process.env.GRAPH_API_VERSION ?? "v21.0",
@@ -88,7 +111,7 @@ export async function getTenantWabaConfig(tenantId: string): Promise<WabaConfig 
     phoneNumberId: phone?.metaPhoneNumberId ?? null,
     phoneNumberDisplay: phone?.displayPhone ?? null,
     businessName: phone?.verifiedName ?? waba.name ?? null,
-    accessToken: waba.accessTokenEnc ? decrypt(waba.accessTokenEnc) : null,
+    accessToken: safeDecryptAccessToken(waba.accessTokenEnc),
     appSecret: waba.appSecret ?? null,
     webhookVerifyToken: waba.webhookVerifyToken ?? null,
     apiVersion: waba.apiVersion ?? process.env.GRAPH_API_VERSION ?? "v21.0",
