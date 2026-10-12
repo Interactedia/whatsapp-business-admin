@@ -30,6 +30,7 @@ import {
   deliverGlobalEventToLocal,
   deliverTenantEventToLocal,
 } from "@/lib/realtime/local-delivery";
+import { scopeForEventType } from "@/lib/realtime/events";
 
 export type RealtimeEvent = {
   /** Event channel, e.g. "message:new", "message:status", "template:status". */
@@ -63,6 +64,15 @@ function createHub(): Hub {
     publish(event: RealtimeEvent, targetTenantId: string | null) {
       // Fail closed: tenant-owned events with an unresolved tenant are never delivered.
       if (!targetTenantId) return;
+      // Scope guard (WA-ERA4-04): a known-global event type must not be
+      // delivered through the tenant path. The catalog is a positive list;
+      // unknown types are allowed (open wire contract).
+      if (scopeForEventType(event.type) === "global") {
+        console.error(
+          `[realtime] publish() rejected global event type "${event.type}"; use publishGlobal()`,
+        );
+        return;
+      }
       deliverTenantEventToLocal(hub.connections, event, targetTenantId);
       // Hand the event to the Pub/Sub adapter for fan-out to peer instances.
       // The adapter is a no-op when Redis is not configured, so single-process
@@ -82,6 +92,15 @@ function createHub(): Hub {
       // Explicit escape hatch for surfaces that are NOT tenant-owned in the
       // current schema (e.g. template status). Never carry tenant message
       // payloads through this path.
+      // Scope guard (WA-ERA4-04): a known-tenant event type must not be
+      // delivered through the global path. The catalog is a positive list;
+      // unknown types are allowed (open wire contract).
+      if (scopeForEventType(event.type) === "tenant") {
+        console.error(
+          `[realtime] publishGlobal() rejected tenant event type "${event.type}"; use publish()`,
+        );
+        return;
+      }
       deliverGlobalEventToLocal(hub.connections, event);
       const state = getPubSubState();
       if (state) {

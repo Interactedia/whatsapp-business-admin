@@ -899,4 +899,87 @@ tenant-owned data must be reviewed against this invariant.
 
 ---
 
-*This document was produced through repository-grounded inspection. All claims verified against source code at commit `322da28`.*
+## 14. WA-ERA4-04 — Canonical Event Inventory & Contract Hardening
+
+**Task ID:** WA-ERA4-04
+**Status:** Implemented
+**Scope:** Internal contract hardening, regression tests, documentation. No public protocol change.
+
+### 14.1 Canonical Event Inventory
+
+The realtime system emits a closed, positive set of known event types. Unknown event types are still allowed through the wire (forward compatibility), but the catalog is the authoritative list for validation.
+
+| Event Type | Scope | Producer(s) |
+|-----------|-------|-------------|
+| `message:new` | tenant | `webhook.ts:286`, `send.ts:247`, `send.ts:254`, `outbound/handler.ts:394`, `outbound/handler.ts:514`, `outbound/handler.ts:536` |
+| `message:status` | tenant | `webhook.ts:367` |
+| `message:image-enriched` | tenant | `webhook.ts:313` |
+| `flow:submission` | tenant | `flow-submission.ts:37` |
+| `template:status` | global | `webhook.ts:406` (via `publishGlobal`) |
+
+Consumer side: `src/hooks/use-realtime.ts` (single WebSocket client consumer).
+
+### 14.2 Wire Contract (Public, Unchanged)
+
+The on-the-wire event shape is exactly:
+
+```typescript
+{ type: string; payload: unknown }
+```
+
+No new required public fields were introduced by WA-ERA4-04. Existing clients continue to parse the same JSON. The internal `RealtimeMessage` type in `use-realtime.ts` mirrors this contract.
+
+### 14.3 Internal Redis Envelope (Unchanged)
+
+```typescript
+{
+  origin: string;          // instanceId of the publishing process
+  tenantId: string | null; // null for global, bound tenant otherwise
+  event: { type: string; payload: unknown };
+}
+```
+
+The envelope is validated at the decode boundary (`decodeEnvelope`) and at the Hub's publish path. WA-ERA4-04 adds a SCOPE validator that rejects envelopes whose `tenantId` contradicts the event's known scope.
+
+### 14.4 New Validators (Internal, Additive)
+
+Two new internal modules were added:
+
+- `src/lib/realtime/events.ts` — the canonical event catalog. Exports `TENANT_EVENT_TYPES`, `GLOBAL_EVENT_TYPES`, `ALL_KNOWN_EVENT_TYPES`, `scopeForEventType`, `isKnownEventType`, `isRealtimeEvent`, and `EVENT_PRODUCER_MAP`.
+- `src/lib/realtime/contracts.ts` — `validateEnvelopeScope`, `validatePayloadShape`, `validateEnvelope`. These are additive; they accept unknown event types (open wire contract) and only tighten validation for known types.
+
+The Hub's `publish()` now rejects global event types (logged + dropped). The Hub's `publishGlobal()` now rejects tenant event types (logged + dropped). This is a fail-closed guard against accidental scope mismatches at producer call sites.
+
+### 14.5 Tests
+
+Two new test files, both deterministic (no I/O, no Redis, no WebSockets):
+
+- `test/realtime-contracts.test.ts` — catalog invariants, producer/consumer mapping, scope validation, payload validation, wire-format preservation.
+- `test/realtime-serialization-roundtrip.test.ts` — encode/decode round-trip for every canonical event type, malformed input rejection, scope/payload validation after round-trip.
+
+The real-Redis integration test in `test/integration/realtime-fanout.test.ts` remains the authoritative proof for cross-process serialization.
+
+### 14.6 Compatibility & Limitations
+
+- ✅ All existing event names preserved.
+- ✅ All existing payload keys preserved.
+- ✅ All existing producers continue to work without code changes.
+- ✅ All existing consumers (e.g. `useRealtime`) continue to parse the same JSON.
+- ✅ `publish()` and `publishGlobal()` signatures preserved.
+- ✅ Redis envelope structure preserved.
+- ⚠️ WA-ERA4-04 adds a fail-closed guard: a known-global event passed to `publish()` is dropped (logged). This is additive defensive behavior; no existing producer hits this path.
+
+### 14.7 Future Extension Rules
+
+To add a new event type without breaking compatibility:
+
+1. Add the type to `TENANT_EVENT_TYPES` or `GLOBAL_EVENT_TYPES` in `src/lib/realtime/events.ts`.
+2. Add the payload shape to the discriminated union.
+3. Update the producer/consumer map.
+4. Update the section 14.1 table.
+5. Add a regression test in `test/realtime-contracts.test.ts`.
+6. NEVER remove or rename existing entries. NEVER add new required wire fields.
+
+---
+
+*Section 14 added by WA-ERA4-04. Earlier sections remain at their original baseline; they document the architecture foundation, not the hardened contract.*
