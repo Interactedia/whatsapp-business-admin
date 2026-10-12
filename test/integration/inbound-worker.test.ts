@@ -10,6 +10,7 @@ const runId = `inbound_worker_${Date.now()}`;
 async function main() {
   process.env.REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
   process.env.BULLMQ_PREFIX = runId;
+  process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY ?? "0".repeat(64);
 
   const { prisma } = await import("@/lib/prisma");
   const { persistInboundWebhookReceipt } = await import("@/lib/whatsapp/inbound/receipt");
