@@ -1,6 +1,7 @@
 import { Queue } from "bullmq";
-import { getBullMQConnectionOptions, isQueueConfigured } from "./connection";
+import { getBullMQConnectionOptions } from "./connection";
 import { getQueueConfig, QUEUE_NAMES } from "./config";
+import { isQueueConfigured } from "@/lib/queue";
 import { inspectQueue, type QueueInspectionResult } from "./inspection";
 
 export type QueueMetric =
