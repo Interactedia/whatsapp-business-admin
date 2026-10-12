@@ -5,11 +5,19 @@ import { encrypt, decrypt } from "@/lib/crypto";
 import { EXTERNAL_EVENT_TYPES, type AnyExternalEvent, type ExternalEventType } from "@/lib/events/contract";
 import { deliverCanonicalEventHttp, type CanonicalWebhookDestination, type CanonicalDeliveryResult } from "@/lib/events/delivery";
 import { validateExternalEvent } from "@/lib/events/validation";
+import type { Prisma } from "@/generated/prisma/client";
 export { WEBHOOK_SIGNATURE_HEADER, WEBHOOK_SIGNATURE_VERSION, WEBHOOK_TIMESTAMP_HEADER, signWebhookBody, verifyWebhookSignature } from "@/lib/events/webhook-signing";
 export const TEST_WEBHOOK_MIN_INTERVAL_MS = 60_000;
 
 const EVENT_TYPES = Object.values(EXTERNAL_EVENT_TYPES) as [ExternalEventType, ...ExternalEventType[]];
 const eventTypeSchema = z.enum(EVENT_TYPES);
+
+export type WebhookDestinationPrisma = Prisma.TransactionClient | typeof prisma;
+
+export const SUPPORTED_EXTERNAL_EVENT_TYPES = new Set<string>(EVENT_TYPES);
+
+export const isSupportedEventType = (value: string): value is ExternalEventType =>
+  SUPPORTED_EXTERNAL_EVENT_TYPES.has(value);
 
 function isUnsafeWebhookUrl(rawUrl: string): boolean {
   const url = new URL(rawUrl);
@@ -174,6 +182,55 @@ export async function destinationForDispatch(tenantId: string, id: string): Prom
   });
   if (!row) return null;
   return { id: row.id, tenantId: row.tenantId, url: row.endpointUrl, signingSecret: decrypt(row.signingSecretEnc) };
+}
+
+/**
+ * Eligible fanout target: enabled, non-retired, tenant-scoped, and subscribed to
+ * the supplied canonical event type. The lookup is intentionally bounded by
+ * `limit` (default + max enforced) and returns a stable ordering by `id` so
+ * pagination is deterministic. No caller-supplied URL is honored.
+ */
+export const MAX_FANOUT_DESTINATIONS_PER_PAGE = 500;
+
+export interface EligibleFanoutDestination {
+  id: string;
+  tenantId: string;
+  endpointUrl: string;
+  secretVersion: number;
+}
+
+export interface ListEligibleWebhookDestinationsOptions {
+  tenantId: string;
+  eventType: ExternalEventType;
+  limit?: number;
+  afterId?: string;
+}
+
+export async function listEligibleWebhookDestinations(
+  db: WebhookDestinationPrisma,
+  options: ListEligibleWebhookDestinationsOptions
+): Promise<EligibleFanoutDestination[]> {
+  if (!isSupportedEventType(options.eventType)) {
+    throw new Error(`Unsupported canonical event type: ${options.eventType}`);
+  }
+  const requested = options.limit ?? MAX_FANOUT_DESTINATIONS_PER_PAGE;
+  const limit = Math.max(1, Math.min(MAX_FANOUT_DESTINATIONS_PER_PAGE, Math.floor(requested)));
+  const where: Prisma.WebhookDestinationWhereInput = {
+    tenantId: options.tenantId,
+    enabled: true,
+    retiredAt: null,
+    subscriptions: { has: options.eventType },
+  };
+  if (options.afterId) {
+    where.id = { gt: options.afterId };
+  }
+  const rows = await db.webhookDestination.findMany({
+    where,
+    orderBy: { id: "asc" },
+    take: limit,
+    select: { id: true, tenantId: true, endpointUrl: true, secretVersion: true },
+  });
+  return rows;
 }
 
 export async function sendSyntheticWebhookTest(tenantId: string, id: string, now = new Date()): Promise<CanonicalDeliveryResult | { status: "rate_limited"; retryAfterMs: number } | null> {

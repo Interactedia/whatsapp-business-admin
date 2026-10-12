@@ -96,3 +96,19 @@ export {
   type DeliveryRetryDecision,
   type DeliveryRetryPolicy,
 } from "./retry-policy";
+export {
+  FanoutError,
+  MAX_FANOUT_DESTINATIONS_PER_INVOCATION,
+  fanoutCanonicalEvent,
+  type FanoutCanonicalEventOptions,
+  type FanoutDatabase,
+  type FanoutDestinationOutcome,
+  type FanoutResult,
+} from "./fanout";
+export {
+  MAX_FANOUT_DESTINATIONS_PER_PAGE,
+  isSupportedEventType,
+  listEligibleWebhookDestinations,
+  type EligibleFanoutDestination,
+  type ListEligibleWebhookDestinationsOptions,
+} from "./webhook-destinations";
