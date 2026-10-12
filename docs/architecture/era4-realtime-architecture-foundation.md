@@ -737,7 +737,7 @@ WA-ERA4-CERT ─ Requires: All WA-ERA4-01..11
 | No reconnect sync handshake | Missed events on long disconnect | WA-ERA4-05 |
 | No presence tracking | Cannot show online/offline | Future enhancement |
 | No event deduplication | Duplicate events possible | WA-ERA4-04 (event IDs) |
-| Revocation latency up to 60s | Stale connection after membership removal | WA-ERA4-03 (push invalidation) |
+| Revocation latency up to 60s | Stale connection after membership removal | WA-ERA4-03 characterised the window; push invalidation deferred to a future packet (requires separate architecture decision) |
 
 ### 11.3 No Conflicts with Frozen ERAs
 
@@ -748,6 +748,103 @@ WA-ERA4-CERT ─ Requires: All WA-ERA4-01..11
 - Idempotency
 
 **Conclusion:** WebSocket realtime infrastructure is NOT part of the ERA 3 FROZEN boundary. ERA 4 may extend it.
+
+---
+
+## 11.4 Authentication, Authorization & Tenant Isolation Boundaries (WA-ERA4-03)
+
+WA-ERA4-03 audited the existing realtime layer against the packet's
+authorization invariants. The findings below are evidence-based — each
+row is backed by a regression test in `test/realtime-security-regression.test.ts`
+or `test/integration/realtime-fanout.test.ts`.
+
+### Authentication Boundary
+
+| Property | Implementation | Evidence |
+|----------|----------------|----------|
+| Cookie parsing | `parseCookies()` in `src/lib/auth-token.ts` | `test/realtime-cookie-parsing.test.ts` (pre-existing) |
+| Token verification | `verifySessionToken()` via `next-auth/jwt` JWE decode | `test/realtime-cookie-parsing.test.ts` |
+| Diagnostic redaction | Cookie-name presence only; never token bytes or session contents | `src/lib/auth-token.ts:90-99` (gated on `NODE_ENV !== "test"`) |
+| Missing AUTH_SECRET | Returns null + logs `missing_secret` diagnostic | `src/lib/auth-token.ts:101-105` |
+| Decode failure | Returns null + logs `decode_failed` diagnostic | `src/lib/auth-token.ts:124-135` |
+| Upgrade rejection | 400 (bad URL) / 401 (no session) / 403 (no membership) | `src/server/realtime.ts:181-211` |
+| HMR passthrough | Non-`/ws` upgrades are not consumed | `src/server/realtime.ts:172` |
+
+### Tenant Authorization Boundary
+
+| Property | Implementation | Evidence |
+|----------|----------------|----------|
+| Membership query | `prisma.tenantMembership.findUnique({ where: { userId_tenantId }, include: { user: { select: { active } } } })` | `src/server/realtime.ts:198-201` |
+| `user.active` gate | Hard reject if `!membership.user.active` | `src/server/realtime.ts:202` |
+| ADMIN role | **Not** consulted for WS auth — membership is the only gate | `test/realtime-security-regression.test.ts:ADMIN bypass attempt` |
+| Client `tenantId` | Treated as a requested scope, NOT as authorization | `src/server/realtime.ts:181-186, 198-201` |
+| Connection binding | `tenantId` field on `ConnectionInfo` is set from the validated server-side membership context | `src/server/realtime.ts:243` |
+| Identity drift | Cookie revalidation checks `session.userId === userId` | `src/server/realtime.ts:235` |
+
+### Connection Lifecycle (Revalidation)
+
+| Property | Value | Evidence |
+|----------|-------|----------|
+| Interval | 60,000 ms (60 s) | `REVALIDATE_INTERVAL_MS` constant + `src/server/realtime.ts:241` |
+| Verifications per tick | (1) `verifySessionToken(cookie)` (2) `prisma.tenantMembership.findUnique()` (3) `membership.user.active` (4) `session.userId === userId` | `src/server/realtime.ts:226-237` |
+| Failure response | `ws.close(4403, "Unauthorized")` | `src/server/realtime.ts:236, 239` |
+| Maximum demonstrated revocation window | **60 seconds** (one revalidation interval) | `test/realtime-security-regression.test.ts:characterizes the maximum revocation window` |
+| Exception safety | Try/catch in async block; failure closes connection (fail-closed) | `src/server/realtime.ts:238-240` |
+| Timer cleanup | `clearInterval(info.revalidate)` in `cleanup()` | `src/server/realtime.ts:251-256` |
+| Double-cleanup guard | `let cleaned = false` short-circuit | `src/server/realtime.ts:250-256` |
+
+### Local Delivery Authorization
+
+| Property | Implementation | Evidence |
+|----------|----------------|----------|
+| Tenant filter | `if (info.tenantId !== tenantId) continue;` | `src/lib/realtime/local-delivery.ts:40` |
+| Source of tenant | `targetTenantId` from `publish()`, NOT from client | `src/server/realtime.ts:63-79` |
+| Fail-closed on null | `if (!targetTenantId) return;` | `src/server/realtime.ts:65` |
+| Send error isolation | try/catch per connection, continues iteration | `src/lib/realtime/local-delivery.ts:42-49` |
+| ReadyState guard | Only sends to `OPEN` (1) connections | `src/lib/realtime/local-delivery.ts:43-45` |
+| Global delivery | Broadcasts to every connection regardless of tenant | `src/lib/realtime/local-delivery.ts:54-79` |
+
+### Distributed Delivery (Redis Pub/Sub)
+
+| Property | Implementation | Evidence |
+|----------|----------------|----------|
+| Envelope shape | `{ origin: string, tenantId: string \| null, event: { type, payload } }` | `src/lib/realtime/distribution.ts:8-13` |
+| Channel naming | `wa:realtime:tenant:<tenantId>`, `wa:realtime:global` | `src/lib/realtime/distribution.ts:5-6` |
+| Tenant-scoped pattern | `psubscribe("wa:realtime:tenant:*")` for fan-in | `src/lib/realtime/distribution.ts:225` |
+| Loop prevention | `if (env.origin === state.instanceId) return;` | `src/lib/realtime/distribution.ts:228` |
+| Envelope validation | `decodeEnvelope()` rejects missing/wrong-type fields | `src/lib/realtime/distribution.ts:271-294` |
+| Malformed envelope | Logged + dropped, never throws to caller | `src/lib/realtime/distribution.ts:227` |
+| At-most-once | Pub/Sub is fire-and-forget; no retention | `src/lib/realtime/distribution.ts:21` |
+| Publisher failure isolation | `publishToRedis()` returns boolean; never throws | `src/lib/realtime/distribution.ts:151-167` |
+
+### Global Event Authorization Boundary
+
+`publishGlobal()` is reserved for surfaces that are NOT tenant-owned in
+the current schema (e.g. template status). The implementation comment
+explicitly warns: *"Never carry tenant message payloads through this
+path."* A regression test verifies that `publishGlobal` reaches every
+local connection regardless of tenant — this is the documented
+semantics, not a defect. Any future global event that contains
+tenant-owned data must be reviewed against this invariant.
+
+### Trust Boundaries
+
+| Trust boundary | Trusted? | Notes |
+|----------------|----------|-------|
+| WebSocket client → `/ws` upgrade | **Untrusted** | Cookie is verified; tenantId is requested scope, not auth |
+| Browser-sent message payloads | **Untrusted** | Not consumed (the client is a subscriber, not a producer) |
+| Redis Pub/Sub channel | **Trusted** | Only the application writes; envelope validates shape but trusts the producer's tenantId assignment |
+| PostgreSQL | **Authoritative** | Membership and `user.active` are the source of truth |
+| `process.env.AUTH_SECRET` | **Required** | Missing secret returns null on every verification |
+
+### Remaining Limitations & Future Work
+
+| Limitation | Impact | Trigger |
+|------------|--------|---------|
+| Maximum revocation window = 60 s | Revoked session/membership continues to receive events for up to 60 s | Decision required: push-based invalidation (separate packet) |
+| Session-only authentication | No API key path on WebSocket | If an external system needs to subscribe, a separate authentication path is required |
+| Loop prevention is instance-scoped | If two instances share an `instanceId` (operator error), a publisher's echo could be delivered twice | Operational discipline; not a code defect |
+| Global events bypass tenant filter | A `publishGlobal` event reaches ALL connected operators | Documented and constrained; future global event additions must not carry tenant data |
 
 ---
 

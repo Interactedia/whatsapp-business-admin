@@ -449,6 +449,73 @@ async function main() {
   }
 
   // -----------------------------------------------------------------
+  // I. cross-tenant isolation (WA-ERA4-03): Instance A publishes for
+  // tenant-X; Instance B has connections for tenant-X AND tenant-Y.
+  // Only the tenant-X connection must receive the event. This proves
+  // that Redis envelopes do not bypass the local tenant filter.
+  // -----------------------------------------------------------------
+  try {
+    const A = await bootInstance();
+    const B = await bootInstance();
+    const connX = makeConn("tenant-X");
+    const connY = makeConn("tenant-Y");
+    B.localConnections.add(connX);
+    B.localConnections.add(connY);
+
+    const ok = await dist.publishToRedis({
+      origin: A.state.instanceId,
+      tenantId: "tenant-X",
+      event: { type: "message:new", payload: { conversationId: "cX" } },
+    });
+    assert(ok, "publishToRedis returned false");
+    await waitFor(() => connX._send.calls.length > 0, 2000);
+
+    check(
+      "I. cross-tenant isolation: tenant-X event delivered only to tenant-X connection",
+      connX._send.calls.length === 1 && connY._send.calls.length === 0,
+      `xDelivered=${connX._send.calls.length} yDelivered=${connY._send.calls.length}`,
+    );
+    await dist.shutdownRealtimeDistribution();
+  } catch (err) {
+    check("I. cross-tenant isolation", false, (err as Error).message);
+  }
+
+  // -----------------------------------------------------------------
+  // J. malformed envelope via Redis (WA-ERA4-03): a publisher writes a
+  // syntactically invalid JSON payload directly to a tenant channel.
+  // The subscriber must drop it without crashing and without delivering
+  // anything to local connections.
+  // -----------------------------------------------------------------
+  try {
+    const A = await bootInstance();
+    const B = await bootInstance();
+    const conn = makeConn("tenant-M");
+    B.localConnections.add(conn);
+
+    // Write three invalid envelopes: bad JSON, missing fields, wrong types.
+    const channel = "wa:realtime:tenant:tenant-M";
+    await A.state.publisher.publish(channel, "this is not json {{{");
+    await A.state.publisher.publish(
+      channel,
+      JSON.stringify({ origin: "x", tenantId: "tenant-M" }), // missing event
+    );
+    await A.state.publisher.publish(
+      channel,
+      JSON.stringify({ origin: "x", tenantId: 42, event: { type: 123, payload: null } }),
+    );
+    await sleep(120);
+
+    check(
+      "J. malformed envelope: dropped without delivering to local connections",
+      conn._send.calls.length === 0,
+      `delivered=${conn._send.calls.length} (expected 0)`,
+    );
+    await dist.shutdownRealtimeDistribution();
+  } catch (err) {
+    check("J. malformed envelope", false, (err as Error).message);
+  }
+
+  // -----------------------------------------------------------------
   // SUMMARY
   // -----------------------------------------------------------------
   const passed = results.filter((r) => r.ok).length;
