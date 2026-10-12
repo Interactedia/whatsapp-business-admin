@@ -22,6 +22,7 @@ function toContactRead(raw: unknown): ContactRead | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
   if (typeof r.id !== "string") return null;
+  const convs = Array.isArray(r.conversations) ? (r.conversations as { id: string }[]) : [];
   return {
     id: r.id as string,
     waId: (r.waId as string) ?? "",
@@ -32,7 +33,7 @@ function toContactRead(raw: unknown): ContactRead | null {
     lastInboundAt: r.lastInboundAt as Date | null,
     createdAt: r.createdAt as Date,
     updatedAt: r.updatedAt as Date,
-    conversation: r.conversation as { id: string } | null,
+    conversation: convs[0] ?? null,
   };
 }
 

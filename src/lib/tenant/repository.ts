@@ -91,7 +91,7 @@ export function createTenantMessagingRepository(db: TenantPrisma = prisma) {
         orderBy: { updatedAt: "desc" },
         take,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-        include: { conversation: { select: { id: true } } },
+        include: { conversations: { take: 1, select: { id: true } } },
       });
     },
 
