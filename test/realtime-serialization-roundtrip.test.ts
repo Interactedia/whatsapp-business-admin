@@ -227,6 +227,8 @@ function representativePayloadFor(type: string) {
       return { messageId: "m1", conversationId: "c1", enrichment: { description: "x" } };
     case "flow:submission":
       return { conversationId: "c1", submissionId: "s1", launchId: "l1" };
+    case "conversation:updated":
+      return { conversationId: "c1" };
     case "template:status":
       return { id: "tpl-1", status: "APPROVED" };
     default:

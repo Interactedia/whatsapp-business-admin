@@ -175,6 +175,19 @@ describe("validateEnvelopeScope", () => {
     expect(validateEnvelopeScope(unknownGlobal)).toBeNull();
   });
 
+  it("rejects conversation:updated delivered with global scope (WA-ERA4-08)", () => {
+    // conversation:updated is tenant-scoped; the Hub's publishGlobal
+    // gate must refuse a global envelope. The validator mirrors that.
+    const bad: RealtimeEnvelope = {
+      ...globalEnv,
+      event: { type: "conversation:updated", payload: { conversationId: "c1" } },
+    };
+    expect(validateEnvelopeScope(bad)).toEqual({
+      reason: "tenant_event_with_null_tenant",
+      field: "tenantId",
+    });
+  });
+
   it("rejects envelopes with invalid origin", () => {
     const bad: RealtimeEnvelope = { ...tenantEnv, origin: "" };
     expect(validateEnvelopeScope(bad)).toEqual({ reason: "origin_invalid" });
@@ -221,6 +234,32 @@ describe("validatePayloadShape", () => {
         payload: { conversationId: "c1", submissionId: "s1", launchId: "l1" },
       }),
     ).toBeNull();
+  });
+
+  it("accepts a well-formed conversation:updated payload (WA-ERA4-08)", () => {
+    expect(
+      validatePayloadShape({
+        type: "conversation:updated",
+        payload: { conversationId: "c1" },
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects conversation:updated missing conversationId (WA-ERA4-08)", () => {
+    const failure = validatePayloadShape({
+      type: "conversation:updated",
+      payload: {},
+    });
+    expect(failure).toEqual({ reason: "payload_key_invalid", field: "conversationId" });
+  });
+
+  it("rejects conversation:updated with empty conversationId (WA-ERA4-08)", () => {
+    expect(
+      validatePayloadShape({
+        type: "conversation:updated",
+        payload: { conversationId: "" },
+      }),
+    ).toEqual({ reason: "payload_key_invalid", field: "conversationId" });
   });
 
   it("accepts a well-formed template:status payload (global)", () => {

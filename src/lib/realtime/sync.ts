@@ -20,6 +20,12 @@
  *     list (they only update a per-message delivery status). They are
  *     narrowed to thread-only refetches to avoid overwriting canonical
  *     `unreadCount` with stale cached values from the list query.
+ *  6. WA-ERA4-08: `conversation:updated` events are INVALIDATION
+ *     signals. They never carry `assignedUserId` or `status`. They
+ *     refetch the conversation list (always) and additionally refetch
+ *     the active thread when the event targets the open conversation.
+ *     The WebSocket payload is NOT authoritative — the canonical
+ *     refetch is the source of truth.
  *
  * No persistent state. No new public event fields. No new public APIs.
  * The shape of the on-the-wire RealtimeEvent is unchanged.
@@ -68,6 +74,12 @@ const SEEN_LIMIT = 512;
  * targeted thread refetch when the active conversation matches. This
  * avoids unnecessary list refetches that could overwrite canonical
  * state with a stale cached value.
+ *
+ * WA-ERA4-08: `conversation:updated` is an invalidation signal. The
+ * conversation list MUST always be refetched (because assignment/status
+ * changes affect the visible ordering and metadata). The active thread
+ * is refetched only when the event targets it. The payload does NOT
+ * carry the new state — the canonical refetch is the source of truth.
  */
 export function classifyEvent(
   event: SyncEvent,
@@ -87,6 +99,24 @@ export function classifyEvent(
       return { kind: "refetch-thread", conversationId: convId };
     }
     return { kind: "ignore" };
+  }
+  if (event.type === "conversation:updated") {
+    // WA-ERA4-08: invalidation signal. The conversation list ordering
+    // and metadata (assignment, status) can change, so the list MUST
+    // be refetched. The thread refetch is added only when the event
+    // targets the open conversation. The payload must carry a
+    // non-empty conversationId; the wire-validator already enforces
+    // that, but we re-check here so a malformed payload is silently
+    // ignored instead of triggering a list-wide refetch that could
+    // leak across tenants.
+    const p = event.payload;
+    if (!p || typeof p !== "object") return { kind: "refetch-list" };
+    const convId = (p as Record<string, unknown>).conversationId;
+    if (typeof convId !== "string" || convId.length === 0) return { kind: "refetch-list" };
+    if (activeConversationId && activeConversationId === convId) {
+      return { kind: "refetch-list-and-thread", conversationId: convId };
+    }
+    return { kind: "refetch-list" };
   }
   if (event.type.startsWith(TENANT_MESSAGE_PREFIX)) {
     const p = event.payload;

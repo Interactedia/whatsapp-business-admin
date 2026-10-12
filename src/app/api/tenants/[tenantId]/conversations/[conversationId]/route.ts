@@ -3,6 +3,7 @@ import { handle, ok, fail } from "@/lib/api";
 import { auth } from "@/auth";
 import { resolveTenantContext, TenantAuthorizationError } from "@/lib/tenant";
 import { tenantMessagingRepository } from "@/lib/tenant/repository";
+import { publish } from "@/server/realtime";
 
 type ConversationRead = {
   id: string;
@@ -112,6 +113,29 @@ export const PATCH = handle(async (req, { params }) => {
 
   const result = toConversationRead(updated);
   if (!result) return fail(500, "Internal error");
+
+  // WA-ERA4-08: post-commit invalidation. The PostgreSQL write above
+  // has already committed (Prisma awaits the row-level write before
+  // returning). Publish the tenant-scoped conversation:updated
+  // notification AFTER the canonical write so subscribers can refetch
+  // the new state from the existing HTTP API.
+  //
+  // We only publish when at least one of the mutated fields actually
+  // changed. This prevents the seen-set / refetch loop on no-op PATCH
+  // (e.g. PATCH with the same assignedUserId already on the row).
+  // The event is best-effort; publish() never throws, never reverts
+  // the commit, and never blocks the HTTP response.
+  const mutatedStatus = body.status !== undefined && body.status !== result.status;
+  const mutatedAssigned =
+    body.assignedUserId !== undefined && body.assignedUserId !== result.assignedUserId;
+  const mutatedUnread =
+    body.unreadCount !== undefined && body.unreadCount !== result.unreadCount;
+  if (mutatedStatus || mutatedAssigned || mutatedUnread) {
+    publish(
+      { type: "conversation:updated", payload: { conversationId: result.id } },
+      tenantId,
+    );
+  }
 
   return ok(result);
 });

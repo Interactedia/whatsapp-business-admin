@@ -73,6 +73,33 @@ describe("classifyEvent", () => {
   it("ignores template:status (global, no conversationId)", () => {
     expect(classifyEvent({ type: "template:status", payload: { id: "t1", status: "APPROVED" } }, "c1")).toEqual({ kind: "ignore" });
   });
+
+  // WA-ERA4-08 — conversation:updated (invalidation-only).
+  it("conversation:updated always refetches the list (WA-ERA4-08)", () => {
+    const v = classifyEvent(
+      { type: "conversation:updated", payload: { conversationId: "c1" } },
+      "c2",
+    );
+    expect(v).toEqual({ kind: "refetch-list" });
+  });
+  it("conversation:updated refetches list+thread when targeting the open conversation (WA-ERA4-08)", () => {
+    const v = classifyEvent(
+      { type: "conversation:updated", payload: { conversationId: "c1" } },
+      "c1",
+    );
+    expect(v).toEqual({ kind: "refetch-list-and-thread", conversationId: "c1" });
+  });
+  it("conversation:updated with malformed payload still triggers list refetch (WA-ERA4-08)", () => {
+    // Defensive: a wire-validator slip must not silently swallow the
+    // invalidation signal. The list is the canonical view; refetch
+    // it even if the payload is structurally wrong.
+    expect(
+      classifyEvent({ type: "conversation:updated", payload: null }, "c1"),
+    ).toEqual({ kind: "refetch-list" });
+    expect(
+      classifyEvent({ type: "conversation:updated", payload: {} }, "c1"),
+    ).toEqual({ kind: "refetch-list" });
+  });
 });
 
 describe("messageIdentity + seenKeyFor", () => {
@@ -242,6 +269,53 @@ describe("processEvent — dedup and staleness", () => {
     const second = processEvent(e, "c1", s, o, KNOWN);
     expect(second.admitted).toBe(false);
     if (!second.admitted) expect(second.reason).toBe("duplicate");
+  });
+
+  // WA-ERA4-08 — conversation:updated passes through processEvent.
+  it("conversation:updated is admitted and triggers list+thread when targeting the open conversation (WA-ERA4-08)", () => {
+    const s = new SeenSet();
+    const o = new OrderingGuard();
+    const v = processEvent(
+      { type: "conversation:updated", payload: { conversationId: "c1" } },
+      "c1",
+      s,
+      o,
+      [...KNOWN, "conversation:updated"],
+    );
+    expect(v.admitted).toBe(true);
+    if (v.admitted) {
+      expect(v.action).toEqual({ kind: "refetch-list-and-thread", conversationId: "c1" });
+    }
+  });
+  it("conversation:updated is admitted and triggers list-only when not targeting the open conversation (WA-ERA4-08)", () => {
+    const s = new SeenSet();
+    const o = new OrderingGuard();
+    const v = processEvent(
+      { type: "conversation:updated", payload: { conversationId: "c1" } },
+      "c2",
+      s,
+      o,
+      [...KNOWN, "conversation:updated"],
+    );
+    expect(v.admitted).toBe(true);
+    if (v.admitted) expect(v.action).toEqual({ kind: "refetch-list" });
+  });
+  it("conversation:updated is ignored by the Inbox when not in the allowlist (WA-ERA4-08 backward compat)", () => {
+    // Older clients that don't know about conversation:updated must
+    // not crash. The seen-set + ordering guards are bypassed; the
+    // processEvent helper reports "malformed" so the Inbox client
+    // drops the event without altering state.
+    const s = new SeenSet();
+    const o = new OrderingGuard();
+    const v = processEvent(
+      { type: "conversation:updated", payload: { conversationId: "c1" } },
+      "c1",
+      s,
+      o,
+      KNOWN,
+    );
+    expect(v.admitted).toBe(false);
+    if (!v.admitted) expect(v.reason).toBe("malformed");
   });
 });
 

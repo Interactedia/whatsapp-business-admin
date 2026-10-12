@@ -30,6 +30,7 @@ export const TENANT_EVENT_TYPES = [
   "message:status",
   "message:image-enriched",
   "flow:submission",
+  "conversation:updated",
 ] as const;
 
 /** Global event type names. MUST be delivered to every connected client. */
@@ -49,6 +50,7 @@ export type KnownEventPayload =
   | MessageStatusPayload
   | MessageImageEnrichedPayload
   | FlowSubmissionPayload
+  | ConversationUpdatedPayload
   | TemplateStatusPayload;
 
 export type MessageNewPayload = {
@@ -74,6 +76,24 @@ export type FlowSubmissionPayload = {
   conversationId: string;
   submissionId: string;
   launchId: string;
+};
+
+/**
+ * WA-ERA4-08 — Conversation assignment/status invalidation notification.
+ *
+ * This event is an INVALIDATION signal, not a copy of the canonical
+ * conversation state. The payload carries ONLY the conversationId so the
+ * client can issue a canonical refetch from the existing HTTP API. The
+ * payload intentionally does NOT include `assignedUserId` or `status`:
+ * the producer MUST NOT project mutable state into the event because the
+ * event is best-effort and not the source of truth.
+ *
+ * Scope: tenant. Producer: the conversation PATCH endpoint after a
+ * successful canonical write. Consumer: Inbox client (and any other
+ * conversation-list view) which must refetch from the canonical HTTP API.
+ */
+export type ConversationUpdatedPayload = {
+  conversationId: string;
 };
 
 export type TemplateStatusPayload = {
@@ -109,6 +129,12 @@ export const EVENT_PRODUCER_MAP: Readonly<
   },
   "flow:submission": {
     producerFiles: ["src/lib/whatsapp/flow-submission.ts"],
+    scope: "tenant",
+  },
+  "conversation:updated": {
+    producerFiles: [
+      "src/app/api/tenants/[tenantId]/conversations/[conversationId]/route.ts",
+    ],
     scope: "tenant",
   },
   "template:status": {

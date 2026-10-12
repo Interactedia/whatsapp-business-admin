@@ -124,7 +124,7 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
       activeId,
       seenRef.current,
       orderingRef.current,
-      ["message:new", "message:status", "message:image-enriched"],
+      ["message:new", "message:status", "message:image-enriched", "conversation:updated"],
     );
     if (!verdict.admitted) return;
     const action: SyncAction = verdict.action;

@@ -1345,3 +1345,205 @@ invalidated on success.
 
 No production code changed. ERAs 1/2/3 are not modified. The
 `tenantMessagingRepository` and PATCH handler are unchanged.
+
+---
+
+## 17. WA-ERA4-08 — `conversation:updated` Event Contract
+
+**Task ID:** WA-ERA4-08-CONVERSATION-EVENT
+**Status:** Implemented (this commit)
+**Date:** 2026-10-12
+**Baseline:** 17323bf
+**Scope:** Add one new tenant-scoped event (`conversation:updated`),
+publish it from the conversation PATCH endpoint after a successful
+canonical write, and consume it in the Inbox client to refetch the
+canonical conversation list.
+
+### 17.1 Approved contract
+
+```
+type: "conversation:updated"
+payload: { conversationId: string }
+scope: tenant
+```
+
+The event is an **invalidation signal**, not a copy of the canonical
+state. The payload carries ONLY the conversationId so the client can
+issue a canonical refetch from the existing HTTP API. The payload
+intentionally does NOT include `assignedUserId` or `status`: the
+producer MUST NOT project mutable state into the event because the
+event is best-effort and not the source of truth.
+
+### 17.2 Producer and consumer responsibilities
+
+**Producer (POST-COMMIT, BEST-EFFORT)**
+
+The PATCH endpoint at
+`src/app/api/tenants/[tenantId]/conversations/[conversationId]/route.ts`
+publishes the event after a successful canonical PostgreSQL write:
+
+- Only when the request passes authorization (401/403/404 short-circuits
+  before publish is called).
+- Only when the body schema parses (400 short-circuits before publish).
+- Only when the repository's `updateMany` reports `count=1` (the
+  cross-tenant / not-found path returns 404 without publish).
+- Only when at least one of the mutated fields (`status`,
+  `assignedUserId`, `unreadCount`) actually differs from the pre-state
+  (no-op PATCH produces no event).
+
+The publish call uses the existing `publish(event, tenantId)` helper
+from `src/server/realtime.ts`. The helper is fire-and-forget: it
+never throws, never reverts the canonical commit, and never blocks the
+HTTP response.
+
+**Consumer (REFETCH CANONICAL STATE)**
+
+The Inbox client (`src/app/(app)/inbox/inbox-client.tsx`) wires
+`conversation:updated` through the existing `processEvent` helper in
+`src/lib/realtime/sync.ts`. The decision matrix is:
+
+- Active thread matches `payload.conversationId` → refetch list AND
+  refetch thread (canonical state may have changed).
+- Active thread is null or different → refetch list only.
+
+The client NEVER mutates `assignedUserId`, `status`, or
+`unreadCount` directly from the WebSocket payload. The WebSocket
+notification only invalidates; the canonical refetch is the source of
+truth.
+
+### 17.3 Post-commit semantics
+
+| Step | Owner | State change |
+|------|-------|--------------|
+| 1. PATCH HTTP request | Browser | None |
+| 2. Auth + tenant check | Route handler | None |
+| 3. Zod body parse | Route handler | None |
+| 4. `prisma.conversation.updateMany` | PostgreSQL | **COMMITTED** |
+| 5. `findConversation` to read post-state | PostgreSQL | None |
+| 6. `publish({ type: "conversation:updated", payload }, tenantId)` | Hub + Redis | Best-effort, async |
+| 7. Return 200 to the originating operator | Route handler | None |
+
+Steps 1–5 are synchronous from the route handler's perspective.
+Step 6 happens AFTER the canonical commit. If `publish` throws (it
+doesn't, but if it did), the response is unaffected. If Redis is
+unavailable, `publish` logs and continues; the local instance still
+delivers to its own WebSocket clients through the local fan-out path
+in `src/lib/realtime/local-delivery.ts`.
+
+### 17.4 Last-write-wins preservation
+
+The PATCH handler still relies on the existing repository's
+`updateMany(...).count === 1` semantic. The repository applies the
+last write that lands in the database. The new event does NOT
+introduce a new conflict policy: it is a notification, not a
+synchronization primitive. Two operators racing to assign the same
+conversation both see HTTP 200; the final canonical row is whichever
+write committed last; both operators receive the post-commit
+notification, both refetch, both converge on the same canonical
+state.
+
+### 17.5 Canonical HTTP reconciliation
+
+The client NEVER trusts the WebSocket payload. On
+`conversation:updated` it issues:
+
+- `qc.invalidateQueries({ queryKey: ["conversations", tenantId] })` —
+  always.
+- `qc.invalidateQueries({ queryKey: ["thread", tenantId, conversationId] })` —
+  only when the active thread matches.
+
+The next render of the Inbox triggers the existing `useQuery` refetch
+path, which goes through the canonical GET endpoints. The WebSocket
+event never short-circuits this — it can only ADVANCE the invalidation.
+
+### 17.6 Backward compatibility
+
+- The public `RealtimeEvent` shape (`{ type: string; payload: unknown }`)
+  is unchanged.
+- The catalog of TENANT_EVENT_TYPES is additive: existing clients
+  that don't know about `conversation:updated` pass it through
+  `processEvent` with `["message:new", "message:status",
+  "message:image-enriched"]` as the known-types list. The seen-set
+  has no entry for the event (it carries no embedded message), so
+  the verdict is `{ admitted: false, reason: "malformed" }` and the
+  Inbox silently ignores it without altering state.
+- The `validateEnvelopeScope` function accepts unknown event types
+  (the wire is open). The `validatePayloadShape` function
+  tightens validation for `conversation:updated` only when the event
+  type is recognized.
+- The PATCH handler preserves its current HTTP response shape: the
+  same JSON body, the same status codes, the same `toConversationRead`
+  projection.
+
+### 17.7 Best-effort notification limitations
+
+- **At-most-once**: Redis Pub/Sub does not retain messages. A
+  disconnected WebSocket client MISSES the notification. On reconnect
+  it does not replay missed events; it refetches from the canonical
+  HTTP API.
+- **No ordering guarantee**: PostgreSQL commits are ordered (last
+  write wins), but Redis Pub/Sub may deliver notifications to a peer
+  instance in a different order. The `OrderingGuard` in
+  `src/lib/realtime/sync.ts` does not apply to `conversation:updated`
+  (it carries no message timestamp). The client refetches and accepts
+  whatever canonical state the database reports.
+- **No durable log**: a server crash between the commit and the
+  publish does not retry. The next refetch (background poll or
+  manual reload) reconciles.
+- **No cross-tenant leak**: the Hub's `publish()` validates the
+  scope at the producer boundary; the Redis channel name encodes the
+  tenantId; the `deliverTenantEventToLocal` helper in
+  `src/lib/realtime/local-delivery.ts` filters by `info.tenantId ===
+  tenantId` on every iteration.
+
+### 17.8 Files changed
+
+Production:
+- `src/lib/realtime/events.ts` — added `conversation:updated` to
+  `TENANT_EVENT_TYPES` and `EVENT_PRODUCER_MAP`; added
+  `ConversationUpdatedPayload` type.
+- `src/lib/realtime/contracts.ts` — added
+  `case "conversation:updated"` in `validatePayloadShape` enforcing
+  `conversationId: string`.
+- `src/lib/realtime/sync.ts` — added `conversation:updated` case in
+  `classifyEvent` (list always, list+thread when active matches).
+- `src/app/api/tenants/[tenantId]/conversations/[conversationId]/route.ts`
+  — import `publish`; emit after a successful canonical write, only
+  when the body actually mutated the row.
+- `src/app/(app)/inbox/inbox-client.tsx` — added
+  `"conversation:updated"` to the `processEvent` known-types list.
+
+Tests:
+- `test/realtime-contracts.test.ts` — added payload-shape and
+  scope-validation tests for `conversation:updated`.
+- `test/realtime-client-sync.test.ts` — added `classifyEvent` and
+  `processEvent` tests for the new event.
+- `test/realtime-client-sync-integration.test.ts` — added a
+  `WA-ERA4-08` describe block with five multi-operator scenarios
+  (convergence, list+thread on match, list-only on mismatch,
+  duplicate safety, tenant isolation).
+- `test/multi-agent-coordination.test.ts` — replaced the prior
+  "does not publish" assertion with four new assertions covering
+  publish-on-success, no-publish-on-noop, no-publish-on-404, and
+  no-publish-on-cross-tenant.
+
+### 17.9 Acceptance gate evidence
+
+| Gate | Evidence |
+|------|----------|
+| `conversation:updated` catalogued | `events.ts` `TENANT_EVENT_TYPES` |
+| Tenant scope validation | `contracts.ts` `validateEnvelopeScope` |
+| Payload validation | `test/realtime-contracts.test.ts` "accepts a well-formed conversation:updated payload" |
+| Existing contracts preserved | `test/realtime-contracts.test.ts` 5 pre-existing payload tests |
+| PATCH publication after commit | `test/multi-agent-coordination.test.ts` "publishes conversation:updated after a successful assignment/status PATCH" |
+| No publication on failed mutation | `test/multi-agent-coordination.test.ts` "does not publish conversation:updated on a 404 PATCH" |
+| No publication on unauthorized | `test/multi-agent-coordination.test.ts` "does not publish conversation:updated for cross-tenant PATCH" |
+| No publication on unchanged state | `test/multi-agent-coordination.test.ts` "does not publish conversation:updated when the PATCH body matches the existing state" |
+| HTTP compatibility preserved | `test/multi-agent-coordination.test.ts` "ignores identity fields" |
+| Last-write-wins preserved | `test/integration/multi-agent-coordination.test.ts` A, B, C, D, E |
+| Two-operator assignment sync | `test/realtime-client-sync-integration.test.ts` "two operators converge on the new assignee" |
+| Two-operator status sync | Same test; the Inbox client refetches the same canonical list regardless of which field changed |
+| Cross-tenant isolation | `test/realtime-client-sync-integration.test.ts` "tenant switching isolates the conversation:updated event" |
+| Duplicate handling | `test/realtime-client-sync-integration.test.ts` "duplicate conversation:updated notifications are harmless" |
+| Stale-response protection | Pre-existing `RequestToken` test in `test/realtime-client-sync.test.ts` "RequestToken rejects stale responses" |
+| ERAs 1/2/3 preserved | No schema, no migrations, no Prisma client changes; no `message:status` semantics change |

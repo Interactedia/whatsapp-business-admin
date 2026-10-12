@@ -112,6 +112,10 @@ export function validatePayloadShape(event: RealtimeEvent): ValidationFailure | 
         { key: "submissionId", kind: "string" },
         { key: "launchId", kind: "string" },
       ]);
+    case "conversation:updated":
+      return requireKeys(p, [
+        { key: "conversationId", kind: "string" },
+      ]);
     case "template:status":
       return requireKeys(p, [
         { key: "id", kind: "string" },

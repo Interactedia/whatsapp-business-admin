@@ -254,19 +254,88 @@ describe("PATCH /api/tenants/:tenantId/conversations/:id — coordination harden
     expect(data).not.toHaveProperty("contactId");
   });
 
-  it("does not publish a realtime event after a successful assignment/status PATCH", async () => {
+  it("publishes conversation:updated after a successful assignment/status PATCH (WA-ERA4-08)", async () => {
+    // The previous test left findFirst returning a row with
+    // assignedUserId "agent-1". To make this PATCH a real change,
+    // we route the new value to "agent-2" — the existing
+    // assignedUserId is "agent-1".
+    prismaState.findFirst = async () => ({
+      ...baseRepoRow,
+      assignedUserId: "agent-1",
+    });
     const { PATCH } = await import(
       "@/app/api/tenants/[tenantId]/conversations/[conversationId]/route"
     );
+    publishMock.mockClear();
     const response = await PATCH(
-      makeRequest("tenant-1", "conv-1", { assignedUserId: "agent-1" }),
+      makeRequest("tenant-1", "conv-1", { assignedUserId: "agent-2" }),
       makeParams("tenant-1", "conv-1"),
     );
     expect(response.status).toBe(200);
-    // The current handler does not publish a conversation-scoped event;
-    // operators on the same tenant reconcile via refetch. If a future
-    // change introduces a publish() call here without an associated
-    // event-type contract change, this assertion fails closed.
+    // WA-ERA4-08: PATCH now publishes a tenant-scoped invalidation
+    // event after a successful canonical write. The payload carries
+    // only the conversationId — never the new assignedUserId or
+    // status. If a future change emits a different shape, this
+    // assertion fails closed.
+    expect(publishMock).toHaveBeenCalledTimes(1);
+    const [event, tenant] = publishMock.mock.calls[0];
+    expect(event).toEqual({
+      type: "conversation:updated",
+      payload: { conversationId: "conv-1" },
+    });
+    expect(tenant).toBe("tenant-1");
+  });
+
+  it("does not publish conversation:updated when the PATCH body matches the existing state (WA-ERA4-08)", async () => {
+    // The PATCH handler compares pre/post to avoid emitting a
+    // no-op notification. Setting the same assignedUserId that
+    // is already on the row produces a 200 from the repository
+    // but no event.
+    prismaState.findFirst = async () => ({
+      ...baseRepoRow,
+      assignedUserId: "agent-A",
+    });
+    const { PATCH } = await import(
+      "@/app/api/tenants/[tenantId]/conversations/[conversationId]/route"
+    );
+    publishMock.mockClear();
+    const response = await PATCH(
+      makeRequest("tenant-1", "conv-1", { assignedUserId: "agent-A" }),
+      makeParams("tenant-1", "conv-1"),
+    );
+    expect(response.status).toBe(200);
+    expect(publishMock).not.toHaveBeenCalled();
+  });
+
+  it("does not publish conversation:updated on a 404 PATCH (WA-ERA4-08)", async () => {
+    prismaState.findFirst = async () => null;
+    const { PATCH } = await import(
+      "@/app/api/tenants/[tenantId]/conversations/[conversationId]/route"
+    );
+    publishMock.mockClear();
+    const response = await PATCH(
+      makeRequest("tenant-1", "conv-other", { assignedUserId: "agent-1" }),
+      makeParams("tenant-1", "conv-other"),
+    );
+    expect(response.status).toBe(404);
+    expect(publishMock).not.toHaveBeenCalled();
+  });
+
+  it("does not publish conversation:updated for cross-tenant PATCH (WA-ERA4-08)", async () => {
+    // updateMany returns 0 for cross-tenant, so the repository
+    // returns null and the route responds 404. The event must
+    // not be published.
+    prismaState.updateMany = async () => ({ count: 0 });
+    prismaState.findFirst = async () => null;
+    const { PATCH } = await import(
+      "@/app/api/tenants/[tenantId]/conversations/[conversationId]/route"
+    );
+    publishMock.mockClear();
+    const response = await PATCH(
+      makeRequest("tenant-1", "conv-1", { status: "CLOSED" }),
+      makeParams("tenant-1", "conv-1"),
+    );
+    expect(response.status).toBe(404);
     expect(publishMock).not.toHaveBeenCalled();
   });
 });
