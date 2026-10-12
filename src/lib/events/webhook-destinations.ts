@@ -11,9 +11,17 @@ export const TEST_WEBHOOK_MIN_INTERVAL_MS = 60_000;
 const EVENT_TYPES = Object.values(EXTERNAL_EVENT_TYPES) as [ExternalEventType, ...ExternalEventType[]];
 const eventTypeSchema = z.enum(EVENT_TYPES);
 
+function isUnsafeWebhookUrl(rawUrl: string): boolean {
+  const url = new URL(rawUrl);
+  const host = url.hostname.toLowerCase();
+  return Boolean(url.username || url.password) || ["localhost", "127.0.0.1", "::1"].includes(host) || host.endsWith(".localhost");
+}
+
 export const webhookDestinationInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  endpointUrl: z.url().refine((url) => new URL(url).protocol === "https:", "Only HTTPS webhook endpoints are supported."),
+  endpointUrl: z.url()
+    .refine((url) => new URL(url).protocol === "https:", "Only HTTPS webhook endpoints are supported.")
+    .refine((url) => !isUnsafeWebhookUrl(url), "Webhook endpoint host is not allowed."),
   enabled: z.boolean().optional(),
   subscriptions: z.array(eventTypeSchema).min(1).max(EVENT_TYPES.length).refine((values) => new Set(values).size === values.length, "Duplicate subscriptions are not allowed."),
 });
