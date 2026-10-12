@@ -6,12 +6,30 @@
  * separate module graph — share the exact same object. Route handlers call
  * `publish()` after DB writes; the custom server owns the WebSocketServer and
  * relays messages to authenticated browser clients.
+ *
+ * WA-ERA4-02: Multi-instance fan-out via Redis Pub/Sub.
+ *   The Hub still owns local delivery. After publishing locally we hand the
+ *   event to the Pub/Sub adapter (src/lib/realtime/distribution.ts) so peer
+ *   instances receive it. Inbound events from the subscriber are delivered
+ *   to local connections through the SAME helpers, ensuring tenant isolation
+ *   and send-error isolation behave identically regardless of origin.
  */
 import type { Server as HttpServer } from "node:http";
 import type { Socket } from "node:net";
 import { WebSocketServer, WebSocket } from "ws";
 import { verifySessionToken } from "@/lib/auth-token";
 import { prisma } from "@/lib/prisma";
+import {
+  initRealtimeDistribution,
+  publishToRedis,
+  shutdownRealtimeDistribution,
+  getPubSubState,
+  type RealtimeEnvelope,
+} from "@/lib/realtime/distribution";
+import {
+  deliverGlobalEventToLocal,
+  deliverTenantEventToLocal,
+} from "@/lib/realtime/local-delivery";
 
 export type RealtimeEvent = {
   /** Event channel, e.g. "message:new", "message:status", "template:status". */
@@ -45,39 +63,53 @@ function createHub(): Hub {
     publish(event: RealtimeEvent, targetTenantId: string | null) {
       // Fail closed: tenant-owned events with an unresolved tenant are never delivered.
       if (!targetTenantId) return;
-      const data = JSON.stringify(event);
-      for (const info of hub.connections) {
-        if (info.tenantId !== targetTenantId) continue;
-        if (info.ws.readyState === WebSocket.OPEN) {
-          try {
-            info.ws.send(data);
-          } catch {
-            // Isolate send failures so a single broken socket cannot block
-            // delivery to other authorized connections on the same tenant.
-            // The close handler will perform the actual cleanup; we just
-            // ensure this iteration does not throw and break the loop.
-          }
-        }
+      deliverTenantEventToLocal(hub.connections, event, targetTenantId);
+      // Hand the event to the Pub/Sub adapter for fan-out to peer instances.
+      // The adapter is a no-op when Redis is not configured, so single-process
+      // deployments are unaffected. Fire-and-forget: the caller's PostgreSQL
+      // commit is the source of truth, and a slow publish must not stall it.
+      const state = getPubSubState();
+      if (state) {
+        const env: RealtimeEnvelope = {
+          origin: state.instanceId,
+          tenantId: targetTenantId,
+          event,
+        };
+        void publishToRedis(env);
       }
     },
     publishGlobal(event: RealtimeEvent) {
       // Explicit escape hatch for surfaces that are NOT tenant-owned in the
       // current schema (e.g. template status). Never carry tenant message
       // payloads through this path.
-      const data = JSON.stringify(event);
-      for (const info of hub.connections) {
-        if (info.ws.readyState === WebSocket.OPEN) {
-          try {
-            info.ws.send(data);
-          } catch {
-            // Same isolation rationale as publish(): one bad socket must not
-            // prevent other clients from receiving global events.
-          }
-        }
+      deliverGlobalEventToLocal(hub.connections, event);
+      const state = getPubSubState();
+      if (state) {
+        const env: RealtimeEnvelope = {
+          origin: state.instanceId,
+          tenantId: null,
+          event,
+        };
+        void publishToRedis(env);
       }
     },
   };
   return hub;
+}
+
+/**
+ * Deliver a remote (Pub/Sub) event to local connections WITHOUT re-publishing
+ * to Redis. The same tenant-isolation and send-error-isolation rules apply.
+ * Tenant-scoped events only reach connections bound to the same tenant;
+ * global events reach every connection.
+ */
+function deliverRemote(env: RealtimeEnvelope): void {
+  const hub = getHub();
+  if (env.tenantId === null || env.tenantId === undefined) {
+    deliverGlobalEventToLocal(hub.connections, env.event);
+    return;
+  }
+  deliverTenantEventToLocal(hub.connections, env.event, env.tenantId);
 }
 
 function getHub(): Hub {
@@ -100,6 +132,31 @@ export function publish(event: RealtimeEvent, tenantId: string | null | undefine
  */
 export function publishGlobal(event: RealtimeEvent): void {
   getHub().publishGlobal(event);
+}
+
+/**
+ * Wire the Redis Pub/Sub fan-out layer onto the Hub. Idempotent: calling
+ * it multiple times is safe and rebinds the inbound message handler to the
+ * local-delivery function. Returns true when the adapter is active, false
+ * when Redis is not configured (single-process mode).
+ *
+ * Call this once at server startup, after attachRealtime(). It does not
+ * need to be awaited for correctness; the subscriber registers its
+ * handlers synchronously and the SUBSCRIBE/PSUBSCRIBE is in flight.
+ */
+export function initRealtimeFanout(): boolean {
+  const hub = getHub();
+  const state = initRealtimeDistribution((env) => {
+    // Inbound from a peer instance: deliver locally only. The Hub's
+    // publish() path is intentionally NOT invoked here, so this code
+    // never re-publishes a remote event back to Redis. That is the
+    // loop-prevention invariant.
+    deliverRemote(env);
+    // Reference hub so the closure captures the live singleton; this also
+    // makes the dependency explicit for future readers.
+    void hub;
+  });
+  return state !== null;
 }
 
 /** Wire the WebSocketServer onto the shared HTTP server. Called once from server.ts. */
@@ -215,14 +272,20 @@ function registerClient(hub: Hub, userId: string, tenantId: string, cookie: stri
 export { registerClient };
 
 /**
- * ponytail: graceful shutdown — closes every active connection with a 1001
- * code (going away) and shuts down the WebSocketServer. Safe to call when no
- * hub has been attached; in that case it is a no-op. Future WA-ERA4-02 can
- * hook Redis Pub/Sub teardown at the same seam.
+ * Graceful shutdown — closes every active connection with a 1001 code (going
+ * away), shuts down the WebSocketServer, and tears down the Redis Pub/Sub
+ * adapter. Safe to call when no hub has been attached; in that case the
+ * WebSocket-related steps are a no-op. The Pub/Sub teardown is also a
+ * no-op when Redis is not configured.
  */
-export function shutdownRealtime(): void {
+export async function shutdownRealtime(): Promise<void> {
   const hub = g.__waRealtime;
-  if (!hub) return;
+  if (!hub) {
+    // Even without a Hub, the Pub/Sub adapter may have been initialized
+    // (e.g. tests that wire it directly). Drain it.
+    await shutdownRealtimeDistribution();
+    return;
+  }
   for (const info of hub.connections) {
     try {
       clearInterval(info.revalidate);
@@ -244,4 +307,8 @@ export function shutdownRealtime(): void {
     }
     hub.wss = null;
   }
+  // Tear down the Pub/Sub adapter so subscriber/publisher connections do
+  // not outlive the process. Awaited so callers (server.ts) can chain other
+  // shutdown steps.
+  await shutdownRealtimeDistribution();
 }

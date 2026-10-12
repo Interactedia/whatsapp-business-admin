@@ -9,7 +9,7 @@
  */
 import { createServer } from "node:http";
 import next from "next";
-import { attachRealtime } from "./src/server/realtime";
+import { attachRealtime, initRealtimeFanout } from "./src/server/realtime";
 import { runFlowMaintenance } from "./src/lib/whatsapp/flow-submission";
 
 const dev = process.env.NODE_ENV !== "production";
@@ -46,6 +46,11 @@ app.prepare().then(() => {
 
   // Attach the WebSocket server for realtime inbox updates.
   attachRealtime(server);
+  // Initialize the Redis Pub/Sub fan-out adapter. No-op when REDIS_URL is
+  // absent — single-process mode keeps working unchanged.
+  const fanout = initRealtimeFanout();
+  if (fanout) console.log("▶ Realtime fan-out: Redis Pub/Sub enabled");
+  else console.log("▶ Realtime fan-out: single-process mode (no REDIS_URL)");
 
   // Durable Flow webhook retries, launch expiry, and retention cleanup.
   let maintainingFlows = false;

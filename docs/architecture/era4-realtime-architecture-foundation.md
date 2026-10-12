@@ -541,21 +541,59 @@ if (!membership || !membership.user.active) {
 // On message: Hub delivers to local connections matching tenantId
 ```
 
-### 7.3 Redis Pub/Sub Channel Design (CONCEPTUAL)
+### 7.3 Redis Pub/Sub Channel Design (IMPLEMENTED — WA-ERA4-02)
 
-| Channel | Purpose |
-|---------|---------|
-| `wa:realtime:{tenantId}` | Tenant-scoped events |
-| `wa:realtime:global` | Non-tenant events (templates) |
+| Channel | Purpose | Subscriber mode |
+|---------|---------|-----------------|
+| `wa:realtime:tenant:<tenantId>` | Tenant-scoped events (messages, status) | PSUBSCRIBE `wa:realtime:*` (one subscription per Hub covers all tenants) |
+| `wa:realtime:global` | Non-tenant events (template status) | SUBSCRIBE (exact) |
 
-**Message format (CONCEPTUAL):**
+**Why PSUBSCRIBE for tenants:** tenants are dynamic — a single Hub cannot predict which tenants will connect. One pattern subscription covers every tenant channel that gets created. Global events are an exact SUBSCRIBE because there is exactly one global channel.
+
+**Envelope (internal — never crosses the WebSocket boundary):**
 ```typescript
-interface PubSubMessage {
-  event: RealtimeEvent;      // { type, payload }
-  publishedAt: string;       // ISO timestamp
-  instanceId?: string;      // For debugging
-}
+type RealtimeEnvelope = {
+  origin: string;                // stable per-process instanceId of the publisher
+  tenantId: string | null;       // null ⇒ global event
+  event: { type: string; payload: unknown };  // the existing RealtimeEvent, unchanged
+};
 ```
+
+**Loop prevention (echo protection):** the publisher records its own `instanceId` in `origin`. The subscriber ignores every message whose `origin` matches the local `instanceId`. The publisher already delivered locally, so re-delivering the echo would double-send. The integration test `realtime-fanout.test.ts` proves this end-to-end with two real Hub instances against a real Redis.
+
+**No-republish invariant:** the subscriber's inbound path calls `deliverRemote()` which only writes to local WebSockets. It never calls `publish()` or `publishToRedis()`. That is what prevents loops. The integration test verifies the publisher client's `publish` count stays at 0 on the receiving instance.
+
+### 7.4 Redis Client Lifecycle
+
+The adapter (`src/lib/realtime/distribution.ts`) uses a **dedicated pair of ioredis clients** that live alongside the existing BullMQ client (`src/lib/redis/client.ts`). ioredis cannot run normal commands on a connection in subscribe mode, so subscriber and publisher MUST be separate connections. The BullMQ connection is not touched.
+
+| Client | Used for | Mode | Reconnect |
+|--------|----------|------|-----------|
+| `publisher` | `PUBLISH` to channels | normal | ioredis auto-retry |
+| `subscriber` | `PSUBSCRIBE wa:realtime:*` and `SUBSCRIBE wa:realtime:global` | subscribe | ioredis auto-retry; resubscribes on reconnect |
+
+Both clients are stored on `globalThis.__waRealtimePubSub` so Next's separate module graph and the custom server see the same adapter instance. `initRealtimeFanout()` in `src/server/realtime.ts` is called once from `server.ts` after `attachRealtime()`. It is idempotent: a second call rebinds the message handler but does not create new clients.
+
+`shutdownRealtime()` (extended in WA-ERA4-02 from synchronous to async) now also calls `shutdownRealtimeDistribution()` which `quit()`s both clients and clears the state. This is the single teardown seam for the whole realtime layer.
+
+### 7.5 Failure Semantics and Known Limitations
+
+| Failure | Behavior | Recovery |
+|---------|----------|----------|
+| Redis temporarily disconnected | Publisher `publish` rejects, logged, returns false. Local delivery is unaffected. | ioredis auto-reconnects; new publishes work. Events published while Redis was down are **lost** for peer instances. |
+| Subscriber reconnect | ioredis re-issues PSUBSCRIBE/SUBSCRIBE automatically. Existing handler bindings survive because they live on the same client object. | Verified by integration test F. |
+| Malformed envelope | Logged, dropped, subscriber continues. | No automatic remediation; the publisher side is expected to be correct. |
+| Server shutdown | `shutdownRealtime()` quits both clients and clears state. | Re-init on next boot. |
+| Duplicate message on the wire | Possible during reconnect window. The envelope does not carry a deduplication token; dedup is the responsibility of the client (cache invalidation + refetch) and PostgreSQL (authoritative). | Not addressed here. |
+
+**Documented limitations (intentional, by design):**
+
+1. **At-most-once delivery.** Redis Pub/Sub does not retain messages. A peer instance that is disconnected when an event is published will not receive it. Recovery is the responsibility of the **client reconnect/resync work** planned for a later ERA 4 unit — not this one.
+2. **No replay.** Subscribers cannot request historical events. The same rule applies.
+3. **No exactly-once guarantee.** A duplicate publish on the wire (e.g. during reconnect) is delivered twice. The Hub already de-duplicates at the local level via the existing `connections` Set; the client is expected to refetch authoritative state from PostgreSQL on reconnect.
+4. **No persistent state in Redis.** Redis Pub/Sub is transport only. The existing `__waRedis` (BullMQ) and the new `__waRealtimePubSub` (Pub/Sub) are conceptually and physically isolated.
+5. **No presence tracking.** This packet does not introduce presence or fan-in.
+6. **No backpressure.** A slow subscriber that cannot keep up is at the mercy of the broker's client-output-buffer. For the current publish rates this is acceptable; revisit if a real incident shows the buffers hitting their limit.
 
 ---
 
