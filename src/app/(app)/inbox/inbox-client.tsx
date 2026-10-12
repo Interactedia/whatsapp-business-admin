@@ -78,13 +78,20 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
   const orderingRef = useRef(new OrderingGuard());
   const listTokenRef = useRef(new RequestToken());
   const prevTenantRef = useRef(tenantId);
-  if (prevTenantRef.current !== tenantId) {
+  useEffect(() => {
+    if (prevTenantRef.current === tenantId) return;
     seenRef.current.reset();
     orderingRef.current.reset();
+    // Drop cached entries for the previous tenant. We do NOT call
+    // cancelQueries here: that would reject the in-flight query's
+    // promise with a CancelledError, marking the query as failed and
+    // triggering TanStack Query's automatic retry. The queryFn's
+    // RequestToken guard handles the in-flight response safely
+    // (returns the previous cache, not an error).
     qc.removeQueries({ queryKey: ["conversations", prevTenantRef.current] });
     qc.removeQueries({ queryKey: ["thread", prevTenantRef.current] });
     prevTenantRef.current = tenantId;
-  }
+  }, [tenantId, qc]);
 
   const conversationsQuery = useQuery({
     queryKey: ["conversations", tenantId, search],
@@ -93,9 +100,13 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
       const qs = search ? `search=${encodeURIComponent(search)}` : "";
       const token = listTokenRef.current.next();
       const result = await apiFetch<Conversation[]>(qs ? `${base}?${qs}` : base);
+      // Stale response: return the previous cache (or the incoming
+      // result if no prior cache). We DO NOT throw — throwing would
+      // mark the query as failed and trigger TanStack Query's
+      // automatic retry loop.
       if (!listTokenRef.current.isCurrent(token) || prevTenantRef.current !== tenantId) {
-        // Stale response: discard. The active tenant has changed.
-        throw new Error("stale-tenant-response");
+        const cached = qc.getQueryData<Conversation[]>(["conversations", tenantId, search]);
+        return (cached ?? result) as Conversation[];
       }
       return result;
     },
@@ -119,6 +130,10 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
     const action: SyncAction = verdict.action;
     if (action.kind === "ignore") return;
     if (action.kind === "refetch-list" || action.kind === "refetch-list-and-thread") {
+      // Bump the request token so any in-flight response is dropped
+      // (the queryFn returns the previous cache rather than throwing).
+      // Then trigger a refetch. We do NOT call cancelQueries — that
+      // would mark the in-flight query as failed.
       listTokenRef.current.next();
       qc.invalidateQueries({ queryKey: ["conversations", tenantId] });
     }
@@ -204,10 +219,13 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
   const [showFlows, setShowFlows] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   // WA-ERA4-05: per-thread token guard for stale HTTP responses. The
-  // query below throws when the active tenant+conversation has moved
-  // on by the time the response arrives, so the cached snapshot from
-  // a previous thread cannot leak into the visible window.
+  // query below returns the previously-cached thread when the active
+  // tenant+conversation has moved on by the time the response arrives.
+  // We DO NOT throw — throwing would mark the query as failed and
+  // trigger TanStack Query's automatic retry loop. Returning the
+  // previous data keeps the visible window stable.
   const threadTokenRef = useRef(new RequestToken());
+  const qc2 = useQueryClient();
 
   const { data, isLoading } = useQuery({
     queryKey: ["thread", tenantId, conversationId],
@@ -217,7 +235,10 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
         `/api/tenants/${tenantId}/conversations/${conversationId}/messages`,
       );
       if (!threadTokenRef.current.isCurrent(token)) {
-        throw new Error("stale-thread-response");
+        // Return the current cached value, or the incoming result if
+        // there is no prior cache. Either way, no error is raised.
+        const cached = qc2.getQueryData<Thread>(["thread", tenantId, conversationId]);
+        return (cached ?? result) as Thread;
       }
       return result;
     },
