@@ -49,7 +49,14 @@ function createHub(): Hub {
       for (const info of hub.connections) {
         if (info.tenantId !== targetTenantId) continue;
         if (info.ws.readyState === WebSocket.OPEN) {
-          info.ws.send(data);
+          try {
+            info.ws.send(data);
+          } catch {
+            // Isolate send failures so a single broken socket cannot block
+            // delivery to other authorized connections on the same tenant.
+            // The close handler will perform the actual cleanup; we just
+            // ensure this iteration does not throw and break the loop.
+          }
         }
       }
     },
@@ -60,7 +67,12 @@ function createHub(): Hub {
       const data = JSON.stringify(event);
       for (const info of hub.connections) {
         if (info.ws.readyState === WebSocket.OPEN) {
-          info.ws.send(data);
+          try {
+            info.ws.send(data);
+          } catch {
+            // Same isolation rationale as publish(): one bad socket must not
+            // prevent other clients from receiving global events.
+          }
         }
       }
     },
@@ -174,11 +186,62 @@ function registerClient(hub: Hub, userId: string, tenantId: string, cookie: stri
   const info: ConnectionInfo = { ws, userId, tenantId, cookie, revalidate };
   hub.connections.add(info);
 
-  ws.on("close", () => {
+  // ponytail: cleanup runs once on whichever event fires first (close or error);
+  // a broken socket may emit error without a subsequent close, so we teardown
+  // eagerly on error to prevent a leaked interval and a Set entry that receives
+  // no further events.
+  let cleaned = false;
+  function cleanup() {
+    if (cleaned) return;
+    cleaned = true;
     clearInterval(info.revalidate);
     hub.connections.delete(info);
+  }
+
+  ws.on("close", cleanup);
+  ws.on("error", () => {
+    cleanup();
+    try {
+      ws.close();
+    } catch {
+      // Socket already in a terminal state; nothing to do.
+    }
   });
-  ws.on("error", () => ws.close());
 
   ws.send(JSON.stringify({ type: "connected", payload: { userId, tenantId } }));
+}
+
+// Exported for test-only lifecycle coverage. Not part of the public runtime API.
+export { registerClient };
+
+/**
+ * ponytail: graceful shutdown — closes every active connection with a 1001
+ * code (going away) and shuts down the WebSocketServer. Safe to call when no
+ * hub has been attached; in that case it is a no-op. Future WA-ERA4-02 can
+ * hook Redis Pub/Sub teardown at the same seam.
+ */
+export function shutdownRealtime(): void {
+  const hub = g.__waRealtime;
+  if (!hub) return;
+  for (const info of hub.connections) {
+    try {
+      clearInterval(info.revalidate);
+    } catch {
+      // ignore
+    }
+    try {
+      info.ws.close(1001, "Server shutting down");
+    } catch {
+      // socket already terminal
+    }
+  }
+  hub.connections.clear();
+  if (hub.wss) {
+    try {
+      hub.wss.close();
+    } catch {
+      // ignore
+    }
+    hub.wss = null;
+  }
 }
