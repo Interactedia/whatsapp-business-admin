@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { EXTERNAL_EVENT_TYPES, type AnyExternalEvent, type ExternalEventType } from "@/lib/events/contract";
 import { deliverCanonicalEventHttp, type CanonicalWebhookDestination, type CanonicalDeliveryResult } from "@/lib/events/delivery";
-import { suspendDeliveriesForDestination } from "@/lib/events/delivery-state";
+import { suspendDeliveriesForDestination, resumeDeliveriesForDestination } from "@/lib/events/delivery-state";
 import { validateExternalEvent } from "@/lib/events/validation";
 import type { Prisma } from "@/generated/prisma/client";
 export { WEBHOOK_SIGNATURE_HEADER, WEBHOOK_SIGNATURE_VERSION, WEBHOOK_TIMESTAMP_HEADER, signWebhookBody, verifyWebhookSignature } from "@/lib/events/webhook-signing";
@@ -47,6 +47,7 @@ export type WebhookDestinationPublic = {
   subscriptions: ExternalEventType[];
   secretVersion: number;
   lastTestAt: string | null;
+  deliverySuspensionUrl: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -62,6 +63,7 @@ type DestinationRow = {
   signingSecretEnc: string;
   secretVersion: number;
   lastTestAt: Date | null;
+  deliverySuspensionUrl?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -77,6 +79,7 @@ function toPublic(row: Omit<DestinationRow, "signingSecretEnc">): WebhookDestina
     subscriptions: row.subscriptions as ExternalEventType[],
     secretVersion: row.secretVersion,
     lastTestAt: row.lastTestAt?.toISOString() ?? null,
+    deliverySuspensionUrl: row.deliverySuspensionUrl ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -92,6 +95,7 @@ const publicSelect = {
   subscriptions: true,
   secretVersion: true,
   lastTestAt: true,
+  deliverySuspensionUrl: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -137,21 +141,77 @@ export async function updateWebhookDestination(tenantId: string, id: string, inp
   if (current.retiredAt) throw new Error("Retired destinations cannot be updated.");
   const data = webhookDestinationInputSchema.partial().parse(input);
 
-  // If the URL changed, suspend all pending deliveries so they are not
-  // automatically redirected to the new address without admin oversight.
+  // If the URL changed, suspend every dispatchable delivery so none is silently
+  // redirected to the replacement address. The URL update and the suspension
+  // commit together: there is never a committed state where the new URL is
+  // visible while affected deliveries are still dispatchable.
   const urlChanged = data.endpointUrl !== undefined && data.endpointUrl !== current.endpointUrl;
 
-  const row = await prisma.webhookDestination.update({
-    where: { id },
-    data,
-    select: publicSelect,
+  const row = await prisma.$transaction(async (tx) => {
+    if (urlChanged) {
+      await suspendDeliveriesForDestination(tx, { tenantId, destinationId: id });
+    }
+    return tx.webhookDestination.update({
+      where: { id },
+      data: urlChanged ? { ...data, deliverySuspensionUrl: current.endpointUrl } : data,
+      select: publicSelect,
+    });
   });
 
-  if (urlChanged) {
-    await suspendDeliveriesForDestination(prisma, { tenantId, destinationId: id });
+  return toPublic(row);
+}
+
+export type ResolveSuspendedStatus = "resumed" | "not_found" | "disabled" | "url_mismatch" | "confirmation_required";
+
+export interface ResolveSuspendedResult {
+  status: ResolveSuspendedStatus;
+  resumed?: number;
+  currentEndpointUrl?: string;
+  requiresRecipientAcknowledgement?: boolean;
+}
+
+/**
+ * Administrative resolution of deliveries suspended by an endpoint change.
+ *
+ * The administrator must explicitly confirm the current endpoint URL. When that
+ * URL differs from the URL that was replaced at suspension time, the caller
+ * must additionally acknowledge the recipient change, so a bulk resume can
+ * never imply authorization to redirect historical deliveries to a different
+ * recipient.
+ */
+export async function resolveSuspendedWebhookDeliveries(
+  tenantId: string,
+  id: string,
+  input: { confirmEndpointUrl?: string; acknowledgeRecipientChange?: boolean },
+): Promise<ResolveSuspendedResult> {
+  const destination = await prisma.webhookDestination.findFirst({
+    where: { tenantId, id },
+    select: { id: true, endpointUrl: true, enabled: true, retiredAt: true, deliverySuspensionUrl: true },
+  });
+  if (!destination) return { status: "not_found" };
+  if (destination.retiredAt || !destination.enabled) return { status: "disabled" };
+
+  if (!input.confirmEndpointUrl || input.confirmEndpointUrl !== destination.endpointUrl) {
+    return { status: "url_mismatch", currentEndpointUrl: destination.endpointUrl };
   }
 
-  return toPublic(row);
+  const recipientChanged =
+    Boolean(destination.deliverySuspensionUrl) && destination.deliverySuspensionUrl !== destination.endpointUrl;
+  if (recipientChanged && input.acknowledgeRecipientChange !== true) {
+    return {
+      status: "confirmation_required",
+      currentEndpointUrl: destination.endpointUrl,
+      requiresRecipientAcknowledgement: true,
+    };
+  }
+
+  const resumed = await prisma.$transaction(async (tx) => {
+    const count = await resumeDeliveriesForDestination(tx, { tenantId, destinationId: id });
+    await tx.webhookDestination.update({ where: { id }, data: { deliverySuspensionUrl: null }, select: { id: true } });
+    return count;
+  });
+
+  return { status: "resumed", resumed };
 }
 
 export async function setWebhookDestinationEnabled(tenantId: string, id: string, enabled: boolean) {

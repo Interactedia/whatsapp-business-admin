@@ -211,16 +211,23 @@ export async function listEligibleDeliveries(
 }
 
 /**
- * Suspends all PENDING and RETRY_PENDING deliveries for a destination.
- * IN_PROGRESS deliveries with active leases are excluded — their leases will
- * expire naturally and the worker will observe the destination as disabled.
- * Returns the count of suspended deliveries.
+ * Suspends every dispatchable delivery for a destination (PENDING,
+ * RETRY_PENDING and IN_PROGRESS) and fences any open attempt.
+ *
+ * Clearing `leaseOwner` invalidates in-flight leases: a worker that already
+ * claimed the delivery can no longer complete the attempt (existing lease
+ * fencing), so an endpoint change cannot be observed by the claim path, and
+ * in-flight work can never be silently redirected to the replacement URL.
+ * Open attempts are recorded as INTERRUPTED so delivery history stays coherent.
+ *
+ * Never opens a nested transaction: the caller must run this in the same
+ * transaction as the destination URL update so both commit or neither.
  */
 export async function suspendDeliveriesForDestination(
   db: CanonicalEventPrisma,
   options: { tenantId: string; destinationId: string }
 ): Promise<number> {
-  const result = await db.$executeRaw`
+  const suspended = await db.$executeRaw`
     UPDATE "CanonicalEventDelivery"
     SET
       "state" = 'SUSPENDED'::"CanonicalEventDeliveryState",
@@ -231,10 +238,27 @@ export async function suspendDeliveriesForDestination(
       AND "destinationId" = ${options.destinationId}
       AND "state" IN (
         'PENDING'::"CanonicalEventDeliveryState",
-        'RETRY_PENDING'::"CanonicalEventDeliveryState"
+        'RETRY_PENDING'::"CanonicalEventDeliveryState",
+        'IN_PROGRESS'::"CanonicalEventDeliveryState"
       )
   `;
-  return result;
+  if (suspended > 0) {
+    await db.$executeRaw`
+      UPDATE "CanonicalEventDeliveryAttempt"
+      SET
+        "completedAt" = NOW(),
+        "result" = 'INTERRUPTED'::"CanonicalEventDeliveryAttemptResult",
+        "errorSummary" = 'Suspended: destination endpoint changed'
+      WHERE "completedAt" IS NULL
+        AND "deliveryId" IN (
+          SELECT "id" FROM "CanonicalEventDelivery"
+          WHERE "tenantId" = ${options.tenantId}
+            AND "destinationId" = ${options.destinationId}
+            AND "state" = 'SUSPENDED'::"CanonicalEventDeliveryState"
+        )
+    `;
+  }
+  return suspended;
 }
 
 /**

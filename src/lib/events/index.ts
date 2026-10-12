@@ -112,6 +112,9 @@ export {
   MAX_FANOUT_DESTINATIONS_PER_PAGE,
   isSupportedEventType,
   listEligibleWebhookDestinations,
+  resolveSuspendedWebhookDeliveries,
   type EligibleFanoutDestination,
   type ListEligibleWebhookDestinationsOptions,
+  type ResolveSuspendedResult,
+  type ResolveSuspendedStatus,
 } from "./webhook-destinations";

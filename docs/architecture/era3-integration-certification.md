@@ -3,14 +3,17 @@
 ## Resumen ejecutivo
 
 La capa de relay canónico de WhatsApp Business Admin está certificada para
-producción en lo que concierne al conjunto de aceptación de WA-ERA3-07. La
+producción en lo que concierne al conjunto de aceptación de WA-ERA3-07,
+incluyendo la remediación de seguridad WA-ERA3-07-SECURITY-REMEDIATION. La
 verificación cubre los 4 familias de eventos canónicos, fanout por
 suscripción, entrega HTTP firmada con HMAC v1, retry/recovery, lease
-fencing, aislamiento de tenant, ciclo de vida de destinos, rotación de
-URL/secreto en entregas pendientes, protecciones SSRF/DNS rebinding e
+fencing, aislamiento de tenant, ciclo de vida de destinos, suspensión atómica
+de entregas ante cambios de endpoint, resolución administrativa con
+confirmación explícita de destinatario, rotación de secreto aislada,
+protecciones SSRF/DNS rebinding con fijación en tiempo de conexión e
 interoperabilidad de consumidores externos genéricos.
 
-**Resultado:** 57 / 57 checks verdes contra PostgreSQL real + receptor HTTP
+**Resultado:** 88 / 88 checks verdes contra PostgreSQL real + receptor HTTP
 local controlado.
 
 **Estado de activación:** la superficie existe, las pruebas pasan, pero
@@ -39,13 +42,13 @@ $ DATABASE_URL=postgresql://wa:wa@localhost:5434/wa_admin?schema=public \
   ENCRYPTION_KEY=daa59decb41536a1f0bf0d095b6fe6dd001b3e27e2b74bcef42df5db56ec2040 \
   npx tsx test/integration/era3-integration-certification.test.ts
 ...
-All 57 certification checks passed.
+All 88 certification checks passed.
 ```
 
 ```text
 $ npm test
- Test Files  64 passed (64)
-      Tests  672 passed (672)
+ Test Files  65 passed (65)
+      Tests  695 passed (695)
 ```
 
 ```text
@@ -70,13 +73,16 @@ $ git diff --check
 
 ```text
 $ npx next build
-(compile + bundle, exit 0)
+✓ Compiled successfully
+Error occurred prerendering page "/login"
+TypeError: Cannot read properties of null (reading 'useState')
+(exit 1 — preexistente, ver "Comandos de regression")
 ```
 
 ## Matriz de verificación
 
 La prueba `test/integration/era3-integration-certification.test.ts` cubre
-14 secciones secuenciales contra PostgreSQL real (puerto 5434) y 11
+16 secciones secuenciales contra PostgreSQL real (puerto 5434) y 14
 receptores HTTP locales (puertos efímeros) con comportamiento controlable
 (`accept`, `rate_limit`, `server_error`, `reject`).
 
@@ -91,15 +97,16 @@ receptores HTTP locales (puertos efímeros) con comportamiento controlable
 | 7 | Lease fencing concurrente | 4 workers compiten por la misma entrega; exactamente 1 gana; los otros 3 devuelven `null`; `completeDeliveryAttempt` con `leaseOwner` incorrecto es no-op | 4 |
 | 8 | Aislamiento de tenant | Cross-tenant fanout lanza error; claim con `tenantId` incorrecto devuelve `null`; `fanout` tenant B sólo ve destinos tenant B | 3 |
 | 9 | Ciclo de vida del destino | Deshabilitar no afecta entregas pre-existentes; deshabilitar bloquea nuevas; retirar preserva historial y bloquea nuevas | 4 |
-| 10 | Rotación de URL/secreto en entrega pendiente | Rotación entre fanout y dispatch; el request aterriza en la URL nueva firmada con el secreto nuevo; la URL vieja no recibe tráfico; el HMAC verifica contra el secreto nuevo y NO contra el viejo | 6 |
+| 10 | Rotación de secreto en entrega pendiente | Rotación de secreto entre fanout y dispatch; el request aterriza en el endpoint configurado del destino firmado con el secreto nuevo; el HMAC verifica contra el secreto nuevo y NO contra el viejo; la rotación no suspende la entrega | 6 |
+| 10b | Suspensión por cambio de endpoint (WA-ERA3-07-SECURITY-REMEDIATION) | El cambio de URL suspende atómicamente PENDING/RETRY_PENDING/IN_PROGRESS; las entregas suspendidas no son despachables; fencing de worker obsoleto; sin emisión HTTP; rollback transaccional; persistencia tras restart; resolución administrativa con confirmación explícita de destinatario; aislamiento cross-tenant; rotación de secreto no reanuda | 27 |
 | 11 | Protecciones SSRF | URL no-HTTPS rechazada; URL loopback sin flag de test rechazada; URL `localhost` literal rechazada; 3xx sin follow rechazado | 4 |
-| 12 | Seguridad DNS rebinding | Loopback literal rechazado (mismo vector que el atacante usaría); re-resolución per-attempt demostrada por la sección de rotación | 2 |
+| 12 | Seguridad DNS rebinding | Loopback literal rechazado; resolvedor que cambia de pública a privada tras la validación no redirige la conexión; DNS resuelto exactamente una vez por dispatch; conexión fijada a la dirección validada | 6 |
 | 13 | `createDeliveryForEvent` | Reutiliza la ruta del fanout sin duplicar lógica | 1 |
 | 14 | Inmutabilidad del outbox | `payload` y `payloadHash` estables a través de toda la relay | 1 |
 | 15 | Interoperabilidad del consumidor externo | Receptor externo recibe envelope, verifica HMAC, dispatchea por `type` | 3 |
 | 16 | Recipiente + estado + flag | `acceptedAt`, `terminalAt`, `attemptCount` correctos en cada estado | 2 |
 
-Total: **57 checks verdes**.
+Total: **88 checks verdes**.
 
 ## Cobertura detallada por capacidad
 
@@ -239,28 +246,87 @@ históricas de `CanonicalEventDelivery` son inmutables: deshabilitar o
 retirar no las borra. `listEligibleDeliveries` sigue devolviéndolas para
 que el worker pueda reclamarlas o el operador auditarlas.
 
-### 10. Rotación de URL/secreto en entrega pendiente
+### 10. Rotación de secreto en entrega pendiente
 
 ```text
 ✓ fanout materializes rotation delivery for the new destination → created=3 alreadyExists=0
-✓ rotated delivery classified as ACCEPTED
-✓ rotated delivery landed on the new URL state key → calls=1
-✓ old URL state never received the rotated request
+✓ secret rotation keeps the pending delivery dispatchable
+✓ delivery landed on its configured endpoint receiver → calls=1
+✓ no request went to the unused rotation-v1 receiver
 ✓ rotated signature verifies against NEW secret
 ✓ rotated signature does NOT verify against OLD secret
 ```
 
-**Política contractual documentada:** el worker de despacho
-(`deliverCanonicalEventHttp`) lee la URL y el secreto actuales del
-destino en el momento del dispatch, no en el momento del fanout. Una
-entrega pendiente rotada se entrega con la URL nueva y firma con el
-secreto nuevo. El HMAC verifica contra el nuevo y falla contra el viejo
-(verificado con `verifyWebhookSignature`).
+**Política contractual documentada:** la rotación del *secreto* de firma no
+mueve, suspende ni reanuda entregas. El worker de despacho
+(`deliverCanonicalEventHttp`) firma con el secreto vigente al momento del
+dispatch; una entrega pendiente firmada con el secreto nuevo verifica contra
+el nuevo y falla contra el viejo (verificado con `verifyWebhookSignature`).
+El cambio de *URL* se rige por la política de suspensión (sección 10b).
 
 Esta política preserva la inmutabilidad de la fila
-`CanonicalEventDelivery` y la auditabilidad histórica (qué entrega
-materializó con qué configuración), mientras permite a operadores
-cambiar la configuración del destino sin reescribir el histórico.
+`CanonicalEventDelivery` y la auditabilidad histórica, mientras permite a
+operadores rotar credenciales sin reescribir el histórico.
+
+### 10b. Suspensión por cambio de endpoint (WA-ERA3-07-SECURITY-REMEDIATION)
+
+```text
+✓ URL change suspends a PENDING delivery → state=SUSPENDED
+✓ suspended deliveries are not dispatchable → eligible=0
+✓ worker cannot claim a suspended delivery
+✓ suspension emitted no HTTP request → calls=0
+✓ suspension records the replaced endpoint URL
+✓ seed claim for retry-pending succeeded
+✓ delivery is RETRY_PENDING before the next change → state=RETRY_PENDING
+✓ URL change suspends a RETRY_PENDING delivery → state=SUSPENDED
+✓ in-flight delivery is claimed as IN_PROGRESS
+✓ URL change suspends an IN_PROGRESS delivery → state=SUSPENDED
+✓ suspension clears the in-flight lease
+✓ stale worker completion is fenced by suspended state
+✓ fenced in-flight attempt is recorded as INTERRUPTED
+✓ concurrent claim + URL change leaves no dispatchable delivery
+✓ concurrent claim + URL change emitted no HTTP request
+✓ four deliveries are suspended before restart
+✓ suspension survives a process/client restart
+✓ historical attempt is preserved across suspension
+✓ failed transaction rolls back the URL change
+✓ failed transaction rolls back the suspension
+✓ cross-tenant resolution is rejected
+✓ resume without matching confirmation is rejected
+✓ changed-recipient resume requires explicit acknowledgement
+✓ explicitly confirmed resume succeeds
+✓ resumed delivery returns to PENDING
+✓ resume clears the suspension context
+✓ secret rotation does not resume suspended deliveries
+```
+
+**Garantías demostradas:**
+
+- **Atomicidad.** `updateWebhookDestination` ejecuta la actualización de
+  `endpointUrl` y la suspensión de entregas dentro de una única
+  `prisma.$transaction`. Un fallo revierte ambos (rollback verificado contra
+  PostgreSQL real). No existe estado confirmado donde la URL nueva sea visible
+  mientras hay entregas aún despachables.
+- **Cobertura de estados.** La suspensión incluye `PENDING`, `RETRY_PENDING`
+  **e** `IN_PROGRESS`, limpiando `leaseOwner`/`leaseExpiresAt`. Los intentos
+  abiertos se registran como `INTERRUPTED`.
+- **Fencing.** Un worker obsoleto con un lease ya limpiado no puede completar
+  (`completeDeliveryAttempt` exige `state='IN_PROGRESS'` y coincidencia de
+  `leaseOwner`), por lo que no puede sobrescribir el estado suspendido ni
+  redirigir trabajo en curso a la URL de reemplazo.
+- **Concurrencia.** Un claim concurrente y un cambio de URL no dejan ninguna
+  entrega despachable y no emiten tráfico HTTP.
+- **Persistencia.** Las entregas suspendidas sobreviven una reconexión del
+  cliente (`$disconnect`/`$connect`).
+- **Resolución administrativa.** `resolveSuspendedWebhookDeliveries` exige la
+  URL actual confirmada explícitamente; si difiere de la URL reemplazada en la
+  suspensión, requiere `acknowledgeRecipientChange: true`. Un resume masivo no
+  implica permiso para redirigir entregas históricas a un destinatario
+  distinto. El rechazo cross-tenant devuelve `not_found`. La autorización de
+  tenant (`requireWebhookDestinationAdminApi`) rechaza a `AGENT` y a
+  administradores sin membresía (verificado en la suite unitaria).
+- **Aislamiento de rotación de secreto.** Rotar el secreto no reanuda entregas
+  suspendidas.
 
 ### 11. Protecciones SSRF
 
@@ -274,7 +340,8 @@ cambiar la configuración del destino sin reescribir el histórico.
 `resolveSafeUrl` (en `src/lib/events/delivery.ts`) verifica:
 - `protocol === "https:"` (excepto `allowLoopbackForTests` con `http:`).
 - Sin credenciales embebidas en la URL.
-- DNS lookup → filtro de IPs privadas/loopback/link-local/ULA.
+- Resolución del host (una sola vez por dispatch) → filtro de IPs
+  privadas/loopback/link-local/ULA.
 - Sin follow de 3xx.
 
 ### 12. Seguridad DNS rebinding
@@ -282,19 +349,24 @@ cambiar la configuración del destino sin reescribir el histórico.
 ```text
 ✓ literal loopback hostname is rejected as DNS rebinding surface
 ✓ literal 127.0.0.1 URL is rejected as DNS rebinding surface
+✓ DNS is resolved exactly once per dispatch attempt → calls=1
+✓ connection is pinned to the validated address → public=1
+✓ rebinding cannot reach the post-validation private address → private=0
+✓ pinned rebinding request is accepted → status=accepted
 ```
 
-`resolveSafeUrl` ejecuta `dns.lookup(hostname, { all: true })` en cada
-intento (sin caché en proceso) y aplica `isPrivateIp` al conjunto de
-direcciones resultantes. Si el resolvedor devuelve una IP privada, el
-request se rechaza con `invalid_destination` antes de cualquier conexión
-saliente.
+La defensa es **en tiempo de conexión**, no sólo de hostname:
 
-**Limitación conocida de la prueba:** un test end-to-end de un resolvedor
-que cambia de pública a privada entre dos lookups requiere un servidor
-DNS controlado. La prueba actual cubre el vector loopback (mismo
-resultado que un atacante de rebinding) y la sección 10 cubre la
-re-resolución per-attempt mediante la rotación de URL.
+- `resolveSafeUrl` resuelve el host **una sola vez** por intento y valida
+  todas las direcciones contra `isPrivateIp`.
+- `postJson` fija el socket a la dirección validada mediante un callback
+  `lookup` que ignora cualquier re-resolución posterior (respetando
+  `all: true` para happy-eyeballs). Un resolvedor que cambie de pública a
+  privada después de la validación no puede redirigir la conexión.
+- Se demostró con dos receptores loopback (dirección validada vs. dirección
+  privada posterior) y un resolvedor inyectado que cambia la respuesta: la
+  conexión aterriza en la dirección validada y la privada recibe cero
+  conexiones.
 
 ### 13. Reuso de `createDeliveryForEvent`
 
@@ -337,50 +409,53 @@ implemente la verificación HMAC v1.
 
 | Comando | Resultado |
 |---------|-----------|
-| `npm test` | 64 archivos, 672/672 tests verdes |
+| `npm test` | 65 archivos, 695/695 tests verdes |
 | `npx tsc --noEmit` | exit 0 |
 | `npx eslint .` | exit 0, 0 errors, 0 warnings |
 | `npx prisma validate` | schema válido |
-| `npx next build` | exit 0 |
+| `npx prisma migrate status` | 21 migraciones, DB up to date |
+| `npx next build` | **NOT PASS — preexistente**. `✓ Compiled successfully`, pero el prerender de `/login` y `/_global-error` falla con `TypeError: Cannot read properties of null (reading 'useState')` en `src/components/providers.tsx:9` (código sin cambios en esta tarea). El fallo se reproduce idénticamente en `2c4b339` sin esta remediación. Requiere actualización de framework fuera de scope. |
 | `git diff --check` | exit 0 |
-| `npx tsx test/integration/era3-integration-certification.test.ts` | 57/57 checks verdes |
+| `npx tsx test/integration/era3-integration-certification.test.ts` | 88/88 checks verdes |
 | `npx tsx test/integration/canonical-event-fanout.test.ts` | 22/22 checks verdes |
 | `npx tsx test/integration/canonical-delivery-state.test.ts` | 19/19 checks verdes |
 | `npx tsx test/integration/webhook-destinations-postgres.test.ts` | 22/22 checks verdes |
 | `npx tsx test/integration/canonical-event-outbox.test.ts` | 12/12 checks verdes |
 
-## Política de rotación de URL/secreto para entregas pendientes
+## Política de cambios de endpoint para entregas pendientes
 
-El relay no introduce un modelo de versionado de configuración por
-destino/entrega. La política actual es:
+La fila `CanonicalEventDelivery` se materializa en el fanout con el
+`destinationId` estable y su fecha de creación. Sobre esa base:
 
-- La fila `CanonicalEventDelivery` se materializa en el momento del
-  fanout con el `destinationId` (estable) y la fecha de creación.
-- En el dispatch, `runCanonicalDeliveryWorker` /
-  `deliverCanonicalEventHttp` releen la URL, `signingSecretEnc` y
-  `secretVersion` actuales del destino.
-- Rotar la URL o el secreto entre fanout y dispatch entrega la URL
-  nueva firmada con el secreto nuevo, como demuestra la sección 10.
-- El histórico de `CanonicalEventDelivery.attemptCount` y
-  `CanonicalEventDeliveryAttempt` refleja la URL/secreto con que se
-  intentó (a través del `transportResult` capturado), no con que se
-  materializó.
+- **Cambio de secreto:** no mueve, suspende ni reanuda entregas. El dispatch
+  firma con el secreto vigente; el HMAC verifica contra el nuevo y falla
+  contra el viejo (sección 10).
+- **Cambio de URL:** suspende atómicamente todas las entregas despachables
+  (`PENDING`, `RETRY_PENDING`, `IN_PROGRESS`) del destino en la misma
+  transacción que actualiza `endpointUrl`, registrando la URL reemplazada en
+  `WebhookDestination.deliverySuspensionUrl`. Ninguna entrega se redirige al
+  destinatario nuevo sin acción administrativa explícita (sección 10b).
+- **Resolución administrativa:** reanudar exige confirmar la URL actual; si
+  difiere de la URL reemplazada, exige además `acknowledgeRecipientChange`.
+  Sólo `ADMIN`/`SYSTEM_ADMIN` con membresía en el tenant pueden resolver;
+  `AGENT` y cross-tenant se rechazan.
+- **Histórico:** `CanonicalEventDeliveryAttempt` conserva cada intento; los
+  intentos abiertos se marcan `INTERRUPTED` al suspenderse.
 
-Si en el futuro se requiere preservar la URL/secreto original en
-entregas pendientes, eso requiere un nuevo modelo (p.ej. snapshot de
-configuración en `CanonicalEventDelivery`). Eso queda fuera del scope de
-WA-ERA3-07.
+Se descarta el rediseño de un modelo de snapshot por entrega: la garantía se
+obtiene con atomicidad + fencing + suspensión, sin nuevos formatos de
+persistencia durable ni cambios al contrato de eventos.
 
 ## Limitaciones conocidas
 
-1. **DNS rebinding end-to-end con servidor controlado:** la prueba cubre
-   el vector loopback literal y la re-resolución per-attempt; un test
-   que cambie de pública a privada requeriría un servidor DNS
-   instrumentalizado.
-2. **Rotación de secreto por entrega individual:** el relay usa la
-   configuración actual del destino. Si la auditoría exige
-   configuración histórica por entrega, hace falta un snapshot de
-   configuración versionado en `CanonicalEventDelivery`.
+1. **DNS rebinding con servidor DNS externo real:** la prueba usa un
+   resolvedor inyectado que cambia de pública a privada tras la validación,
+   junto a dos receptores loopback. Demuestra la fijación en tiempo de
+   conexión, pero no levanta un servidor DNS instrumentado.
+2. **Snapshot de configuración por entrega:** el relay no versiona
+   configuración por entrega; un cambio de URL suspende (no reescribe) las
+   entregas existentes. Si la auditoría exige configuración histórica por
+   entrega, hará falta un snapshot versionado en `CanonicalEventDelivery`.
 3. **Paginación de destinos:** el fanout soporta `maxDestinations` y
    `afterId` pero la API pública no expone `afterId` todavía. Si un
    tenant supera el tope, hace falta iterar invocando varias veces.
@@ -390,14 +465,23 @@ WA-ERA3-07.
    la integración operativa (claim loop, lease renewal, schedule) no se
    ha certificado contra un daemon porque ese despliegue está fuera de
    scope.
+5. **Build de Next.js:** `npx next build` falla en el prerender de `/login`
+   y `/_global-error` por una incompatibilidad React 19.2.8 / Next 16.3.4
+   preexistente (idéntica en `2c4b339` sin esta remediación). No afecta al
+   relay ni a esta remediación; requiere actualización de framework fuera de
+   scope.
 
 ## Estado de activación en producción
 
 **Desactivado.** La superficie existe, las pruebas PostgreSQL + HTTP
-verifican el contrato end-to-end, todos los gates del IMPLEMENTATION_PACKET
-pasan. Ningún lazo automático, daemon, cron ni scheduler de producción
-invoca todavía el relay.
+verifican el contrato end-to-end y los gates de seguridad de
+WA-ERA3-07-SECURITY-REMEDIATION pasan. Ningún lazo automático, daemon, cron
+ni scheduler de producción invoca todavía el relay.
 
 `runCanonicalDeliveryWorker` puede invocarse explícitamente desde código
 (como hace el test), pero ningún lazo automático lo activa. La activación
 queda para WA-ERA3-CERT tras la decisión explícita de producción.
+
+**ERA 3 NO está FROZEN.** Esta remediación no declara congelación de era:
+el build de Next.js queda en rojo por una causa preexistente y fuera de
+scope, y la activación de producción sigue pendiente de una unidad dedicada.

@@ -362,6 +362,10 @@ model WebhookDestination {
   signingSecretEnc String
   secretVersion   Int      @default(1)
   lastTestAt      DateTime?
+  // Endpoint URL that was replaced when in-flight/pending deliveries were
+  // suspended. Preserved so an administrative resume can require explicit
+  // acknowledgement that the recipient changed before re-dispatching.
+  deliverySuspensionUrl String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

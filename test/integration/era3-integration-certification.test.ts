@@ -275,6 +275,9 @@ async function main() {
         "rotation-v1",
         "rotation-v2",
         "external",
+        "suspend",
+        "suspend-v2",
+        "inflight",
       ],
       async ({ ports }) => {
       // For compatibility, the first 6 ports are reserved for the early
@@ -902,16 +905,17 @@ async function main() {
       await prisma.webhookDestination.update({
         where: { id: destRotation },
         data: {
-          endpointUrl: receiverUrl("rotation-v2", portRotation),
           signingSecretEnc: encrypt(rotationSecretV2),
           secretVersion: 2,
         },
       });
-      // Configure the new receiver state with the new secret.
+      // Endpoint URL is intentionally unchanged: rotating a signing secret must
+      // never move, suspend or resume a pending delivery. Only the HMAC secret
+      // rotates.
       const rotationV2State = receiverState.get("rotation-v2")!;
       rotationV2State.secret = rotationSecretV2;
-      // Process the pending delivery — it must hit the new URL and verify
-      // against the new secret.
+      // Process the pending delivery — it must stay on its configured receiver
+      // and verify against the new secret.
       const rotationProcess = await processDelivery({
         tenantId: tenantA,
         eventId: rotationEvent.id,
@@ -919,14 +923,14 @@ async function main() {
         workerId: `${runId}_rotation_worker`,
         now: new Date(),
       });
-      check("rotated delivery classified as ACCEPTED", rotationProcess?.outcome === "ACCEPTED");
+      check("secret rotation keeps the pending delivery dispatchable", rotationProcess?.outcome === "ACCEPTED");
       check(
-        "rotated delivery landed on the new URL state key",
+        "delivery landed on its configured endpoint receiver",
         rotationV2State.calls.length === 1,
         `calls=${rotationV2State.calls.length}`,
       );
       check(
-        "old URL state never received the rotated request",
+        "no request went to the unused rotation-v1 receiver",
         (receiverState.get("rotation-v1")?.calls.length ?? 0) === 0,
       );
       const rotSig = rotationV2State.calls[0]?.headers[WEBHOOK_SIGNATURE_HEADER.toLowerCase()] as string | undefined;
@@ -936,6 +940,176 @@ async function main() {
       const rotValidV1 = verifyWebhookSignature(rotBody, rotationSecretV1, rotTs ?? null, rotSig ?? null);
       check("rotated signature verifies against NEW secret", rotValidV2 === true);
       check("rotated signature does NOT verify against OLD secret", rotValidV1 === false);
+
+      // -----------------------------------------------------------------
+      // 9b. Endpoint-change suspension — WA-ERA3-07 security remediation.
+      //
+      // Changing a destination URL must atomically suspend every dispatchable
+      // delivery (PENDING / RETRY_PENDING / IN_PROGRESS), never silently
+      // redirect in-flight work, survive restart, and require explicit
+      // administrative confirmation before any changed-recipient re-dispatch.
+      // -----------------------------------------------------------------
+      const { updateWebhookDestination, resolveSuspendedWebhookDeliveries } = await import("@/lib/events/webhook-destinations");
+      const { listSuspendedDeliveriesForDestination, suspendDeliveriesForDestination } = await import("@/lib/events/delivery-state");
+
+      const suspendSecret = trackingSecretVersion("suspend");
+      const suspendLoopbackUrl = receiverUrl("suspend", receiverPorts.get("suspend")!);
+      const destSuspend = await createTestDestination({
+        tenantId: tenantA,
+        name: "dest_suspend",
+        url: suspendLoopbackUrl,
+        secret: suspendSecret,
+        subscriptions: [EXTERNAL_EVENT_TYPES.INBOUND_MESSAGE_RECEIVED],
+      });
+      const makeSuspendEvent = (suffix: string) =>
+        addCanonicalEvent(prisma, buildInboundMessageReceivedEvent({
+          tenantId: tenantA,
+          conversationId: `${tenantA}_conv`,
+          contactId: `${tenantA}_contact`,
+          phoneNumberId: `${tenantA}_phone`,
+          wabaAccountId: `${tenantA}_waba`,
+          messageId: `${runId}_msg_suspend_${suffix}`,
+          providerMessageId: `${runId}_msg_suspend_${suffix}.provider`,
+          type: "TEXT",
+          preview: suffix,
+          occurredAt: "2026-10-12T10:20:00.000Z",
+        }));
+
+      const urlV1 = "https://dest-suspend.example.test/v1";
+      const urlV2 = "https://dest-suspend.example.test/v2";
+      const urlV3 = "https://dest-suspend.example.test/v3";
+
+      // (a) URL change suspends a PENDING delivery atomically and emits nothing.
+      const suspendEvent1 = await makeSuspendEvent("a");
+      insertedEventIds.push(suspendEvent1.id);
+      await fanoutCanonicalEvent(prisma, { tenantId: tenantA, eventId: suspendEvent1.id });
+      await updateWebhookDestination(tenantA, destSuspend, { endpointUrl: urlV1 });
+      const suspended1 = await getDeliveryRecord(prisma, { tenantId: tenantA, eventId: suspendEvent1.id, destinationId: destSuspend });
+      check("URL change suspends a PENDING delivery", suspended1?.state === "SUSPENDED", `state=${suspended1?.state}`);
+      const eligible1 = await listEligibleDeliveries(prisma, { tenantId: tenantA, destinationId: destSuspend });
+      check("suspended deliveries are not dispatchable", eligible1.length === 0, `eligible=${eligible1.length}`);
+      const noDispatch = await processDelivery({ tenantId: tenantA, eventId: suspendEvent1.id, destinationId: destSuspend, workerId: `${runId}_susp_w1`, now: new Date() });
+      check("worker cannot claim a suspended delivery", noDispatch === null);
+      check("suspension emitted no HTTP request", (receiverState.get("suspend")?.calls.length ?? 0) === 0, `calls=${receiverState.get("suspend")?.calls.length ?? 0}`);
+      const destAfterChange = await prisma.webhookDestination.findUniqueOrThrow({ where: { id: destSuspend } });
+      check("suspension records the replaced endpoint URL", destAfterChange.deliverySuspensionUrl === suspendLoopbackUrl, `recorded=${destAfterChange.deliverySuspensionUrl}`);
+
+      // (b) RETRY_PENDING is suspended too.
+      const suspendEvent2 = await makeSuspendEvent("b");
+      insertedEventIds.push(suspendEvent2.id);
+      await fanoutCanonicalEvent(prisma, { tenantId: tenantA, eventId: suspendEvent2.id });
+      const seedClaim = await claimDelivery(prisma, { tenantId: tenantA, eventId: suspendEvent2.id, destinationId: destSuspend, workerId: `${runId}_seed`, now: new Date(), leaseMs: 60_000 });
+      check("seed claim for retry-pending succeeded", seedClaim !== null);
+      await completeDeliveryAttempt(prisma, {
+        deliveryId: seedClaim!.delivery.id,
+        tenantId: tenantA,
+        leaseOwner: `${runId}_seed`,
+        attemptNumber: seedClaim!.attempt.attemptNumber,
+        result: "RETRYABLE",
+        httpStatus: 500,
+        errorSummary: "seeded retry",
+        nextRetryAt: new Date(Date.now() + 3_600_000),
+        now: new Date(),
+      });
+      const retryRow = await getDeliveryRecord(prisma, { tenantId: tenantA, eventId: suspendEvent2.id, destinationId: destSuspend });
+      check("delivery is RETRY_PENDING before the next change", retryRow?.state === "RETRY_PENDING", `state=${retryRow?.state}`);
+      await updateWebhookDestination(tenantA, destSuspend, { endpointUrl: urlV2 });
+      const retryAfter = await getDeliveryRecord(prisma, { tenantId: tenantA, eventId: suspendEvent2.id, destinationId: destSuspend });
+      check("URL change suspends a RETRY_PENDING delivery", retryAfter?.state === "SUSPENDED", `state=${retryAfter?.state}`);
+
+      // (c) IN_PROGRESS is suspended and the stale worker is fenced.
+      const suspendEvent3 = await makeSuspendEvent("c");
+      insertedEventIds.push(suspendEvent3.id);
+      await fanoutCanonicalEvent(prisma, { tenantId: tenantA, eventId: suspendEvent3.id });
+      const inflightClaim = await claimDelivery(prisma, { tenantId: tenantA, eventId: suspendEvent3.id, destinationId: destSuspend, workerId: `${runId}_inflight`, now: new Date(), leaseMs: 60_000 });
+      check("in-flight delivery is claimed as IN_PROGRESS", inflightClaim?.delivery.state === "IN_PROGRESS", `state=${inflightClaim?.delivery.state}`);
+      await updateWebhookDestination(tenantA, destSuspend, { endpointUrl: urlV3 });
+      const inflightAfter = await getDeliveryRecord(prisma, { tenantId: tenantA, eventId: suspendEvent3.id, destinationId: destSuspend });
+      check("URL change suspends an IN_PROGRESS delivery", inflightAfter?.state === "SUSPENDED", `state=${inflightAfter?.state}`);
+      check("suspension clears the in-flight lease", inflightAfter?.leaseOwner === null, `leaseOwner=${inflightAfter?.leaseOwner}`);
+      const staleCompletion = await completeDeliveryAttempt(prisma, {
+        deliveryId: inflightClaim!.delivery.id,
+        tenantId: tenantA,
+        leaseOwner: `${runId}_inflight`,
+        attemptNumber: inflightClaim!.attempt.attemptNumber,
+        result: "ACCEPTED",
+        httpStatus: 202,
+        now: new Date(),
+      });
+      check("stale worker completion is fenced by suspended state", staleCompletion === null);
+      const fencedAttempts = await listDeliveryAttempts(prisma, inflightClaim!.delivery.id);
+      check("fenced in-flight attempt is recorded as INTERRUPTED", fencedAttempts[fencedAttempts.length - 1]?.result === "INTERRUPTED", `result=${fencedAttempts[fencedAttempts.length - 1]?.result}`);
+
+      // (c2) Concurrent claim + URL change: whichever wins, no dispatchable
+      // delivery remains, and no request is emitted.
+      const suspendEvent3b = await makeSuspendEvent("c2");
+      insertedEventIds.push(suspendEvent3b.id);
+      await fanoutCanonicalEvent(prisma, { tenantId: tenantA, eventId: suspendEvent3b.id });
+      const raceInterleave = await Promise.all([
+        claimDelivery(prisma, { tenantId: tenantA, eventId: suspendEvent3b.id, destinationId: destSuspend, workerId: `${runId}_race`, now: new Date(), leaseMs: 60_000 }),
+        updateWebhookDestination(tenantA, destSuspend, { endpointUrl: "https://dest-suspend.example.test/race" }),
+      ]);
+      const raceRow = await getDeliveryRecord(prisma, { tenantId: tenantA, eventId: suspendEvent3b.id, destinationId: destSuspend });
+      check("concurrent claim + URL change leaves no dispatchable delivery", raceRow?.state === "SUSPENDED", `state=${raceRow?.state} claimed=${raceInterleave[0] !== null}`);
+      check("concurrent claim + URL change emitted no HTTP request", (receiverState.get("suspend")?.calls.length ?? 0) === 0, `calls=${receiverState.get("suspend")?.calls.length ?? 0}`);
+
+      // (d) Durability across a client restart.
+      const suspendedBeforeRestart = await listSuspendedDeliveriesForDestination(prisma, { tenantId: tenantA, destinationId: destSuspend });
+      check("four deliveries are suspended before restart", suspendedBeforeRestart.length === 4, `count=${suspendedBeforeRestart.length}`);
+      await prisma.$disconnect();
+      await prisma.$connect();
+      const suspendedAfterRestart = await listSuspendedDeliveriesForDestination(prisma, { tenantId: tenantA, destinationId: destSuspend });
+      check("suspension survives a process/client restart", suspendedAfterRestart.length === 4, `count=${suspendedAfterRestart.length}`);
+
+      // (e) History preservation: the seeded retry attempt remains recorded.
+      const historyAttempts = await listDeliveryAttempts(prisma, seedClaim!.delivery.id);
+      check("historical attempt is preserved across suspension", historyAttempts.length >= 1 && historyAttempts[0].result === "RETRYABLE", `attempts=${historyAttempts.length}`);
+
+      // (f) Transaction atomicity: a failure rolls back both the URL and the suspension.
+      const rollbackEvent = await makeSuspendEvent("d");
+      insertedEventIds.push(rollbackEvent.id);
+      await fanoutCanonicalEvent(prisma, { tenantId: tenantA, eventId: rollbackEvent.id });
+      const rollbackUrlBefore = (await prisma.webhookDestination.findUniqueOrThrow({ where: { id: destSuspend }, select: { endpointUrl: true } })).endpointUrl;
+      let rollbackThrew = false;
+      try {
+        await prisma.$transaction(async (tx) => {
+          await suspendDeliveriesForDestination(tx, { tenantId: tenantA, destinationId: destSuspend });
+          await tx.webhookDestination.update({ where: { id: destSuspend }, data: { endpointUrl: "https://dest-suspend.example.test/rolled-back" }, select: { id: true } });
+          throw new Error("forced failure after suspend");
+        });
+      } catch {
+        rollbackThrew = true;
+      }
+      const rollbackUrlAfter = (await prisma.webhookDestination.findUniqueOrThrow({ where: { id: destSuspend }, select: { endpointUrl: true } })).endpointUrl;
+      const rollbackRow = await getDeliveryRecord(prisma, { tenantId: tenantA, eventId: rollbackEvent.id, destinationId: destSuspend });
+      check("failed transaction rolls back the URL change", rollbackThrew && rollbackUrlAfter === rollbackUrlBefore, `after=${rollbackUrlAfter}`);
+      check("failed transaction rolls back the suspension", rollbackRow?.state === "PENDING", `state=${rollbackRow?.state}`);
+
+      // (g) Administrative resolution with explicit recipient confirmation.
+      const currentDestUrl = (await prisma.webhookDestination.findUniqueOrThrow({ where: { id: destSuspend }, select: { endpointUrl: true } })).endpointUrl;
+      const crossTenantResolve = await resolveSuspendedWebhookDeliveries(tenantB, destSuspend, { confirmEndpointUrl: currentDestUrl, acknowledgeRecipientChange: true });
+      check("cross-tenant resolution is rejected", crossTenantResolve.status === "not_found", `status=${crossTenantResolve.status}`);
+      const wrongConfirm = await resolveSuspendedWebhookDeliveries(tenantA, destSuspend, { confirmEndpointUrl: "https://wrong.example.test/x" });
+      check("resume without matching confirmation is rejected", wrongConfirm.status === "url_mismatch", `status=${wrongConfirm.status}`);
+      const noAck = await resolveSuspendedWebhookDeliveries(tenantA, destSuspend, { confirmEndpointUrl: currentDestUrl });
+      check("changed-recipient resume requires explicit acknowledgement", noAck.status === "confirmation_required", `status=${noAck.status}`);
+      const resumed = await resolveSuspendedWebhookDeliveries(tenantA, destSuspend, { confirmEndpointUrl: currentDestUrl, acknowledgeRecipientChange: true });
+      check("explicitly confirmed resume succeeds", resumed.status === "resumed" && (resumed.resumed ?? 0) >= 4, `status=${resumed.status} resumed=${resumed.resumed}`);
+      const resumedRow = await getDeliveryRecord(prisma, { tenantId: tenantA, eventId: suspendEvent1.id, destinationId: destSuspend });
+      check("resumed delivery returns to PENDING", resumedRow?.state === "PENDING", `state=${resumedRow?.state}`);
+      const clearedContext = await prisma.webhookDestination.findUniqueOrThrow({ where: { id: destSuspend }, select: { deliverySuspensionUrl: true } });
+      check("resume clears the suspension context", clearedContext.deliverySuspensionUrl === null);
+
+      // (h) Secret rotation does not resume suspended deliveries.
+      await updateWebhookDestination(tenantA, destSuspend, { endpointUrl: "https://dest-suspend.example.test/v4" });
+      const suspendedBeforeRotation = (await listSuspendedDeliveriesForDestination(prisma, { tenantId: tenantA, destinationId: destSuspend })).length;
+      await prisma.webhookDestination.update({ where: { id: destSuspend }, data: { signingSecretEnc: encrypt(trackingSecretVersion("rotated")), secretVersion: 9 } });
+      const suspendedAfterRotation = (await listSuspendedDeliveriesForDestination(prisma, { tenantId: tenantA, destinationId: destSuspend })).length;
+      check(
+        "secret rotation does not resume suspended deliveries",
+        suspendedBeforeRotation >= 1 && suspendedAfterRotation === suspendedBeforeRotation,
+        `before=${suspendedBeforeRotation} after=${suspendedAfterRotation}`,
+      );
 
       // -----------------------------------------------------------------
       // 10. SSRF protections.
@@ -981,22 +1155,18 @@ async function main() {
       // -----------------------------------------------------------------
       // 11. DNS rebinding safety.
       //
-      // The transport resolves the destination URL via dns.lookup on every
-      // attempt (no in-process cache). To exercise the per-attempt
-      // re-resolution guard without standing up a real DNS server, we
-      // verify two properties end-to-end:
+      // The transport resolves the destination via the resolver exactly once
+      // per dispatch, validates every returned address against the private-IP
+      // guard, and pins the TCP connection to the validated address. This
+      // proves two properties end-to-end:
       //
       //   (a) A literal loopback hostname (e.g. `localhost`, `127.0.0.1`)
       //       is rejected by the safety check, even though the URL is
       //       well-formed HTTPS.
-      //   (b) The transport re-resolves the host on every call by checking
-      //       that two consecutive attempts to the same destination hit
-      //       the receiver with the URL and the secret resolved at the
-      //       dispatch time (which the rotation test already covered).
-      //
-      // A true DNS rebinding test (public → private flip) would require a
-      // controlled DNS server; the per-attempt lookup and the private-IP
-      // guard are documented in era3-integration-certification.md.
+      //   (b) A resolver that flips from a public to a private address after
+      //       validation cannot redirect the connection, because the socket
+      //       is pinned to the first validated address and DNS is not
+      //       re-resolved before connect.
       // -----------------------------------------------------------------
       const rebindLiteral = await deliverCanonicalEventHttp(
         { id: destHmac, tenantId: tenantA, url: "https://localhost/wa", signingSecret: "x" },
@@ -1008,10 +1178,48 @@ async function main() {
         envelope,
       );
       check("literal 127.0.0.1 URL is rejected as DNS rebinding surface", rebindLiteralIpv4.status === "invalid_destination");
-      // The rotation test (section 9) already proved per-attempt
-      // re-resolution: when the destination URL is changed between fanout
-      // and dispatch, the next request lands at the new URL, which is
-      // only possible if the host is re-resolved on each attempt.
+
+      // Connection-time rebinding defense: DNS is resolved exactly once,
+      // validated, and the TCP connection is pinned to that validated address.
+      // A resolver that would answer with a different (private) address after
+      // validation cannot redirect the request.
+      let rebindResolveCalls = 0;
+      let rebindPublicCalls = 0;
+      let rebindPrivateCalls = 0;
+      const rebindPublic = http.createServer((_req, res) => {
+        rebindPublicCalls += 1;
+        res.writeHead(202, { "content-type": "application/json" });
+        res.end("{}");
+      });
+      const rebindPrivate = http.createServer((_req, res) => {
+        rebindPrivateCalls += 1;
+        res.writeHead(202, { "content-type": "application/json" });
+        res.end("{}");
+      });
+      try {
+        await new Promise<void>((resolve) => rebindPublic.listen(0, "127.0.0.1", () => resolve()));
+        const rebindPort = (rebindPublic.address() as { port: number }).port;
+        await new Promise<void>((resolve) => rebindPrivate.listen(rebindPort, "127.0.0.2", () => resolve()));
+        const rebindResult = await deliverCanonicalEventHttp(
+          { id: destHmac, tenantId: tenantA, url: `http://rebind.example.test:${rebindPort}/hook`, signingSecret: "x" },
+          envelope,
+          {
+            allowLoopbackForTests: true,
+            resolveHost: async () => {
+              rebindResolveCalls += 1;
+              // Attacker-controlled answer: first (validated) public, then private.
+              return rebindResolveCalls === 1 ? ["127.0.0.1"] : ["127.0.0.2"];
+            },
+          },
+        );
+        check("DNS is resolved exactly once per dispatch attempt", rebindResolveCalls === 1, `calls=${rebindResolveCalls}`);
+        check("connection is pinned to the validated address", rebindPublicCalls === 1, `public=${rebindPublicCalls}`);
+        check("rebinding cannot reach the post-validation private address", rebindPrivateCalls === 0, `private=${rebindPrivateCalls}`);
+        check("pinned rebinding request is accepted", rebindResult.status === "accepted", `status=${rebindResult.status}`);
+      } finally {
+        await new Promise<void>((resolve) => rebindPrivate.close(() => resolve()));
+        await new Promise<void>((resolve) => rebindPublic.close(() => resolve()));
+      }
 
       // -----------------------------------------------------------------
       // 12. createDeliveryForEvent (the public WA-ERA3-05 helper) still

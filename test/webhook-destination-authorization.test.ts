@@ -58,4 +58,28 @@ describe("webhook destination authorization", () => {
     const response = await GET(new Request("https://example.test/api/tenants/tenant_2/webhook-destinations"), { params: Promise.resolve({ tenantId: "tenant_2" }) });
     expect(response.status).toBe(403);
   });
+
+  it("rejects unauthenticated access to the suspended-delivery resolution route", async () => {
+    auth.mockResolvedValue(null);
+    const { POST } = await import("@/app/api/tenants/[tenantId]/webhook-destinations/[destinationId]/suspended/route");
+    const response = await POST(new Request("https://example.test/api/tenants/tenant_1/webhook-destinations/dest_1/suspended", { method: "POST", body: "{}" }), { params: Promise.resolve({ tenantId: "tenant_1", destinationId: "dest_1" }) });
+    expect(response.status).toBe(401);
+  });
+
+  it("rejects AGENT resolving suspended deliveries", async () => {
+    auth.mockResolvedValue({ user: { id: "agent_1", role: "AGENT" } });
+    tenantMembershipFindUnique.mockResolvedValue({ id: "m_1", user: { id: "agent_1", active: true, role: "AGENT" }, tenant: { id: "tenant_1", name: "Tenant" } });
+    const { POST } = await import("@/app/api/tenants/[tenantId]/webhook-destinations/[destinationId]/suspended/route");
+    const response = await POST(new Request("https://example.test/api/tenants/tenant_1/webhook-destinations/dest_1/suspended", { method: "POST", body: "{}" }), { params: Promise.resolve({ tenantId: "tenant_1", destinationId: "dest_1" }) });
+    expect(response.status).toBe(403);
+  });
+
+  it("rejects cross-tenant ADMIN resolving suspended deliveries", async () => {
+    auth.mockResolvedValue({ user: { id: "admin_1", role: "ADMIN" } });
+    userFindUnique.mockResolvedValue({ id: "admin_1", active: true, role: "ADMIN" });
+    tenantFindUnique.mockResolvedValue({ id: "tenant_2" });
+    const { POST } = await import("@/app/api/tenants/[tenantId]/webhook-destinations/[destinationId]/suspended/route");
+    const response = await POST(new Request("https://example.test/api/tenants/tenant_2/webhook-destinations/dest_1/suspended", { method: "POST", body: "{}" }), { params: Promise.resolve({ tenantId: "tenant_2", destinationId: "dest_1" }) });
+    expect(response.status).toBe(403);
+  });
 });

@@ -82,6 +82,12 @@ export interface CanonicalHttpTransportOptions {
   workerId?: string;
   leaseMs?: number;
   retryPolicy?: DeliveryRetryPolicy;
+  /**
+   * Test seam to inject a controlled resolver. Production always uses the
+   * system resolver; the value is resolved exactly once per dispatch so the
+   * TCP connection is pinned to the address that passed validation.
+   */
+  resolveHost?: (hostname: string) => Promise<string[]>;
 }
 
 type ResolvedUrl = { url: URL; addresses: string[] };
@@ -98,7 +104,7 @@ function isPrivateIp(address: string): boolean {
   return ip === "::" || ip === "::1" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe8") || ip.startsWith("fe9") || ip.startsWith("fea") || ip.startsWith("feb") || ip.startsWith("::ffff:127.") || ip.startsWith("::ffff:10.") || ip.startsWith("::ffff:192.168.");
 }
 
-async function resolveSafeUrl(rawUrl: string, allowLoopbackForTests: boolean): Promise<ResolvedUrl> {
+async function resolveSafeUrl(rawUrl: string, allowLoopbackForTests: boolean, resolveHost?: (hostname: string) => Promise<string[]>): Promise<ResolvedUrl> {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -110,7 +116,8 @@ async function resolveSafeUrl(rawUrl: string, allowLoopbackForTests: boolean): P
 
   const hostname = url.hostname;
   const literalIp = net.isIP(hostname) ? hostname : null;
-  const addresses = literalIp ? [literalIp] : (await dns.lookup(hostname, { all: true })).map((entry) => entry.address);
+  const resolve = resolveHost ?? (async (host: string) => (await dns.lookup(host, { all: true })).map((entry) => entry.address));
+  const addresses = literalIp ? [literalIp] : await resolve(hostname);
   if (!addresses.length) throw new Error("Destination host did not resolve.");
   const unsafe = addresses.filter(isPrivateIp);
   if (unsafe.length && !allowLoopbackForTests) throw new Error("Unsafe destination network target.");
@@ -128,7 +135,16 @@ async function postJson(resolved: ResolvedUrl, body: string, headers: Record<str
       method: "POST",
       headers: { ...headers, "Content-Length": String(Buffer.byteLength(body)) },
       servername: resolved.url.hostname,
-      lookup: (_hostname, _options, callback) => callback(null, address, family),
+      // Pin the connection to the address that passed SSRF validation. DNS is
+      // resolved once (before connect); later changes (rebinding) cannot
+      // redirect this socket, and `all` is honored for happy-eyeballs callers.
+      lookup: (_hostname, lookupOptions, callback) => {
+        if (lookupOptions?.all) {
+          callback(null, [{ address, family }]);
+          return;
+        }
+        callback(null, address, family);
+      },
     }, (response) => {
       const status = response.statusCode || 0;
       const retryAfter = response.headers["retry-after"]?.toString() ?? null;
@@ -143,7 +159,7 @@ async function postJson(resolved: ResolvedUrl, body: string, headers: Record<str
 
 export async function validateCanonicalDestination(destination: CanonicalWebhookDestination, options: CanonicalHttpTransportOptions = {}): Promise<void> {
   if (!destination.id || !destination.tenantId || !destination.url) throw new Error("Destination id, tenantId and url are required.");
-  await resolveSafeUrl(destination.url, options.allowLoopbackForTests === true);
+  await resolveSafeUrl(destination.url, options.allowLoopbackForTests === true, options.resolveHost);
 }
 
 export async function deliverCanonicalEventHttp(
@@ -159,7 +175,7 @@ export async function deliverCanonicalEventHttp(
   const timeoutMs = clampInteger(options.timeoutMs, DEFAULT_DELIVERY_TIMEOUT_MS, MAX_DELIVERY_TIMEOUT_MS);
   let resolved: ResolvedUrl;
   try {
-    resolved = await resolveSafeUrl(destination.url, options.allowLoopbackForTests === true);
+    resolved = await resolveSafeUrl(destination.url, options.allowLoopbackForTests === true, options.resolveHost);
   } catch (error) {
     return { status: "invalid_destination", eventId: event.id, destinationId: destination.id, tenantId, reason: error instanceof Error ? error.message : "Invalid destination." };
   }
