@@ -76,3 +76,38 @@ export async function requireTenantAdminApi(userId: string, tenantId: string) {
   }
   return membership;
 }
+
+export async function requireWebhookDestinationAdminApi(userId: string, tenantId: string) {
+  const membership = await verifyMembership(userId, tenantId);
+  if (membership) {
+    const role = membership.user.role;
+    if (role !== "ADMIN" && role !== "SYSTEM_ADMIN") {
+      throw new HttpError(403, "Tenant admin required");
+    }
+    return { mode: "tenant_membership" as const, membership };
+  }
+
+  const [user, tenant] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { id: true, active: true, role: true } }),
+    prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } }),
+  ]);
+  if (!user?.active || user.role !== "SYSTEM_ADMIN" || !tenant) {
+    throw new HttpError(403, "Tenant admin required");
+  }
+  return { mode: "system_admin" as const, tenantId };
+}
+
+export async function requireWebhookDestinationAdmin(tenantId: string) {
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
+  const memberships = await getMemberships(session.user.id);
+  try {
+    await requireWebhookDestinationAdminApi(session.user.id, tenantId);
+    return { session, memberships, authorized: true };
+  } catch (error) {
+    if (error instanceof HttpError && error.status === 403) {
+      return { session, memberships, authorized: false };
+    }
+    throw error;
+  }
+}

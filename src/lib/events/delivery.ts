@@ -3,6 +3,7 @@ import http from "node:http";
 import https from "node:https";
 import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
+import { signWebhookBody } from "@/lib/events/webhook-signing";
 import type { AnyExternalEvent } from "@/lib/events/contract";
 import {
   claimDelivery,
@@ -28,6 +29,7 @@ export interface CanonicalWebhookDestination {
   id: string;
   tenantId: string;
   url: string;
+  signingSecret?: string;
 }
 
 export type CanonicalDeliveryResult =
@@ -163,10 +165,13 @@ export async function deliverCanonicalEventHttp(
   }
 
   try {
-    const response = await postJson(resolved, JSON.stringify(validateExternalEvent(event)), {
+    const body = JSON.stringify(validateExternalEvent(event));
+    const signatureHeaders = destination.signingSecret ? signWebhookBody(body, destination.signingSecret) : null;
+    const response = await postJson(resolved, body, {
       "Content-Type": "application/json",
       "X-Canonical-Event-Id": event.id,
       "X-Canonical-Tenant-Id": tenantId,
+      ...(signatureHeaders ? { "X-WBA-Timestamp": signatureHeaders.timestamp, "X-WBA-Signature": signatureHeaders.signature } : {}),
     }, timeoutMs);
     if (response.status >= 300 && response.status < 400) {
       return { status: "invalid_destination", eventId: event.id, destinationId: destination.id, tenantId, reason: "HTTP redirects are not followed." };

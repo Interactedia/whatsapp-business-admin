@@ -11,6 +11,7 @@ import {
   Workflow,
   Building2,
   ScrollText,
+  Webhook,
   type LucideIcon,
 } from "lucide-react";
 
@@ -46,6 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "submissions", label: "Submissions", icon: ListChecks, tenantScoped: true },
   { key: "broadcasts", label: "Broadcasts", icon: Megaphone, adminOnly: true, tenantScoped: true },
   { key: "settings", label: "Settings", icon: Settings, adminOnly: true, tenantScoped: true },
+  { key: "settings/webhooks", label: "Webhooks salientes", icon: Webhook, adminOnly: true, tenantScoped: true },
   { key: "developer", label: "API", icon: Code2, adminOnly: true, tenantScoped: true },
   { key: "users", label: "Users", icon: UserCog, adminOnly: true, tenantScoped: true },
   // System administration (SYSTEM_ADMIN only — no operational menus)

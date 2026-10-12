@@ -83,10 +83,12 @@ describe("canonical event HTTP delivery", () => {
     });
 
     try {
-      const result = await deliverCanonicalEventHttp(destination(server.url), sent, { allowLoopbackForTests: true });
+      const result = await deliverCanonicalEventHttp({ ...destination(server.url), signingSecret: "secret" }, sent, { allowLoopbackForTests: true });
       expect(result).toMatchObject({ status: "accepted", httpStatus: 202, eventId: sent.id, tenantId });
       expect(headers["content-type"]).toBe("application/json");
       expect(headers["x-canonical-event-id"]).toBe(sent.id);
+      expect(headers["x-wba-timestamp"]).toEqual(expect.any(String));
+      expect(headers["x-wba-signature"]).toMatch(/^v1=/);
       expect(JSON.parse(body)).toEqual(sent);
     } finally {
       await server.close();

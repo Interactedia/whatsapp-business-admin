@@ -95,6 +95,7 @@ model Tenant {
   outboxEvents           OutboxEvent[]
   canonicalEventOutbox   CanonicalEventOutbox[]
   canonicalDeliveries    CanonicalEventDelivery[]
+  webhookDestinations    WebhookDestination[]
   outboundAttempts       OutboundSendAttempt[]
 }
 
@@ -346,6 +347,25 @@ enum CanonicalEventDeliveryAttemptResult {
   RETRYABLE
   TERMINAL
   INTERRUPTED
+}
+
+model WebhookDestination {
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name            String
+  endpointUrl     String
+  enabled         Boolean  @default(true)
+  retiredAt       DateTime?
+  subscriptions   String[]
+  signingSecretEnc String
+  secretVersion   Int      @default(1)
+  lastTestAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([tenantId, enabled])
+  @@index([tenantId, retiredAt])
 }
 
 model CanonicalEventDelivery {
