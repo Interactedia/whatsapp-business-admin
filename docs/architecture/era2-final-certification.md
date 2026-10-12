@@ -3,7 +3,8 @@
 **Task ID:** WA-ERA2-14-FINAL-CERTIFICATION
 **Status:** FROZEN
 **Date:** 2026-10-11
-**Baseline Commit:** 93c39319e4ad880c2023cb1b2ae0683af6029c92
+**Pre-certification baseline:** `93c39319e4ad880c2023cb1b2ae0683af6029c92` (WA-ERA2-13 final commit)
+**Frozen commit:** `dc8e84f23bd5dfd9c48a912beb5f2384967b5555` (includes the observability import fix and this certification record)
 **Certification Layer:** layer-2-workers
 **Executor:** autonomous implementation
 
@@ -14,12 +15,13 @@
 | Check | Result |
 |---|---|
 | Git branch | `main` |
-| HEAD commit | `93c39319e4ad880c2023cb1b2ae0683af6029c92` |
+| Pre-certification baseline (WA-ERA2-13) | `93c39319e4ad880c2023cb1b2ae0683af6029c92` |
+| Certification commit | `dc8e84f23bd5dfd9c48a912beb5f2384967b5555` |
 | Worktree state | Clean (no uncommitted changes) |
 | Merge conflicts | None |
 | Pre-existing changes | None |
 
-Baseline commit matches the documented certification baseline from WA-ERA2-13.
+**Baseline vs. frozen commit reconciliation.** The pre-certification baseline `93c39319` is the WA-ERA2-13 final commit whose evidence was certified in `docs/architecture/era2-integration-failure-evidence.md`. During WA-ERA2-14, one production import changed (`src/lib/queue/observability.ts` — `isQueueConfigured` now imported via the `@/lib/queue` barrel so the module boundary remains mockable; no behavioral change). Because of this, the final certification re-executed every real-infrastructure integration suite against the final code state. The frozen commit is the certification commit `dc8e84f`, not the pre-certification baseline.
 
 ---
 
@@ -139,14 +141,40 @@ Result:   The schema at prisma/schema.prisma is valid
 Exit:     0
 ```
 
-### Real Infrastructure Integration Suites (from WA-ERA2-13)
+### Real Infrastructure Integration Suites (re-executed against final frozen code)
 ```
-Command:  Sequential execution of 19 integration suites
+Command:  npx tsx test/integration/<suite>.test.ts  (executed sequentially, 19 suites)
 Suites:   19/19 passed
 Checks:   217/217 passed
-Exit:     0
+Exit:     0 (per suite)
 ```
-See `docs/architecture/era2-integration-failure-evidence.md` for per-suite detail.
+
+Re-executed during WA-ERA2-14 against the final code state (including the observability import fix), confirming the WA-ERA2-13 evidence still holds on the frozen commit:
+
+| Suite | Command | Checks | Exit |
+|---|---|---|---|
+| Redis Failure Handling | `npx tsx test/integration/redis-failure-handling.test.ts` | 7/7 | 0 |
+| Redis Integration | `npx tsx test/integration/redis-integration.test.ts` | 11/11 | 0 |
+| BullMQ Integration | `npx tsx test/integration/bullmq-integration.test.ts` | 17/17 | 0 |
+| BullMQ Producers | `npx tsx test/integration/bullmq-producers.test.ts` | 12/12 | 0 |
+| Outbox PostgreSQL | `npx tsx test/integration/outbox-postgres.test.ts` | 7/7 | 0 |
+| Outbox Dispatch | `npx tsx test/integration/outbox-dispatch.test.ts` | 5/5 | 0 |
+| Stalled Job Recovery | `npx tsx test/integration/stalled-job-recovery.test.ts` | 17/17 | 0 |
+| Outbound Attempt PostgreSQL | `npx tsx test/integration/outbound-attempt-postgres.test.ts` | 23/23 | 0 |
+| Inbound Outbox | `npx tsx test/integration/inbound-outbox.test.ts` | 7/7 | 0 |
+| Inbound Worker | `npx tsx test/integration/inbound-worker.test.ts` | 8/8 | 0 |
+| Outbound Worker | `npx tsx test/integration/outbound-worker.test.ts` | 17/17 | 0 |
+| Status Outbox | `npx tsx test/integration/status-outbox.test.ts` | 5/5 | 0 |
+| Status Worker | `npx tsx test/integration/status-worker.test.ts` | 6/6 | 0 |
+| Broadcast Outbox | `npx tsx test/integration/broadcast-outbox.test.ts` | 12/12 | 0 |
+| Broadcast Worker | `npx tsx test/integration/broadcast-worker.test.ts` | 21/21 | 0 |
+| Typing Indicator | `npx tsx test/integration/typing-indicator.test.ts` | 16/16 | 0 |
+| Tenant Contact Identity | `npx tsx test/integration/tenant-contact-identity.test.ts` | 3/3 | 0 |
+| Tenant Migration Rehearsal | `npx tsx test/integration/tenant-identity-migration-rehearsal.test.ts` | 13/13 | 0 |
+| Observability Failure Isolation | `npx tsx test/integration/observability-failure-isolation.test.ts` | 13/13 | 0 |
+| **Total** | **19 suites** | **217/217** | **0** |
+
+Infrastructure: PostgreSQL 16 (`localhost:5434/wa_admin`) and Redis 7 (`redis://127.0.0.1:6379`). No real Meta API calls (GraphRequest/GraphFetch mocked boundary). Prisma `prisma:error` console lines inside Tenant Contact Identity and Stalled Job Recovery are expected negative-path logs of deliberately triggered unique-constraint rejections — those rejections are the assertions being verified. See also `docs/architecture/era2-integration-failure-evidence.md` for the original WA-ERA2-13 per-suite evidence.
 
 ### Failure Scenario Coverage (A–P)
 ```
@@ -223,11 +251,12 @@ ERA 2 FROZEN establishes the following explicit boundaries:
 ```
 Decision: ERA 2 FROZEN
 Date:     2026-10-11
-Commit:   93c39319e4ad880c2023cb1b2ae0683af6029c92
+Baseline: 93c39319e4ad880c2023cb1b2ae0683af6029c92 (WA-ERA2-13 final commit)
+Frozen:   dc8e84f23bd5dfd9c48a912beb5f2384967b5555 (WA-ERA2-14 certification commit)
 Gates:    All 18 required acceptance gates PASS
 Tests:    577/577 unit tests PASS
-Suites:   19/19 integration suites PASS
-Checks:   217/217 integration checks PASS
+Suites:   19/19 integration suites PASS (re-executed against final frozen code)
+Checks:   217/217 integration checks PASS (re-executed against final frozen code)
 ```
 
 ERA 2 is technically certified for its defined scope. Production deployment and async feature activation are separate decisions requiring additional authorization.
