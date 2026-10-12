@@ -48,3 +48,20 @@ export {
   type CanonicalEventPrisma,
   type ListCanonicalEventsOptions,
 } from "./outbox";
+export {
+  DEFAULT_DELIVERY_BATCH_SIZE,
+  DEFAULT_DELIVERY_CONCURRENCY,
+  DEFAULT_DELIVERY_TIMEOUT_MS,
+  MAX_DELIVERY_BATCH_SIZE,
+  MAX_DELIVERY_TIMEOUT_MS,
+  MAX_DELIVERY_CONCURRENCY,
+  deliverCanonicalEventHttp,
+  runCanonicalDeliveryWorker,
+  validateCanonicalDestination,
+  type CanonicalDeliveryResult,
+  type CanonicalDeliveryWorkerOptions,
+  type CanonicalDeliveryWorkerResult,
+  type CanonicalEventTransport,
+  type CanonicalHttpTransportOptions,
+  type CanonicalWebhookDestination,
+} from "./delivery";
