@@ -9,6 +9,13 @@ import {
 import { apiFetch } from "@/lib/fetcher";
 import { cn, formatInboxTimestamp } from "@/lib/utils";
 import { useRealtime } from "@/hooks/use-realtime";
+import {
+  OrderingGuard,
+  RequestToken,
+  SeenSet,
+  processEvent,
+  type SyncAction,
+} from "@/lib/realtime/sync";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -65,24 +72,58 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
   const tenantId = basePath.startsWith("/t/") ? basePath.split("/")[2] : "";
   const [search, setSearch] = useState("");
 
-  const { data: conversations = [] } = useQuery({
+  // WA-ERA4-05: per-tenant sync helpers. Reset on tenant switch so
+  // seen ids and high-water marks from a previous tenant never leak.
+  const seenRef = useRef(new SeenSet());
+  const orderingRef = useRef(new OrderingGuard());
+  const listTokenRef = useRef(new RequestToken());
+  const prevTenantRef = useRef(tenantId);
+  if (prevTenantRef.current !== tenantId) {
+    seenRef.current.reset();
+    orderingRef.current.reset();
+    qc.removeQueries({ queryKey: ["conversations", prevTenantRef.current] });
+    qc.removeQueries({ queryKey: ["thread", prevTenantRef.current] });
+    prevTenantRef.current = tenantId;
+  }
+
+  const conversationsQuery = useQuery({
     queryKey: ["conversations", tenantId, search],
-    queryFn: () => {
+    queryFn: async () => {
       const base = conversationsUrl;
       const qs = search ? `search=${encodeURIComponent(search)}` : "";
-      return apiFetch<Conversation[]>(qs ? `${base}?${qs}` : base);
+      const token = listTokenRef.current.next();
+      const result = await apiFetch<Conversation[]>(qs ? `${base}?${qs}` : base);
+      if (!listTokenRef.current.isCurrent(token) || prevTenantRef.current !== tenantId) {
+        // Stale response: discard. The active tenant has changed.
+        throw new Error("stale-tenant-response");
+      }
+      return result;
     },
     refetchInterval: 30_000,
   });
+  const conversations = conversationsQuery.data ?? [];
 
   // Realtime: refresh lists + the open thread on any event for this tenant.
+  // WA-ERA4-05: route the event through the sync helpers to dedup
+  // duplicates, reject stale timestamps, and decide whether the list
+  // or the open thread actually needs a refetch.
   useRealtime(tenantId || null, (msg) => {
-    if (msg.type.startsWith("message:")) {
+    const verdict = processEvent(
+      msg,
+      activeId,
+      seenRef.current,
+      orderingRef.current,
+      ["message:new", "message:status", "message:image-enriched"],
+    );
+    if (!verdict.admitted) return;
+    const action: SyncAction = verdict.action;
+    if (action.kind === "ignore") return;
+    if (action.kind === "refetch-list" || action.kind === "refetch-list-and-thread") {
+      listTokenRef.current.next();
       qc.invalidateQueries({ queryKey: ["conversations", tenantId] });
-      const p = msg.payload as { conversationId?: string };
-      if (p.conversationId && p.conversationId === activeId) {
-        qc.invalidateQueries({ queryKey: ["thread", tenantId, activeId] });
-      }
+    }
+    if (action.kind === "refetch-thread" || action.kind === "refetch-list-and-thread") {
+      qc.invalidateQueries({ queryKey: ["thread", tenantId, action.conversationId] });
     }
   });
 
@@ -162,10 +203,24 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
   const [showTemplates, setShowTemplates] = useState(false);
   const [showFlows, setShowFlows] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // WA-ERA4-05: per-thread token guard for stale HTTP responses. The
+  // query below throws when the active tenant+conversation has moved
+  // on by the time the response arrives, so the cached snapshot from
+  // a previous thread cannot leak into the visible window.
+  const threadTokenRef = useRef(new RequestToken());
 
   const { data, isLoading } = useQuery({
     queryKey: ["thread", tenantId, conversationId],
-    queryFn: () => apiFetch<Thread>(`/api/tenants/${tenantId}/conversations/${conversationId}/messages`),
+    queryFn: async () => {
+      const token = threadTokenRef.current.next();
+      const result = await apiFetch<Thread>(
+        `/api/tenants/${tenantId}/conversations/${conversationId}/messages`,
+      );
+      if (!threadTokenRef.current.isCurrent(token)) {
+        throw new Error("stale-thread-response");
+      }
+      return result;
+    },
   });
 
   // Auto-scroll to bottom on new messages.
