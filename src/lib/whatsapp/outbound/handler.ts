@@ -23,6 +23,8 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { addCanonicalEvent } from "@/lib/events";
+import { buildConversationStatusChangedEvent, buildOutboundMessageStatusChangedEvent } from "@/lib/events/producers";
 import { graphFetch as defaultGraphFetch, WhatsAppApiError, type GraphRequest } from "@/lib/whatsapp/client";
 import { phoneNumberConfig, type OwnedPhoneNumber } from "@/lib/tenant/waba";
 import { publish } from "@/server/realtime";
@@ -245,6 +247,8 @@ export async function handleOutboundMessage(
       conversation: {
         select: {
           id: true,
+          contactId: true,
+          status: true,
           contact: { select: { waId: true } },
           phoneNumber: {
             include: { wabaAccount: { select: { id: true } } },
@@ -350,19 +354,41 @@ export async function handleOutboundMessage(
       throw new MetaResponseError("MISSING_MESSAGE_ID", "Meta returned 200 but no message ID in response", res);
     }
 
-    // Mark SENT — both Message and OutboundSendAttempt in one transaction.
+    // Mark SENT, update conversation, and persist canonical events in one transaction.
     const [updated] = await prisma.$transaction(async (tx) => {
+      const now = new Date();
       const updatedMsg = await tx.message.update({
         where: { id: messageId },
         data: { status: "SENT", waMessageId },
       });
       await markOutboundSent(tx, { attemptId: attempt.id, waMessageId });
+      const conversation = await tx.conversation.update({
+        where: { id: conversationId },
+        data: { lastMessageAt: now, lastPreview: (row.text ?? "").slice(0, 140), status: "OPEN" },
+      });
+      await addCanonicalEvent(tx, buildOutboundMessageStatusChangedEvent({
+        tenantId,
+        conversationId,
+        messageId,
+        phoneNumberId,
+        wabaAccountId,
+        providerMessageId: waMessageId,
+        previousStatus: row.status,
+        status: "SENT",
+        occurredAt: now,
+      }));
+      const conversationEvent = buildConversationStatusChangedEvent({
+        tenantId,
+        conversationId,
+        contactId: conversation.contactId,
+        phoneNumberId,
+        wabaAccountId,
+        previousStatus: row.conversation.status,
+        status: conversation.status,
+        occurredAt: now,
+      });
+      if (conversationEvent) await addCanonicalEvent(tx, conversationEvent);
       return [updatedMsg];
-    });
-
-    await prisma.conversation.update({
-      where: { id: conversationId },
-      data: { lastMessageAt: new Date(), lastPreview: (row.text ?? "").slice(0, 140) },
     });
 
     publish(
@@ -379,7 +405,7 @@ export async function handleOutboundMessage(
       attemptId: attempt.id,
     };
   } catch (err) {
-    return await recordFailure(err, attempt, messageId, tenantId, conversationId);
+    return await recordFailure(err, attempt, messageId, tenantId, conversationId, phoneNumberId, wabaAccountId, row.status);
   }
 }
 
@@ -453,7 +479,10 @@ async function recordFailure(
   attempt: OutboundAttemptRecord,
   messageId: string,
   tenantId: string,
-  conversationId: string
+  conversationId: string,
+  phoneNumberId: string,
+  wabaAccountId: string,
+  previousStatus: "PENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED" | "RECEIVED",
 ): Promise<OutboundSendFailed | OutboundSendUncertain> {
   const cls = classifyError(err);
 
@@ -470,6 +499,16 @@ async function recordFailure(
         retryable: cls.retryable,
         metaStatus: cls.metaStatus,
       });
+      await addCanonicalEvent(tx, buildOutboundMessageStatusChangedEvent({
+        tenantId,
+        conversationId,
+        messageId,
+        phoneNumberId,
+        wabaAccountId,
+        previousStatus,
+        status: "FAILED",
+        occurredAt: new Date(),
+      }));
       return updatedMsg;
     });
     publish(

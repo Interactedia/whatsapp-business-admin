@@ -66,6 +66,7 @@ async function main() {
       () => check("unknown phone is rejected", true),
     );
   } finally {
+    await prisma.canonicalEventOutbox.deleteMany({ where: { tenantId } });
     await prisma.outboxEvent.deleteMany({ where: { tenantId } });
     await prisma.webhookEvent.deleteMany({ where: { eventSummary: "accepted durable inbound receipt" } });
     await prisma.phoneNumber.deleteMany({ where: { id: phoneId } });

@@ -145,6 +145,12 @@ const repoMock = vi.hoisted(() => {
 
 vi.mock("@/lib/whatsapp/outbound/repository", () => repoMock);
 
+const eventsMock = vi.hoisted(() => ({ addCanonicalEvent: vi.fn(async () => ({})) }));
+vi.mock("@/lib/events", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/events")>("@/lib/events");
+  return { ...actual, addCanonicalEvent: eventsMock.addCanonicalEvent };
+});
+
 const prismaStub = vi.hoisted(() => ({
   message: {
     findUnique: vi.fn(),
@@ -218,6 +224,8 @@ function mockMessageRow(overrides: {
     timestamp: new Date(),
     conversation: {
       id: CONV,
+      contactId: "contact_test",
+      status: "CLOSED",
       contact: { waId: "919876543210" },
       phoneNumber: {
         id: PHONE,
@@ -243,7 +251,7 @@ describe("handleOutboundMessage", () => {
     vi.clearAllMocks();
     prismaStub.message.findUnique.mockResolvedValue(mockMessageRow());
     prismaStub.message.update.mockResolvedValue(mockMessageRow({ status: "SENT", waMessageId: WA_MSG_ID }));
-    prismaStub.conversation.update.mockResolvedValue({} as never);
+    prismaStub.conversation.update.mockResolvedValue({ id: CONV, contactId: "contact_test", status: "OPEN" } as never);
     graphFetch.mockResolvedValue({ messages: [{ id: WA_MSG_ID }] });
   });
 

@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { addCanonicalEvent, type ExternalMessageType } from "@/lib/events";
+import { buildConversationChangedEvent, buildConversationStatusChangedEvent, buildInboundMessageReceivedEvent, buildOutboundMessageStatusChangedEvent } from "@/lib/events/producers";
 import { getWabaConfig } from "@/lib/settings";
 import { phoneNumberConfig, resolveInboundPhoneNumber } from "@/lib/tenant/waba";
 import { downloadInboundMedia } from "@/lib/whatsapp/media";
@@ -66,6 +68,11 @@ function mapMessageType(t: string): MessageType {
     "CONTACTS", "TEMPLATE", "INTERACTIVE", "BUTTON", "REACTION",
   ];
   return (known.includes(upper as MessageType) ? upper : "UNSUPPORTED") as MessageType;
+}
+
+function externalMessageType(type: MessageType): ExternalMessageType {
+  if (type === "UNSUPPORTED") return "TEXT";
+  return type;
 }
 
 function summarizeText(m: WaMessage): string {
@@ -144,48 +151,13 @@ async function handleInboundMessage(
 
   const tenantId = businessPhone.wabaAccount.tenantId;
 
-  // Upsert tenant-owned contact.
+  const preview = summarizeText(msg);
   const contact = await prisma.contact.upsert({
     where: { tenantId_waId: { tenantId, waId } },
     update: { profileName: profileName ?? undefined, lastInboundAt: ts },
     create: { waId, profileName, lastInboundAt: ts, tenantId },
   });
   if (contact.tenantId !== tenantId) throw new Error("Inbound contact tenant mismatch");
-
-  // Upsert conversation without rebinding historical unbound rows.
-  const preview = summarizeText(msg);
-  const existingByContact = await prisma.conversation.findFirst({ where: { contactId: contact.id } });
-  if (existingByContact?.phoneNumberId && existingByContact.phoneNumberId !== businessPhone.id) {
-    throw new Error("Inbound conversation sender mismatch");
-  }
-  if (existingByContact && !existingByContact.phoneNumberId) {
-    throw new Error("Inbound conversation is unbound");
-  }
-  const existingConversation = (await prisma.conversation.findFirst({
-    where: { tenantId, contactId: contact.id, phoneNumberId: businessPhone.id },
-  })) ?? existingByContact;
-  const conversation = existingConversation
-    ? await prisma.conversation.update({
-        where: { id: existingConversation.id },
-        data: {
-          lastMessageAt: ts,
-          lastInboundAt: ts,
-          lastPreview: preview.slice(0, 140),
-          unreadCount: { increment: 1 },
-          status: "OPEN",
-        },
-      })
-    : await prisma.conversation.create({
-        data: {
-          contactId: contact.id,
-          tenantId,
-          phoneNumberId: businessPhone.id,
-          lastMessageAt: ts,
-          lastInboundAt: ts,
-          lastPreview: preview.slice(0, 140),
-          unreadCount: 1,
-        },
-      });
   void fallbackConfig;
 
   // Media download for supported types.
@@ -220,22 +192,95 @@ async function handleInboundMessage(
   const existing = await prisma.message.findUnique({ where: { waMessageId: msg.id } });
   if (existing) return `dup ${msg.id}`;
 
-  const created = await prisma.message.create({
-    data: {
-      tenantId: businessPhone.wabaAccount.tenantId,
+  const { conversation, created } = await prisma.$transaction(async (tx) => {
+    const existingByContact = await tx.conversation.findFirst({ where: { contactId: contact.id } });
+    if (existingByContact?.phoneNumberId && existingByContact.phoneNumberId !== businessPhone.id) {
+      throw new Error("Inbound conversation sender mismatch");
+    }
+    if (existingByContact && !existingByContact.phoneNumberId) {
+      throw new Error("Inbound conversation is unbound");
+    }
+    const existingConversation = (await tx.conversation.findFirst({
+      where: { tenantId, contactId: contact.id, phoneNumberId: businessPhone.id },
+    })) ?? existingByContact;
+    const previousStatus = existingConversation?.status ?? null;
+    const conversation = existingConversation
+      ? await tx.conversation.update({
+          where: { id: existingConversation.id },
+          data: {
+            lastMessageAt: ts,
+            lastInboundAt: ts,
+            lastPreview: preview.slice(0, 140),
+            unreadCount: { increment: 1 },
+            status: "OPEN",
+          },
+        })
+      : await tx.conversation.create({
+          data: {
+            contactId: contact.id,
+            tenantId,
+            phoneNumberId: businessPhone.id,
+            lastMessageAt: ts,
+            lastInboundAt: ts,
+            lastPreview: preview.slice(0, 140),
+            unreadCount: 1,
+          },
+        });
+
+    const created = await tx.message.create({
+      data: {
+        tenantId: businessPhone.wabaAccount.tenantId,
+        conversationId: conversation.id,
+        direction: "IN",
+        type: mapMessageType(msg.type),
+        status: "RECEIVED",
+        waMessageId: msg.id,
+        text: msg.type === "text" ? msg.text?.body : summarizeText(msg),
+        caption,
+        mediaPath,
+        mediaMime,
+        mediaFilename,
+        payload: redactFlowWebhookPayload(msg) as object,
+        timestamp: ts,
+      },
+    });
+
+    await addCanonicalEvent(tx, buildInboundMessageReceivedEvent({
+      tenantId,
       conversationId: conversation.id,
-      direction: "IN",
-      type: mapMessageType(msg.type),
-      status: "RECEIVED",
-      waMessageId: msg.id,
-      text: msg.type === "text" ? msg.text?.body : summarizeText(msg),
-      caption,
-      mediaPath,
-      mediaMime,
-      mediaFilename,
-      payload: redactFlowWebhookPayload(msg) as object,
-      timestamp: ts,
-    },
+      contactId: contact.id,
+      phoneNumberId: businessPhone.id,
+      wabaAccountId: businessPhone.wabaAccount.id,
+      messageId: created.id,
+      providerMessageId: msg.id,
+      type: externalMessageType(created.type),
+      preview,
+      occurredAt: ts,
+    }));
+    const conversationEvent = existingConversation
+      ? buildConversationStatusChangedEvent({
+          tenantId,
+          conversationId: conversation.id,
+          contactId: contact.id,
+          phoneNumberId: businessPhone.id,
+          wabaAccountId: businessPhone.wabaAccount.id,
+          previousStatus,
+          status: conversation.status,
+          occurredAt: ts,
+        })
+      : buildConversationChangedEvent({
+          tenantId,
+          conversationId: conversation.id,
+          contactId: contact.id,
+          phoneNumberId: businessPhone.id,
+          wabaAccountId: businessPhone.wabaAccount.id,
+          kind: "CREATED",
+          status: conversation.status,
+          occurredAt: ts,
+        });
+    if (conversationEvent) await addCanonicalEvent(tx, conversationEvent);
+
+    return { conversation, created };
   });
 
   publish({
@@ -294,13 +339,31 @@ async function handleStatus(st: WaStatus, metaPhoneNumberId?: string): Promise<s
   const errorJson = st.errors && st.errors.length > 0 ? (st.errors as object) : undefined;
 
   // Only downgrade never (read > delivered > sent); simplest: update if message exists.
-  const msg = await prisma.message.findUnique({ where: { waMessageId: st.id } });
+  const msg = await prisma.message.findUnique({
+    where: { waMessageId: st.id },
+    include: { conversation: { select: { phoneNumberId: true } } },
+  });
   if (msg) {
     if (msg.tenantId !== businessPhone.wabaAccount.tenantId) throw new Error("Status tenant mismatch");
-    await prisma.message.update({
-      where: { id: msg.id },
-      data: { status, errorJson: errorJson ?? undefined },
-    });
+    if (msg.status !== status) {
+      await prisma.$transaction(async (tx) => {
+        await tx.message.update({
+          where: { id: msg.id },
+          data: { status, errorJson: errorJson ?? undefined },
+        });
+        await addCanonicalEvent(tx, buildOutboundMessageStatusChangedEvent({
+          tenantId: msg.tenantId!,
+          conversationId: msg.conversationId,
+          messageId: msg.id,
+          phoneNumberId: msg.conversation.phoneNumberId ?? businessPhone.id,
+          wabaAccountId: businessPhone.wabaAccount.id,
+          providerMessageId: st.id,
+          previousStatus: msg.status,
+          status,
+          occurredAt: new Date(Number(st.timestamp) * 1000),
+        }));
+      });
+    }
     publish({ type: "message:status", payload: { conversationId: msg.conversationId, waMessageId: st.id, status } }, msg.tenantId);
   }
 

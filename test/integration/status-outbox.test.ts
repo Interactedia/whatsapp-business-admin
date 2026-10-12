@@ -127,6 +127,7 @@ async function main() {
     check("rollback test leaves no database residue", rollbackOk && !rolledBack);
 
   } finally {
+    await prisma.$executeRawUnsafe(`DELETE FROM "CanonicalEventOutbox" WHERE "tenantId" = $1`, tenantId).catch(() => {});
     await prisma.$executeRawUnsafe(`DELETE FROM "OutboxEvent" WHERE "tenantId" = $1`, tenantId).catch(() => {});
     await prisma.$executeRawUnsafe(`DELETE FROM "Message" WHERE "tenantId" = $1`, tenantId).catch(() => {});
     await prisma.$executeRawUnsafe(`DELETE FROM "Conversation" WHERE "tenantId" = $1`, tenantId).catch(() => {});

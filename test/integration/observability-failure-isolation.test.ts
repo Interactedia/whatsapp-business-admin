@@ -198,6 +198,7 @@ async function main() {
     // Teardown test rows and close resources
     process.env.REDIS_URL = originalRedisUrl;
     try {
+      await prisma.$executeRawUnsafe(`DELETE FROM "CanonicalEventOutbox" WHERE "tenantId" = $1`, tenantId);
       await prisma.$executeRawUnsafe(
         `DELETE FROM "OutboundSendAttempt" WHERE "id" = $1`,
         attemptId

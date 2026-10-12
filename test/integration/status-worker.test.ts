@@ -196,6 +196,7 @@ async function main() {
     if (worker) await worker.close();
     await closeAllQueueResources();
 
+    await prisma.$executeRawUnsafe(`DELETE FROM "CanonicalEventOutbox" WHERE "tenantId" IN ($1, $2)`, tenantId, otherTenantId).catch(() => {});
     await prisma.$executeRawUnsafe(`DELETE FROM "OutboundSendAttempt" WHERE "tenantId" = $1`, tenantId).catch(() => {});
     await prisma.$executeRawUnsafe(`DELETE FROM "OutboxEvent" WHERE "tenantId" IN ($1, $2)`, tenantId, otherTenantId).catch(() => {});
     await prisma.$executeRawUnsafe(`DELETE FROM "Message" WHERE "tenantId" = $1`, tenantId).catch(() => {});

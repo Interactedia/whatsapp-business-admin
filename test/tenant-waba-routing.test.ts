@@ -18,20 +18,28 @@ const messageUpdate = vi.hoisted(() => vi.fn());
 const conversationUpdate = vi.hoisted(() => vi.fn());
 const templateFindUnique = vi.hoisted(() => vi.fn());
 const apiLogCreate = vi.hoisted(() => vi.fn());
+const prismaMock = vi.hoisted(() => ({
+  tenantMembership: { findUnique: membershipFindUnique },
+  phoneNumber: { findFirst: phoneFindFirst, findMany: phoneFindMany },
+  wabaAccount: { findFirst: wabaFindFirst },
+  wabaSettings: { findUnique: vi.fn().mockResolvedValue({}) },
+  conversation: { findFirst: conversationFindFirst, findUnique: conversationFindUnique, create: conversationCreate, update: conversationUpdate },
+  contact: { findFirst: contactFindFirst, findUnique: contactFindUnique, update: contactUpdate, create: contactCreate, upsert: contactUpsert },
+  message: { findUnique: vi.fn(), create: messageCreate, update: messageUpdate },
+  template: { findUnique: templateFindUnique },
+  apiLog: { create: apiLogCreate },
+  $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prismaMock)),
+}));
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    tenantMembership: { findUnique: membershipFindUnique },
-    phoneNumber: { findFirst: phoneFindFirst, findMany: phoneFindMany },
-    wabaAccount: { findFirst: wabaFindFirst },
-    wabaSettings: { findUnique: vi.fn().mockResolvedValue({}) },
-    conversation: { findFirst: conversationFindFirst, findUnique: conversationFindUnique, create: conversationCreate, update: conversationUpdate },
-    contact: { findFirst: contactFindFirst, findUnique: contactFindUnique, update: contactUpdate, create: contactCreate, upsert: contactUpsert },
-    message: { findUnique: vi.fn(), create: messageCreate, update: messageUpdate },
-    template: { findUnique: templateFindUnique },
-    apiLog: { create: apiLogCreate },
-  },
+  prisma: prismaMock,
 }));
+
+vi.mock("@/lib/events", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/events")>("@/lib/events");
+  return { ...actual, addCanonicalEvent: vi.fn(async () => ({})) };
+});
+
 
 vi.mock("@/lib/tenant", () => ({
   TenantAuthorizationError: class TenantAuthorizationError extends Error {

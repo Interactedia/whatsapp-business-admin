@@ -38,3 +38,13 @@ export {
   validateExternalEventOfType,
   type ExternalEventValidationErrorCode,
 } from "./validation";
+export {
+  CanonicalEventOutboxConflictError,
+  addCanonicalEvent,
+  canonicalEventPayloadHash,
+  getCanonicalEvent,
+  listCanonicalEvents,
+  type CanonicalEventOutboxRecord,
+  type CanonicalEventPrisma,
+  type ListCanonicalEventsOptions,
+} from "./outbox";

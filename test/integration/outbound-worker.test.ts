@@ -334,6 +334,7 @@ async function main() {
       await closeAllQueueResources();
     } catch { /* ignore */ }
     try {
+      await prisma.$executeRawUnsafe(`DELETE FROM "CanonicalEventOutbox" WHERE "tenantId" LIKE $1`, `${runId}%`);
       await prisma.$executeRawUnsafe(`DELETE FROM "OutboundSendAttempt" WHERE "tenantId" LIKE $1`, `${runId}%`);
       await prisma.$executeRawUnsafe(`DELETE FROM "OutboxEvent" WHERE "tenantId" LIKE $1`, `${runId}%`);
       await prisma.$executeRawUnsafe(`DELETE FROM "Message" WHERE "conversationId" = $1`, convId);

@@ -270,6 +270,7 @@ async function main() {
     check("S7c. failureCode is preserved", s7Stored?.failureCode != null);
     check("S7d. failureMessage is redacted (no credentials)", !s7Stored?.failureMessage?.includes("127.0.0.1"));
   } finally {
+    await prisma.$executeRawUnsafe(`DELETE FROM "CanonicalEventOutbox" WHERE "tenantId" LIKE '${runId}%'`);
     await prisma.$executeRawUnsafe(`DELETE FROM "OutboundSendAttempt" WHERE "tenantId" LIKE '${runId}%'`);
     await prisma.$executeRawUnsafe(`DELETE FROM "OutboxEvent" WHERE "tenantId" = $1`, tenantId);
     await prisma.$executeRawUnsafe(`DELETE FROM "Message" WHERE "tenantId" LIKE '${runId}%'`);

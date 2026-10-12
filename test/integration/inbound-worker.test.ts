@@ -104,6 +104,7 @@ async function main() {
     check("Redis outage does not block committed receipt", !!receipt3.outboxEventId);
   } finally {
     await closeAllQueueResources();
+    await prisma.canonicalEventOutbox.deleteMany({ where: { tenantId } });
     await prisma.message.deleteMany({ where: { tenantId } });
     await prisma.conversation.deleteMany({ where: { tenantId } });
     await prisma.contact.deleteMany({ where: { waId: contactWa } });

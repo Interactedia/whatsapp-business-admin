@@ -3,6 +3,8 @@ import type { WabaConfig } from "@/lib/settings";
 import { graphFetch, WhatsAppApiError } from "@/lib/whatsapp/client";
 import { phoneNumberConfig, type OwnedPhoneNumber } from "@/lib/tenant/waba";
 import { publish } from "@/server/realtime";
+import { addCanonicalEvent, type ExternalMessageType } from "@/lib/events";
+import { buildOutboundMessageAcceptedEvent } from "@/lib/events/producers";
 import { serializeMessage } from "@/lib/whatsapp/webhook";
 import type { MessageType, Prisma } from "@/generated/prisma/client";
 import { buildTemplateContent, templateContentText, templateContentPreview } from "./template-content";
@@ -11,6 +13,11 @@ import { createOutboundMessageJobPayload } from "@/lib/queue";
 import type { KnownJobPayload } from "@/lib/queue";
 
 export { isWithinSessionWindow } from "@/lib/whatsapp/window";
+
+function externalMessageType(type: MessageType): ExternalMessageType {
+  if (type === "UNSUPPORTED") return "TEXT";
+  return type;
+}
 
 /** Get or create the tenant-scoped contact + phone-scoped conversation for a wa_id. */
 export async function ensureConversation(
@@ -348,7 +355,7 @@ export async function enqueueOutboundMessage(
       },
     });
 
-    // Add the outbox event so the dispatcher enqueues it to BullMQ
+    // Add the ERA 2 outbox event so the dispatcher enqueues it to BullMQ.
     await addOutboxEvent(tx, {
       tenantId,
       payload: createOutboundMessageJobPayload({
@@ -360,6 +367,17 @@ export async function enqueueOutboundMessage(
         producer: "queue-producer",
       }) as KnownJobPayload,
     });
+
+    await addCanonicalEvent(tx, buildOutboundMessageAcceptedEvent({
+      tenantId,
+      conversationId: opts.conversationId,
+      contactId: conversation.contactId,
+      phoneNumberId,
+      wabaAccountId,
+      messageId: message.id,
+      type: externalMessageType(type),
+      occurredAt: message.timestamp,
+    }));
 
     return message.id;
   });
