@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { EXTERNAL_EVENT_TYPES, type AnyExternalEvent, type ExternalEventType } from "@/lib/events/contract";
 import { deliverCanonicalEventHttp, type CanonicalWebhookDestination, type CanonicalDeliveryResult } from "@/lib/events/delivery";
+import { suspendDeliveriesForDestination } from "@/lib/events/delivery-state";
 import { validateExternalEvent } from "@/lib/events/validation";
 import type { Prisma } from "@/generated/prisma/client";
 export { WEBHOOK_SIGNATURE_HEADER, WEBHOOK_SIGNATURE_VERSION, WEBHOOK_TIMESTAMP_HEADER, signWebhookBody, verifyWebhookSignature } from "@/lib/events/webhook-signing";
@@ -131,15 +132,25 @@ export async function createWebhookDestination(tenantId: string, input: WebhookD
 }
 
 export async function updateWebhookDestination(tenantId: string, id: string, input: Partial<WebhookDestinationInput>) {
-  const current = await prisma.webhookDestination.findFirst({ where: { tenantId, id }, select: { id: true, retiredAt: true } });
+  const current = await prisma.webhookDestination.findFirst({ where: { tenantId, id }, select: { id: true, endpointUrl: true, retiredAt: true } });
   if (!current) return null;
   if (current.retiredAt) throw new Error("Retired destinations cannot be updated.");
   const data = webhookDestinationInputSchema.partial().parse(input);
+
+  // If the URL changed, suspend all pending deliveries so they are not
+  // automatically redirected to the new address without admin oversight.
+  const urlChanged = data.endpointUrl !== undefined && data.endpointUrl !== current.endpointUrl;
+
   const row = await prisma.webhookDestination.update({
     where: { id },
     data,
     select: publicSelect,
   });
+
+  if (urlChanged) {
+    await suspendDeliveriesForDestination(prisma, { tenantId, destinationId: id });
+  }
+
   return toPublic(row);
 }
 

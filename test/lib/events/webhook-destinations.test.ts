@@ -7,8 +7,10 @@ const decrypt = vi.hoisted(() => vi.fn((value: string) => value.replace(/^enc:/,
 const create = vi.hoisted(() => vi.fn());
 const findFirst = vi.hoisted(() => vi.fn());
 const update = vi.hoisted(() => vi.fn());
+const suspendDeliveriesForDestination = vi.hoisted(() => vi.fn().mockResolvedValue(3));
 
 vi.mock("@/lib/crypto", () => ({ encrypt, decrypt }));
+vi.mock("@/lib/events/delivery-state", () => ({ suspendDeliveriesForDestination }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     webhookDestination: { create, findFirst, update },
@@ -79,7 +81,7 @@ describe("webhook destination repository", () => {
   });
 
   it("keeps destination identity stable when URL changes", async () => {
-    findFirst.mockResolvedValueOnce({ id: "dest_1", retiredAt: null });
+    findFirst.mockResolvedValueOnce({ id: "dest_1", endpointUrl: "https://old.example.test/wba", retiredAt: null });
     update.mockResolvedValueOnce({
       id: "dest_1",
       tenantId: "tenant_1",
@@ -97,6 +99,46 @@ describe("webhook destination repository", () => {
     const result = await updateWebhookDestination("tenant_1", "dest_1", { endpointUrl: "https://new.example.test/wba" });
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "dest_1" }, data: { endpointUrl: "https://new.example.test/wba" } }));
     expect(result?.id).toBe("dest_1");
+  });
+
+  it("suspends pending deliveries when webhook URL changes", async () => {
+    findFirst.mockResolvedValueOnce({ id: "dest_1", endpointUrl: "https://old.example.test/wba", retiredAt: null });
+    update.mockResolvedValueOnce({
+      id: "dest_1",
+      tenantId: "tenant_1",
+      name: "Mastra",
+      endpointUrl: "https://new.example.test/wba",
+      enabled: true,
+      retiredAt: null,
+      subscriptions: [EXTERNAL_EVENT_TYPES.CONVERSATION_CHANGED],
+      secretVersion: 1,
+      lastTestAt: null,
+      createdAt: new Date("2026-10-12T00:00:00.000Z"),
+      updatedAt: new Date("2026-10-12T00:01:00.000Z"),
+    });
+    const { updateWebhookDestination } = await import("@/lib/events/webhook-destinations");
+    await updateWebhookDestination("tenant_1", "dest_1", { endpointUrl: "https://new.example.test/wba" });
+    expect(suspendDeliveriesForDestination).toHaveBeenCalledWith(expect.anything(), { tenantId: "tenant_1", destinationId: "dest_1" });
+  });
+
+  it("does not suspend deliveries when URL is unchanged", async () => {
+    findFirst.mockResolvedValueOnce({ id: "dest_1", endpointUrl: "https://hooks.example.test/wba", retiredAt: null });
+    update.mockResolvedValueOnce({
+      id: "dest_1",
+      tenantId: "tenant_1",
+      name: "Mastra",
+      endpointUrl: "https://hooks.example.test/wba",
+      enabled: true,
+      retiredAt: null,
+      subscriptions: [EXTERNAL_EVENT_TYPES.CONVERSATION_CHANGED],
+      secretVersion: 1,
+      lastTestAt: null,
+      createdAt: new Date("2026-10-12T00:00:00.000Z"),
+      updatedAt: new Date("2026-10-12T00:01:00.000Z"),
+    });
+    const { updateWebhookDestination } = await import("@/lib/events/webhook-destinations");
+    await updateWebhookDestination("tenant_1", "dest_1", { name: "Renamed" });
+    expect(suspendDeliveriesForDestination).not.toHaveBeenCalled();
   });
 
   it("does not select disabled or retired destinations for dispatch", async () => {

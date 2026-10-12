@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import type { CanonicalEventPrisma } from "@/lib/events/outbox";
 
-export const DELIVERY_STATES = ["PENDING", "IN_PROGRESS", "RETRY_PENDING", "ACCEPTED", "FAILED_TERMINAL"] as const;
+export const DELIVERY_STATES = ["PENDING", "IN_PROGRESS", "RETRY_PENDING", "ACCEPTED", "FAILED_TERMINAL", "SUSPENDED"] as const;
 export type DeliveryState = (typeof DELIVERY_STATES)[number];
 export type DeliveryAttemptResult = "ACCEPTED" | "RETRYABLE" | "TERMINAL" | "INTERRUPTED";
 
@@ -206,6 +206,73 @@ export async function listEligibleDeliveries(
       AND "nextAttemptAt" <= ${now}
       AND ("state" != 'IN_PROGRESS'::"CanonicalEventDeliveryState" OR "leaseExpiresAt" <= ${now})
     ORDER BY "nextAttemptAt" ASC, "createdAt" ASC
+    LIMIT ${limit}
+  `;
+}
+
+/**
+ * Suspends all PENDING and RETRY_PENDING deliveries for a destination.
+ * IN_PROGRESS deliveries with active leases are excluded — their leases will
+ * expire naturally and the worker will observe the destination as disabled.
+ * Returns the count of suspended deliveries.
+ */
+export async function suspendDeliveriesForDestination(
+  db: CanonicalEventPrisma,
+  options: { tenantId: string; destinationId: string }
+): Promise<number> {
+  const result = await db.$executeRaw`
+    UPDATE "CanonicalEventDelivery"
+    SET
+      "state" = 'SUSPENDED'::"CanonicalEventDeliveryState",
+      "leaseOwner" = NULL,
+      "leaseExpiresAt" = NULL,
+      "updatedAt" = NOW()
+    WHERE "tenantId" = ${options.tenantId}
+      AND "destinationId" = ${options.destinationId}
+      AND "state" IN (
+        'PENDING'::"CanonicalEventDeliveryState",
+        'RETRY_PENDING'::"CanonicalEventDeliveryState"
+      )
+  `;
+  return result;
+}
+
+/**
+ * Resumes all SUSPENDED deliveries for a destination back to PENDING.
+ * Returns the count of resumed deliveries.
+ */
+export async function resumeDeliveriesForDestination(
+  db: CanonicalEventPrisma,
+  options: { tenantId: string; destinationId: string }
+): Promise<number> {
+  const result = await db.$executeRaw`
+    UPDATE "CanonicalEventDelivery"
+    SET
+      "state" = 'PENDING'::"CanonicalEventDeliveryState",
+      "nextAttemptAt" = NOW(),
+      "updatedAt" = NOW()
+    WHERE "tenantId" = ${options.tenantId}
+      AND "destinationId" = ${options.destinationId}
+      AND "state" = 'SUSPENDED'::"CanonicalEventDeliveryState"
+  `;
+  return result;
+}
+
+/**
+ * Lists all SUSPENDED deliveries for a destination, including event type
+ * and last attempt summary.
+ */
+export async function listSuspendedDeliveriesForDestination(
+  db: CanonicalEventPrisma,
+  options: { tenantId: string; destinationId: string; limit?: number }
+): Promise<DeliveryRecord[]> {
+  const limit = Math.min(Math.max(1, options.limit ?? 100), 500);
+  return db.$queryRaw<RawDelivery[]>`
+    SELECT * FROM "CanonicalEventDelivery"
+    WHERE "tenantId" = ${options.tenantId}
+      AND "destinationId" = ${options.destinationId}
+      AND "state" = 'SUSPENDED'::"CanonicalEventDeliveryState"
+    ORDER BY "createdAt" ASC
     LIMIT ${limit}
   `;
 }

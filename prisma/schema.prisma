@@ -340,6 +340,7 @@ enum CanonicalEventDeliveryState {
   RETRY_PENDING
   ACCEPTED
   FAILED_TERMINAL
+  SUSPENDED
 }
 
 enum CanonicalEventDeliveryAttemptResult {
