@@ -89,6 +89,9 @@ export const DELETE = handle(async (_req, { params }) => {
   if (session.user.role !== "SYSTEM_ADMIN" && !(await canManageUser(session, id))) {
     throw new HttpError(403, "You can only manage users in your organization");
   }
-  await prisma.user.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.tenantMembership.deleteMany({ where: { userId: id } });
+    await tx.user.delete({ where: { id } });
+  });
   return ok({ deleted: true });
 });
