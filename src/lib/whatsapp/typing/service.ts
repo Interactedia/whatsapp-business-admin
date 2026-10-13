@@ -245,7 +245,7 @@ export async function sendTypingIndicator(
   const queue = queueFor(phoneNumber.id);
 
   return await queue.add(async () =>
-    executeTypingRequest(cfg, wamid),
+    executeTypingRequest(cfg, wamid, phoneNumber.wabaAccount.tenantId),
   );
 }
 
@@ -271,6 +271,7 @@ export async function sendTypingIndicator(
 async function executeTypingRequest(
   cfg: WabaConfig,
   waMessageId: string,
+  tenantId: string,
 ): Promise<SendTypingResult> {
   const signal = AbortSignal.timeout(TYPING_REQUEST_TIMEOUT_MS);
 
@@ -291,6 +292,7 @@ async function executeTypingRequest(
       // typing-indicator calls are ephemeral; do not create a durable ApiLog link
       // since there is no business Message row to relate to
       related: { type: "typing-indicator" },
+      diagnostics: { tenantId, wabaId: cfg.wabaId ?? undefined },
     });
 
     return { success: true };
