@@ -151,9 +151,28 @@ export async function syncTemplates(): Promise<{ synced: number }> {
     related: { type: "template" },
     config,
   });
+  return reconcileTemplateList(res.data ?? [], null);
+}
 
+/** Pull templates for a specific tenant using the tenant's WabaAccount. */
+export async function syncTemplatesForTenant(tenantId: string): Promise<{ synced: number }> {
+  const config = await configForTemplate(tenantId);
+  if (!config.wabaId) throw new WhatsAppApiError(400, "Set your WABA ID in Settings first.");
+
+  const res = await graphFetch<{ data: MetaTemplate[] }>({
+    method: "GET",
+    path: `/${config.wabaId}/message_templates`,
+    query: { fields: "name,status,category,language,components,id,rejected_reason", limit: 200 },
+    related: { type: "template" },
+    config,
+    diagnostics: { tenantId, wabaId: config.wabaId ?? undefined },
+  });
+  return reconcileTemplateList(res.data ?? [], tenantId);
+}
+
+async function reconcileTemplateList(items: MetaTemplate[], tenantId: string | null): Promise<{ synced: number }> {
   let synced = 0;
-  for (const t of res.data ?? []) {
+  for (const t of items) {
     const status = mapMetaStatus(t.status);
     await prisma.template.upsert({
       where: { name_language: { name: t.name, language: t.language } },
@@ -163,6 +182,7 @@ export async function syncTemplates(): Promise<{ synced: number }> {
         components: t.components as object,
         metaTemplateId: t.id,
         rejectionReason: t.rejected_reason && t.rejected_reason !== "NONE" ? t.rejected_reason : null,
+        ...(tenantId ? { tenantId } : {}),
       },
       create: {
         name: t.name,
@@ -172,6 +192,7 @@ export async function syncTemplates(): Promise<{ synced: number }> {
         components: t.components as object,
         metaTemplateId: t.id,
         rejectionReason: t.rejected_reason && t.rejected_reason !== "NONE" ? t.rejected_reason : null,
+        ...(tenantId ? { tenantId } : {}),
       },
     });
     synced++;

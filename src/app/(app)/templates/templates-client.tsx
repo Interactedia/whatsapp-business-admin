@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, RefreshCw, Eye, Pencil, Trash2, Send } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
@@ -42,8 +43,15 @@ const STATUS_VARIANT: Record<Template["status"], BadgeProps["variant"]> = {
 
 export function TemplatesClient() {
   const qc = useQueryClient();
+  const pathname = usePathname();
   const { toast } = useToast();
   const [preview, setPreview] = useState<Template | null>(null);
+  // ponytail: derive the active tenant from the URL so multi-tenant setups
+  // sync against the right WABA without forcing the operator to pick.
+  const activeTenantId = (() => {
+    const m = pathname.match(/^\/t\/([^/]+)/);
+    return m ? m[1] : null;
+  })();
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ["templates"],
@@ -52,7 +60,11 @@ export function TemplatesClient() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ["templates"] });
 
   const sync = useMutation({
-    mutationFn: () => apiFetch<{ synced: number }>("/api/templates/sync", { method: "POST" }),
+    mutationFn: () =>
+      apiFetch<{ synced: number }>("/api/templates/sync", {
+        method: "POST",
+        body: JSON.stringify(activeTenantId ? { tenantId: activeTenantId } : {}),
+      }),
     onSuccess: (r) => {
       invalidate();
       toast({ title: `Synced ${r.synced} templates from Meta` });
