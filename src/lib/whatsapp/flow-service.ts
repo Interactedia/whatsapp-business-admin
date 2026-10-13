@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getWabaConfig } from "@/lib/settings";
+import { getTenantWabaConfig, getWabaConfig, type WabaConfig } from "@/lib/settings";
 import { graphFetch, WhatsAppApiError } from "./client";
 import { emptyFlowJson, type FlowCategory, type FlowComponent, type FlowJson } from "./flow-types";
 import { flowUsesEndpoint, parseFlowJson, validateFlowJson } from "./flow-validate";
@@ -264,18 +264,27 @@ export async function deleteFlow(flowId: string) {
   await prisma.flow.delete({ where: { id: flowId } });
 }
 
-async function fetchMetaFlowJson(metaFlowId: string): Promise<FlowJson | null> {
-  const assets = await graphFetch<{ data?: { download_url?: string }[] }>({ method: "GET", path: `/${metaFlowId}/assets`, related: { type: "flow" } });
+async function fetchMetaFlowJson(metaFlowId: string, config?: WabaConfig): Promise<FlowJson | null> {
+  const assets = await graphFetch<{ data?: { download_url?: string }[] }>({ method: "GET", path: `/${metaFlowId}/assets`, related: { type: "flow" }, config });
   const url = assets.data?.[0]?.download_url;
   if (!url) return null;
-  const config = await getWabaConfig();
-  const response = await fetch(url, { headers: config.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : undefined, redirect: "error" });
+  const response = await fetch(url, { headers: config?.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : undefined, redirect: "error" });
   if (!response.ok) return null;
   return parseFlowJson(await response.json());
 }
 
 export async function syncFlows() {
   const config = await getWabaConfig();
+  return syncFlowsWithConfig(config);
+}
+
+export async function syncFlowsForTenant(tenantId: string) {
+  const config = await getTenantWabaConfig(tenantId);
+  if (!config) throw new WhatsAppApiError(400, "Set the tenant WABA in Settings first.");
+  return syncFlowsWithConfig(config, tenantId);
+}
+
+async function syncFlowsWithConfig(config: WabaConfig, tenantId?: string) {
   if (!config.wabaId) throw new WhatsAppApiError(400, "Set the WABA ID in Settings first.");
   const metaFlows: MetaFlow[] = [];
   let after: string | undefined;
@@ -293,7 +302,7 @@ export async function syncFlows() {
   let synced = 0;
   for (const item of metaFlows) {
     const existing = await prisma.flowVersion.findUnique({ where: { metaFlowId: item.id }, include: { flow: true } });
-    const flowJson = await fetchMetaFlowJson(item.id).catch(() => null);
+    const flowJson = await fetchMetaFlowJson(item.id, config).catch(() => null);
     if (existing) {
       await prisma.flowVersion.update({
         where: { id: existing.id },
@@ -306,7 +315,7 @@ export async function syncFlows() {
         },
       });
     } else {
-      const created = await createLocalFlow({ name: item.name, categories: (item.categories || ["OTHER"]) as FlowCategory[], flowJson: flowJson || emptyFlowJson() });
+      const created = await createLocalFlow({ name: item.name, tenantId, categories: (item.categories || ["OTHER"]) as FlowCategory[], flowJson: flowJson || emptyFlowJson() });
       const version = created.versions[0];
       const importErrors = [...(item.validation_errors || []), ...(!flowJson ? [{ message: "Could not download the Flow JSON asset from Meta. Sync again before editing." }] : [])];
       await prisma.flowVersion.update({

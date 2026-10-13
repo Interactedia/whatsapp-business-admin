@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, ExternalLink, Pencil, Plus, RefreshCw, Send, Trash2, Upload, Archive } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
@@ -23,7 +24,9 @@ type FlowRow = {
 
 export function FlowsClient() {
   const qc = useQueryClient();
+  const pathname = usePathname();
   const { toast } = useToast();
+  const activeTenantId = pathname.match(/^\/t\/([^/]+)/)?.[1] ?? null;
   const { data: flows = [], isLoading } = useQuery({ queryKey: ["flows"], queryFn: () => apiFetch<FlowRow[]>("/api/flows") });
   const invalidate = () => qc.invalidateQueries({ queryKey: ["flows"] });
   const action = useMutation({
@@ -32,7 +35,7 @@ export function FlowsClient() {
     onError: (error: Error) => toast({ variant: "destructive", title: "Flow action failed", description: error.message }),
   });
   const sync = useMutation({
-    mutationFn: () => apiFetch<{ synced: number }>("/api/flows/sync", { method: "POST" }),
+    mutationFn: () => apiFetch<{ synced: number }>("/api/flows/sync", { method: "POST", body: JSON.stringify(activeTenantId ? { tenantId: activeTenantId } : {}) }),
     onSuccess: (result) => { invalidate(); toast({ title: `Synced ${result.synced} Flows from Meta` }); },
     onError: (error: Error) => toast({ variant: "destructive", title: "Sync failed", description: error.message }),
   });
