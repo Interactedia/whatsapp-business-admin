@@ -329,6 +329,10 @@ export async function enqueueOutboundMessage(
   // For templates: store the components that were validated and sent so the worker
   // can reconstruct the Meta payload without needing the original caller's data.
   // For flows: we store the flowId/cta/token.
+  // For media: store the mediaId returned by the Meta upload (and the link
+  // if the caller supplied one), so the worker can rebuild the IMAGE / VIDEO
+  // / AUDIO / DOCUMENT payload with the actual media reference instead of
+  // an empty object that Meta rejects with 132018.
   const storedPayload: Record<string, unknown> =
     templateContent
       ? (() => {
@@ -342,7 +346,13 @@ export async function enqueueOutboundMessage(
         })()
       : opts.content.kind === "flow"
         ? { flowId: opts.content.flowId, cta: opts.content.cta, flowToken: opts.content.flowToken }
-        : {};
+        : opts.content.kind === "media"
+          ? {
+              _kind: "media",
+              ...(opts.content.mediaId ? { mediaId: opts.content.mediaId } : {}),
+              ...(opts.content.mediaLink ? { mediaLink: opts.content.mediaLink } : {}),
+            }
+          : {};
 
   // Atomic: Message row + OutboxEvent in one transaction
   const messageId = await prisma.$transaction(async (tx) => {
