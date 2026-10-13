@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { getWabaConfig } from "@/lib/settings";
+import { getWabaConfig, type WabaConfig } from "@/lib/settings";
+import { decrypt } from "@/lib/crypto";
 import { graphFetch, WhatsAppApiError } from "@/lib/whatsapp/client";
 import {
   builderToComponents,
@@ -27,13 +28,38 @@ function mapMetaStatus(status: string): TemplateStatus {
   }
 }
 
+function getTenantWabaConfig(tenantId?: string | null): Promise<WabaConfig> {
+  if (!tenantId) return getWabaConfig();
+  return configForTemplate(tenantId);
+}
+
+async function configForTemplate(tenantId?: string | null): Promise<WabaConfig> {
+  if (!tenantId) return getWabaConfig();
+  const account = await prisma.wabaAccount.findFirst({
+    where: { tenantId },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!account) throw new WhatsAppApiError(400, "Set your tenant WABA account in Settings first.");
+  return {
+    wabaId: account.metaWabaId,
+    metaAppId: account.metaAppId ?? null,
+    phoneNumberId: null,
+    phoneNumberDisplay: null,
+    businessName: account.name,
+    accessToken: account.accessTokenEnc ? decrypt(account.accessTokenEnc) : null,
+    appSecret: account.appSecret ?? null,
+    webhookVerifyToken: account.webhookVerifyToken ?? null,
+    apiVersion: account.apiVersion ?? "v21.0",
+  };
+}
+
 /** Submit a locally-stored template to Meta for approval. */
 export async function submitTemplate(templateId: string): Promise<{ status: TemplateStatus; metaId: string }> {
-  const config = await getWabaConfig();
-  if (!config.wabaId) throw new WhatsAppApiError(400, "Set your WABA ID in Settings first.");
-
   const tmpl = await prisma.template.findUnique({ where: { id: templateId } });
   if (!tmpl) throw new WhatsAppApiError(404, "Template not found.");
+
+  const config = await configForTemplate(tmpl.tenantId);
+  if (!config.wabaId) throw new WhatsAppApiError(400, "Set your WABA ID in Settings first.");
 
   // Reconstruct a builder-shaped object from stored components for validation.
   const components = tmpl.components as unknown as ApiComponent[];

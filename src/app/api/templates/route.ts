@@ -27,7 +27,7 @@ export const GET = handle(async (req) => {
 
 export const POST = handle(async (req) => {
   const session = await requireAdmin();
-  const body = (await req.json()) as { builder: TemplateBuilder; submit?: boolean };
+  const body = (await req.json()) as { builder: TemplateBuilder; submit?: boolean; tenantId?: string };
   const builder = body.builder;
 
   // Validate + convert (throws 422 with all messages if invalid).
@@ -46,6 +46,7 @@ export const POST = handle(async (req) => {
       status: "LOCAL",
       components: components as object,
       createdById: session.user.id,
+      ...(body.tenantId ? { tenantId: body.tenantId } : {}),
     },
   });
 

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { handle, ok, requireUser, requireAdmin, HttpError } from "@/lib/api";
-import { buildValidatedComponents, deleteTemplate } from "@/lib/whatsapp/template-service";
+import { buildValidatedComponents, deleteTemplate, submitTemplate } from "@/lib/whatsapp/template-service";
 import type { TemplateBuilder } from "@/lib/whatsapp/template-types";
 
 export const GET = handle(async (_req, { params }) => {
@@ -20,7 +20,7 @@ export const PATCH = handle(async (req, { params }) => {
     throw new HttpError(400, "Only local or rejected templates can be edited.");
   }
 
-  const body = (await req.json()) as { builder: TemplateBuilder };
+  const body = (await req.json()) as { builder: TemplateBuilder; submit?: boolean; tenantId?: string };
   const components = buildValidatedComponents(body.builder);
 
   const updated = await prisma.template.update({
@@ -32,8 +32,15 @@ export const PATCH = handle(async (req, { params }) => {
       components: components as object,
       status: "LOCAL",
       rejectionReason: null,
+      ...(body.tenantId ? { tenantId: body.tenantId } : {}),
     },
   });
+
+  if (body.submit) {
+    const result = await submitTemplate(id);
+    return ok({ id: updated.id, status: result.status, metaId: result.metaId });
+  }
+
   return ok({ id: updated.id });
 });
 

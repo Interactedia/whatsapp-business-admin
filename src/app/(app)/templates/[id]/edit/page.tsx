@@ -18,5 +18,5 @@ export default async function EditTemplatePage({ params }: { params: Promise<{ i
     category: template.category as TemplateCategory,
   });
 
-  return <TemplateWizard initial={builder} templateId={template.id} />;
+  return <TemplateWizard initial={builder} templateId={template.id} tenantId={template.tenantId} />;
 }

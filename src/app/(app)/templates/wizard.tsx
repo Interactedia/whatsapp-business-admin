@@ -51,7 +51,7 @@ const CATEGORIES = [
   { value: "AUTHENTICATION", label: "Authentication", icon: ShieldCheck, help: "One-time passcodes and verification." },
 ] as const;
 
-export function TemplateWizard({ initial, templateId }: { initial?: TemplateBuilder; templateId?: string }) {
+export function TemplateWizard({ initial, templateId, tenantId }: { initial?: TemplateBuilder; templateId?: string; tenantId?: string | null }) {
   const router = useRouter();
   const { toast } = useToast();
   const [step, setStep] = useState(0);
@@ -66,7 +66,7 @@ export function TemplateWizard({ initial, templateId }: { initial?: TemplateBuil
     mutationFn: (submit: boolean) => {
       const url = templateId ? `/api/templates/${templateId}` : "/api/templates";
       const method = templateId ? "PATCH" : "POST";
-      return apiFetch(url, { method, body: JSON.stringify({ builder, submit }) });
+      return apiFetch(url, { method, body: JSON.stringify({ builder, submit, tenantId }) });
     },
     onSuccess: (_d, submit) => {
       toast({ title: submit ? "Submitted to Meta for approval" : "Template saved as draft" });
