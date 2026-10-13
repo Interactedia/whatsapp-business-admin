@@ -751,7 +751,7 @@ WA-ERA4-CERT ─ Requires: All WA-ERA4-01..11
 
 ---
 
-## 11.4 Authentication, Authorization & Tenant Isolation Boundaries (WA-ERA4-03)
+### 11.4 Authentication, Authorization & Tenant Isolation Boundaries (WA-ERA4-03)
 
 WA-ERA4-03 audited the existing realtime layer against the packet's
 authorization invariants. The findings below are evidence-based — each
@@ -1770,7 +1770,7 @@ Tests:
 
 ---
 
-## 16. WA-ERA4-10 — Observability and Resilience Certification
+## 19. WA-ERA4-10 — Observability and Resilience Certification
 
 **Task ID:** WA-ERA4-10
 **Status:** PASS
@@ -1778,7 +1778,7 @@ Tests:
 infrastructure. Detect and correct reproducible defects. Preserve the
 approved architecture and the public contracts of ERA 4.
 
-### 16.1 Existing Observability Inventory
+### 19.1 Existing Observability Inventory
 
 The realtime stack already emits structured `console.*` diagnostics at
 specific lifecycle transitions. The packet requirement was to inventory
@@ -1807,7 +1807,7 @@ direct signal. WA-ERA4-10 adds three `console.info` lines
 high-cardinality tenant/user labels, no payload logging, no token or
 cookie logging, no new observability platform.
 
-### 16.2 Sensitive-Data Logging Review
+### 19.2 Sensitive-Data Logging Review
 
 A repository-wide grep on `cookie|session|token|secret|password|phone`
 against the realtime source confirmed zero PII is included in any
@@ -1827,7 +1827,7 @@ counter. No user id, tenant id, session, token, cookie, message
 payload, conversation id or contact phone number appears in any
 emitted log line.
 
-### 16.3 Failure Isolation Evidence
+### 19.3 Failure Isolation Evidence
 
 The new regression test `test/realtime-resilience-observability.test.ts`
 exercises each documented failure-isolation path with deterministic
@@ -1846,7 +1846,7 @@ required) and reproducible.
 | `template:status` published via `publish()` | Rejected, error logged with type only | `rejects publish of global event on tenant path` |
 | `message:new` published via `publishGlobal()` | Rejected, error logged with type only | `rejects publishGlobal of tenant event` |
 
-### 16.4 Redis Resilience
+### 19.4 Redis Resilience
 
 The packet explicitly forbids certifying the Redis gates with mocks.
 The authoritative real-Redis evidence lives in:
@@ -1870,7 +1870,7 @@ a subscriber is offline are not replayed. Recovery is via canonical
 HTTP, not via Redis replay. This is intentional and aligned with
 PostgreSQL-as-source-of-truth.
 
-### 16.5 WebSocket Resilience
+### 19.5 WebSocket Resilience
 
 | Property | Status | Source of evidence |
 |----------|--------|--------------------|
@@ -1885,7 +1885,7 @@ PostgreSQL-as-source-of-truth.
 The revalidation interval remains at 60 seconds. The packet forbids
 changing it without explicit approval; WA-ERA4-10 does not.
 
-### 16.6 Bounded Load Methodology and Results
+### 19.6 Bounded Load Methodology and Results
 
 The packet requested "repeatable load scenarios with explicitly
 documented client counts and durations" but did not specify what
@@ -1921,7 +1921,7 @@ bounded run. A single broken `send()` produces exactly one console
 error and does not abort the iteration; cross-tenant delivery is
 rejected by the iteration filter before `send()` is even attempted.
 
-### 16.7 Resource Cleanup Guarantees
+### 19.7 Resource Cleanup Guarantees
 
 `shutdownRealtime()` (and the equivalent `cleanup()` inside
 `registerClient`) is the canonical teardown path. WA-ERA4-10 asserts
@@ -1936,7 +1936,7 @@ in a deterministic test that after shutdown:
 - The active-connection counter is logged with `shutdown drained <n>`
   so an operator can confirm a clean exit vs a hung subscriber
 
-### 16.8 Tenant Isolation
+### 19.8 Tenant Isolation
 
 The architecture foundation already documents tenant isolation as
 server-side, fail-closed, and verified by the WA-ERA4-03 security
@@ -1947,7 +1947,7 @@ regression test:
 - A publish to a tenant with zero connections does not echo the
   payload in any error log
 
-### 16.9 Privacy of Operational Logs
+### 19.9 Privacy of Operational Logs
 
 All `console.*` lines emitted by the realtime stack are restricted to:
 event type names, lifecycle words (`accepted`, `closed`, `draining`,
@@ -1958,7 +1958,7 @@ enforced by source review and by the new
 `test/realtime-resilience-observability.test.ts` "no payload echo"
 assertions.
 
-### 16.10 Known Limitations (Reaffirmed)
+### 19.10 Known Limitations (Reaffirmed)
 
 - No historical replay — disconnect-then-reconnect is recovered via
   HTTP, not via Redis.
@@ -1970,7 +1970,7 @@ assertions.
 - Bounded-load numbers above are unit-scale; production capacity
   targets require a separate approved capacity requirement.
 
-### 16.11 Remaining Items for Final Certification (WA-ERA4-11)
+### 19.11 Remaining Items for Final Certification (WA-ERA4-11)
 
 - Real-network, multi-instance capacity test (N concurrent sockets
   per tenant) — not started; requires approved capacity target.
@@ -1980,7 +1980,7 @@ assertions.
 - Production-side log aggregation confirmation — requires the
   deployment runbook, not a code change.
 
-### 16.12 Test Results
+### 19.12 Test Results
 
 | Gate | Result |
 |------|--------|
