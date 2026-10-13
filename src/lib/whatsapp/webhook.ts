@@ -475,6 +475,10 @@ export function serializeMessage(m: {
   errorJson?: unknown;
 }) {
   const templateContent = m.type === "TEMPLATE" ? readTemplateContent(m.payload) : null;
+  const payload = m.payload && typeof m.payload === "object" ? m.payload as { location?: unknown } : null;
+  const location = m.type === "LOCATION" && payload?.location && typeof payload.location === "object"
+    ? payload.location as { latitude?: unknown; longitude?: unknown; name?: unknown; address?: unknown; url?: unknown }
+    : null;
   return {
     id: m.id,
     conversationId: m.conversationId,
@@ -483,6 +487,15 @@ export function serializeMessage(m: {
     status: m.status,
     text: templateContent ? templateContentText(templateContent) : m.text,
     ...(templateContent ? { templateContent } : {}),
+    ...(location && typeof location.latitude === "number" && typeof location.longitude === "number" ? {
+      location: {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        name: typeof location.name === "string" ? location.name : null,
+        address: typeof location.address === "string" ? location.address : null,
+        url: typeof location.url === "string" ? location.url : null,
+      },
+    } : {}),
     caption: m.caption,
     hasMedia: Boolean(m.mediaPath),
     mediaMime: m.mediaMime,

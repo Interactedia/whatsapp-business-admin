@@ -49,6 +49,7 @@ type Msg = {
   waMessageId: string | null;
   errorJson?: { code?: string; message?: string; uncertain?: boolean; metaStatus?: number } | null;
   templateContent?: TemplateContent;
+  location?: { latitude: number; longitude: number; name: string | null; address: string | null; url: string | null };
 };
 type FlowSubmission = { id: string; waMessageId: string | null; flow: { name: string }; response: Record<string, unknown> | null; purgedAt: string | null; completedAt: string };
 type Thread = {
@@ -460,8 +461,9 @@ function MessageBubble({ m }: { m: Msg }) {
         )}
       >
         {m.type === "TEMPLATE" && m.templateContent ? <TemplateMessage content={m.templateContent} messageId={m.id} hasMedia={m.hasMedia} /> : <>
+          {m.type === "LOCATION" && m.location ? <LocationContent m={m} /> : null}
           {m.hasMedia && <MediaContent m={m} />}
-          {m.text && <div className="whitespace-pre-wrap wrap-break-word">{m.text}</div>}
+          {m.type !== "LOCATION" && m.text && <div className="whitespace-pre-wrap wrap-break-word">{m.text}</div>}
           {m.caption && <div className="whitespace-pre-wrap wrap-break-word">{m.caption}</div>}
         </>}
         <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px] [&>svg]:shrink-0", out ? "text-zinc-600 dark:text-zinc-300" : "text-muted-foreground")}>
@@ -470,6 +472,25 @@ function MessageBubble({ m }: { m: Msg }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function LocationContent({ m }: { m: Msg }) {
+  if (!m.location) return null;
+  const { latitude, longitude, name, address } = m.location;
+  const q = encodeURIComponent(`${latitude},${longitude}`);
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${q}`;
+  const staticUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${latitude},${longitude}&zoom=16&size=420x220&markers=${latitude},${longitude},red-pushpin`;
+  return (
+    <a href={mapUrl} target="_blank" rel="noreferrer" className="mb-1 block overflow-hidden rounded-md border bg-muted/40 no-underline">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={staticUrl} alt={name ?? "Location"} className="h-40 w-full object-cover" />
+      <div className="space-y-0.5 p-2">
+        <div className="font-medium text-inherit">{name ?? "Location"}</div>
+        {address && <div className="text-xs text-muted-foreground">{address}</div>}
+        <div className="text-xs text-muted-foreground">{latitude.toFixed(6)}, {longitude.toFixed(6)}</div>
+      </div>
+    </a>
   );
 }
 
