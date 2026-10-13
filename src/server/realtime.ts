@@ -241,6 +241,17 @@ export function attachRealtime(server: HttpServer): void {
  */
 const REVALIDATE_INTERVAL_MS = 60_000;
 
+/**
+ * WA-ERA4-10 — Log WebSocket lifecycle transitions at INFO level so operators
+ * can correlate hub accept/close with the existing [realtime-pubsub]
+ * diagnostics. Counters only — no user id, tenant id, session, token, cookie
+ * or payload is included.
+ */
+function logLifecycle(event: "accepted" | "closed"): void {
+  const hub = getHub();
+  console.info(`[realtime] connection ${event}; active=${hub.connections.size}`);
+}
+
 function registerClient(hub: Hub, userId: string, tenantId: string, cookie: string, ws: WebSocket) {
   const revalidate = setInterval(async () => {
     try {
@@ -261,6 +272,7 @@ function registerClient(hub: Hub, userId: string, tenantId: string, cookie: stri
 
   const info: ConnectionInfo = { ws, userId, tenantId, cookie, revalidate };
   hub.connections.add(info);
+  logLifecycle("accepted");
 
   // ponytail: cleanup runs once on whichever event fires first (close or error);
   // a broken socket may emit error without a subsequent close, so we teardown
@@ -272,6 +284,7 @@ function registerClient(hub: Hub, userId: string, tenantId: string, cookie: stri
     cleaned = true;
     clearInterval(info.revalidate);
     hub.connections.delete(info);
+    logLifecycle("closed");
   }
 
   ws.on("close", cleanup);
@@ -305,6 +318,7 @@ export async function shutdownRealtime(): Promise<void> {
     await shutdownRealtimeDistribution();
     return;
   }
+  const drained = hub.connections.size;
   for (const info of hub.connections) {
     try {
       clearInterval(info.revalidate);
@@ -318,6 +332,9 @@ export async function shutdownRealtime(): Promise<void> {
     }
   }
   hub.connections.clear();
+  if (drained > 0) {
+    console.info(`[realtime] shutdown drained ${drained} connection(s)`);
+  }
   if (hub.wss) {
     try {
       hub.wss.close();

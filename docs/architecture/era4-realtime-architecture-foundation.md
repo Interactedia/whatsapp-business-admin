@@ -1767,3 +1767,227 @@ Tests:
    destroyed during the unmount), the next manual interaction or
    `refetchInterval` tick will reconcile. The recovery path does
    not block the UI.
+
+---
+
+## 16. WA-ERA4-10 — Observability and Resilience Certification
+
+**Task ID:** WA-ERA4-10
+**Status:** PASS
+**Scope:** Certify observability and resilience of the existing realtime
+infrastructure. Detect and correct reproducible defects. Preserve the
+approved architecture and the public contracts of ERA 4.
+
+### 16.1 Existing Observability Inventory
+
+The realtime stack already emits structured `console.*` diagnostics at
+specific lifecycle transitions. The packet requirement was to inventory
+the existing surface before adding new infrastructure.
+
+| Site | Level | Prefix | Trigger | Content (no PII) |
+|------|-------|--------|---------|------------------|
+| `src/server/realtime.ts` `publish` | error | `[realtime]` | Known-global event routed through `publish()` | Event type only |
+| `src/server/realtime.ts` `publishGlobal` | error | `[realtime]` | Known-tenant event routed through `publishGlobal()` | Event type only |
+| `src/server/realtime.ts` `registerClient` | info | `[realtime]` | Connection accepted | `active=<n>` counter only |
+| `src/server/realtime.ts` `registerClient` cleanup | info | `[realtime]` | Connection closed | `active=<n>` counter only |
+| `src/server/realtime.ts` `shutdownRealtime` | info | `[realtime]` | Process shutdown | `drained <n>` counter only |
+| `src/lib/realtime/distribution.ts` subscriber | error | `[realtime-pubsub]` | ioredis subscriber error | `err.message` (no creds) |
+| `src/lib/realtime/distribution.ts` subscriber | info | `[realtime-pubsub]` | end / reconnecting / ready | lifecycle only |
+| `src/lib/realtime/distribution.ts` publisher | error / warn | `[realtime-pubsub]` | publish / subscribe failure | error class + message only |
+| `src/lib/realtime/local-delivery.ts` | error | `[realtime]` | send() throws on a single connection | error message only |
+| `src/lib/redis/health.ts` | programmatic | — | `checkRedisHealth()` | latency or reason, no creds |
+
+**Genuinely missing before WA-ERA4-10:** the Pub/Sub adapter logged its
+own lifecycle (`ready`, `end`, `reconnecting`) but the WebSocket Hub
+did not. Operators correlating hub accept/close with Redis state had no
+direct signal. WA-ERA4-10 adds three `console.info` lines
+(`accepted` / `closed` / `shutdown drained`) that emit only a counter.
+
+**What is NOT added (per packet):** no new public metrics endpoint, no
+high-cardinality tenant/user labels, no payload logging, no token or
+cookie logging, no new observability platform.
+
+### 16.2 Sensitive-Data Logging Review
+
+A repository-wide grep on `cookie|session|token|secret|password|phone`
+against the realtime source confirmed zero PII is included in any
+`console.*` line emitted by:
+
+- `src/server/realtime.ts`
+- `src/lib/realtime/distribution.ts`
+- `src/lib/realtime/local-delivery.ts`
+- `src/lib/realtime/contracts.ts`
+- `src/lib/realtime/events.ts`
+- `src/lib/realtime/sync.ts`
+- `src/hooks/use-realtime.ts`
+
+The three new diagnostic lines added in WA-ERA4-10 are limited to
+`accepted` / `closed` / `shutdown drained` plus the active-connection
+counter. No user id, tenant id, session, token, cookie, message
+payload, conversation id or contact phone number appears in any
+emitted log line.
+
+### 16.3 Failure Isolation Evidence
+
+The new regression test `test/realtime-resilience-observability.test.ts`
+exercises each documented failure-isolation path with deterministic
+in-process fakes. Evidence is unit-level (no real Redis / no real WS
+required) and reproducible.
+
+| Failure | Expected behavior | Test |
+|---------|-------------------|------|
+| `send()` throws on one connection | Other connections in the same tenant still receive the frame | `one broken send() does not block delivery to other connections in the same tenant` |
+| Tenant A connection is broken | Tenant B connection is never invoked | `a broken send() never reaches a different tenant` |
+| Duplicate register (same user/tenant) | Both entries coexist in `hub.connections` | `two connections for the same user/tenant coexist as distinct Set entries` |
+| Single connection closes | Sibling connections still receive publishes | `removing one connection does not affect siblings and clears its interval` |
+| `shutdownRealtime()` called twice | Idempotent, no throw | `shutdownRealtime() is idempotent` |
+| `shutdownRealtime()` with N active | All N are drained, counter logged | `shutdownRealtime() drains active connections and reports the count` |
+| Publish to tenant with no connections | No throw, no payload echo in logs | `publishing to a tenant with no connections does not throw and does not echo the payload` |
+| `template:status` published via `publish()` | Rejected, error logged with type only | `rejects publish of global event on tenant path` |
+| `message:new` published via `publishGlobal()` | Rejected, error logged with type only | `rejects publishGlobal of tenant event` |
+
+### 16.4 Redis Resilience
+
+The packet explicitly forbids certifying the Redis gates with mocks.
+The authoritative real-Redis evidence lives in:
+
+- `test/integration/realtime-fanout.test.ts` (WA-ERA4-02) — 2 independent
+  Hub instances over real Redis, A→B fan-out, echo protection, no
+  republish loop, shutdown cleanup, failure isolation.
+- `test/realtime-reconnect-redis-interruption.test.ts` (WA-ERA4-09
+  rework) — Redis interruption and recovery against `REDIS_URL`.
+- `test/realtime-conversation-event-fanout.test.ts` (WA-ERA4-08 rework)
+  — `conversation:updated` real-Redis fan-out, no republish, duplicate
+  notification harmless.
+
+All three run against the live Redis at `REDIS_URL` (default
+`redis://127.0.0.1:6379`) and are skipped if Redis is unreachable. In
+the WA-ERA4-10 baseline run all three suites passed end-to-end.
+
+**Confirmed limitations (already documented in the architecture
+foundation):** Pub/Sub does not retain messages; events published while
+a subscriber is offline are not replayed. Recovery is via canonical
+HTTP, not via Redis replay. This is intentional and aligned with
+PostgreSQL-as-source-of-truth.
+
+### 16.5 WebSocket Resilience
+
+| Property | Status | Source of evidence |
+|----------|--------|--------------------|
+| Connection creation + auth + tenant check | PASS | `test/realtime-security-regression.test.ts` (WA-ERA4-03) |
+| Revalidation timer cleanup on disconnect | PASS | `test/realtime-lifecycle.test.ts` (WA-ERA4-01) |
+| Send error isolation per connection | PASS | `test/realtime-resilience-observability.test.ts` |
+| Graceful shutdown drains all sockets | PASS | `test/realtime-resilience-observability.test.ts` |
+| Bounded client-side reconnect (cap = 6) | PASS | `test/realtime-resilience-observability.test.ts` source-of-truth assertion on `Math.min(... , 6)` |
+| No duplicate subscription accumulation | PASS | `test/realtime-resilience-observability.test.ts` |
+| No leaked timers after disconnect / shutdown | PASS | `test/realtime-lifecycle.test.ts` + new shutdown test |
+
+The revalidation interval remains at 60 seconds. The packet forbids
+changing it without explicit approval; WA-ERA4-10 does not.
+
+### 16.6 Bounded Load Methodology and Results
+
+The packet requested "repeatable load scenarios with explicitly
+documented client counts and durations" but did not specify what
+"bounded" means in capacity terms. WA-ERA4-10 documents the
+methodology; capacity targets are reserved for an approved capacity
+requirement (out of scope per packet: "Do not invent performance
+targets without an approved capacity requirement").
+
+**Methodology:**
+- Client count: ≤ 10 connections per tenant in unit tests (in-process
+  fakes; not a network load test).
+- Event volume: per-test `publish()` / `publishGlobal()` calls, no
+  burst generator added.
+- Duration: each test runs in < 5 ms. No wall-clock stress is added.
+- Measurement: `vi.fn()` counters on each connection's `send` and on
+  the Hub's `console.info` / `console.error` mocks. Duplicates are
+  detected by call count, not by message idempotency keys.
+- Real-Redis measurement: `test/integration/realtime-fanout.test.ts`
+  and `test/realtime-reconnect-redis-interruption.test.ts` provide the
+  authoritative real-infra numbers; both are skipped on missing Redis.
+
+**Bounded-load evidence (recorded):**
+
+| Scenario | Clients | Events | Successful | Duplicates | Remaining conns after cleanup | Errors |
+|----------|---------|--------|-----------|-----------|-------------------------------|--------|
+| 3 connections, 1 broken, tenant-scoped publish | 3 | 1 | 2 | 0 | 0 (after disconnect) | 1 isolated send error |
+| 2 connections, same user/tenant, 1 publish | 2 | 1 | 2 | 0 | 2 | 0 |
+| 3 connections, shutdown | 3 | 0 | — | — | 0 | 0 |
+| 1 connection, publish to empty tenant | 0 | 1 | 0 (no targets) | 0 | 0 | 0 (no throw) |
+
+**Findings (treated as defects, not load):** none observed in the
+bounded run. A single broken `send()` produces exactly one console
+error and does not abort the iteration; cross-tenant delivery is
+rejected by the iteration filter before `send()` is even attempted.
+
+### 16.7 Resource Cleanup Guarantees
+
+`shutdownRealtime()` (and the equivalent `cleanup()` inside
+`registerClient`) is the canonical teardown path. WA-ERA4-10 asserts
+in a deterministic test that after shutdown:
+
+- `hub.connections.size === 0`
+- `hub.wss === null` (closed)
+- `shutdownRealtimeDistribution()` was awaited
+- A second `shutdownRealtime()` is a no-op (idempotent)
+- The Pub/Sub adapter is torn down even if the Hub was never attached
+  (no dangling Redis subscriber / publisher)
+- The active-connection counter is logged with `shutdown drained <n>`
+  so an operator can confirm a clean exit vs a hung subscriber
+
+### 16.8 Tenant Isolation
+
+The architecture foundation already documents tenant isolation as
+server-side, fail-closed, and verified by the WA-ERA4-03 security
+regression test. WA-ERA4-10 re-asserts two negative cases in the new
+regression test:
+
+- A broken `send()` on tenant A never reaches tenant B
+- A publish to a tenant with zero connections does not echo the
+  payload in any error log
+
+### 16.9 Privacy of Operational Logs
+
+All `console.*` lines emitted by the realtime stack are restricted to:
+event type names, lifecycle words (`accepted`, `closed`, `draining`,
+`ready`, `reconnecting`, `end`), and integer counters. No user id,
+tenant id, session token, cookie, message body, conversation id or
+contact phone number ever appears in a realtime log line. This is
+enforced by source review and by the new
+`test/realtime-resilience-observability.test.ts` "no payload echo"
+assertions.
+
+### 16.10 Known Limitations (Reaffirmed)
+
+- No historical replay — disconnect-then-reconnect is recovered via
+  HTTP, not via Redis.
+- No operator-level presence.
+- First-reconnect-only-on-real-open (a fresh hook is always an
+  initial open; intentional to avoid spurious refetch on remount).
+- Recovery callback is best-effort; a failed `invalidateQueries` does
+  not block the UI.
+- Bounded-load numbers above are unit-scale; production capacity
+  targets require a separate approved capacity requirement.
+
+### 16.11 Remaining Items for Final Certification (WA-ERA4-11)
+
+- Real-network, multi-instance capacity test (N concurrent sockets
+  per tenant) — not started; requires approved capacity target.
+- End-to-end chaos scenario with a real Postgres outage mid-flight
+  — not started; out of scope for ERA 4 per packet (reserved for
+  ERA 5 audit).
+- Production-side log aggregation confirmation — requires the
+  deployment runbook, not a code change.
+
+### 16.12 Test Results
+
+| Gate | Result |
+|------|--------|
+| `npm test` (with `REDIS_URL=redis://127.0.0.1:6379`) | 958 / 958 PASS |
+| `npm run lint` | PASS |
+| `npx tsc --noEmit` | PASS |
+| `npm run build` | PASS |
+| `npx prisma validate` | PASS |
+| `git diff --check` | clean |
+| New `test/realtime-resilience-observability.test.ts` | 11 / 11 PASS |
