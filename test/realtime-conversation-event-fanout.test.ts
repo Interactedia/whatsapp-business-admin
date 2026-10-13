@@ -35,6 +35,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import Redis from "ioredis";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
+// Force REDIS_URL into the environment for the duration of this suite so the
+// Pub/Sub adapter is not silently skipped when vitest is launched without
+// inherited env. The probe below still gates execution on actual broker
+// availability.
+process.env.REDIS_URL = REDIS_URL;
 
 let redisAvailable = false;
 let probe: Redis | null = null;
