@@ -75,6 +75,7 @@ export function ContactsClient({
         body: JSON.stringify({ waId: c.waId, name: c.name ?? undefined }),
       }),
     onSuccess: (conv) => router.push(`${conversationsHref}?c=${conv.id}`),
+    onError: (e: Error) => toast({ variant: "destructive", title: "Cannot start chat", description: e.message }),
   });
 
   return (
