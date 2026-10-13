@@ -127,10 +127,7 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
   if (isLoading) {
     return (
       <div className="flex h-full flex-col">
-        <PageHeader
-          title="Settings"
-          description="Connect your WhatsApp Business Cloud API account."
-        />
+        <PageHeader title="Settings" />
         <div className="mx-auto w-full max-w-3xl space-y-4 p-4">
           <Card className="h-64 animate-pulse bg-muted/40" />
           <Card className="h-48 animate-pulse bg-muted/40" />
@@ -143,7 +140,7 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Settings"
-        description="Connect your WhatsApp Business Cloud API account."
+        description={data?.connected ? `Connected as ${data.phoneNumberDisplay || data.phoneNumberId || "WhatsApp number"}.` : "Connect your WhatsApp Business Cloud API account."}
         actions={
           data?.connected ? (
             <Badge variant="success" className="gap-1">
