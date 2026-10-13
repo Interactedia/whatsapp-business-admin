@@ -7,7 +7,6 @@ import { serializeMessage } from "@/lib/whatsapp/webhook";
 import { resolveTemplateContents } from "@/lib/whatsapp/template-history";
 import { enqueueOutboundMessage, isWithinSessionWindow, resolveConversationSenderConfig } from "@/lib/whatsapp/send";
 import { uploadOutboundMedia } from "@/lib/whatsapp/media";
-import { WhatsAppApiError } from "@/lib/whatsapp/client";
 import { mediaStore, extFromMime } from "@/lib/media";
 import { templateExampleComponents, templateRuntimeComponents } from "@/lib/whatsapp/template-service";
 import { extractVariables, isNamedToken, type ApiComponent } from "@/lib/whatsapp/template-types";
@@ -294,34 +293,7 @@ export const POST = handle(async (req, { params }) => {
           : "document";
 
     const senderConfig = await resolveConversationSenderConfig(conversationId);
-    let mediaId: string;
-    try {
-      mediaId = await uploadOutboundMedia({ data: buffer, mimeType: mime, fileName: file.name, config: senderConfig });
-    } catch (err) {
-      // ponytail: persist a FAILED row so the operator sees the attempt in the
-      // thread (AlertCircle, not the silent 400 the upload endpoint would
-      // otherwise return). The DB row is the source of truth; the API log
-      // already records the Meta error.
-      const reason = err instanceof WhatsAppApiError
-        ? `Meta error ${err.status}: ${err.message}`
-        : err instanceof Error ? err.message : String(err);
-      const failedRow = await prisma.message.create({
-        data: {
-          conversationId,
-          tenantId: context.tenantId,
-          direction: "OUT",
-          type: mediaType.toUpperCase() as "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT",
-          status: "FAILED",
-          text: caption ?? null,
-          mediaFilename: file.name,
-          mediaMime: mime,
-          sentById: session.user.id,
-          errorJson: { code: "UPLOAD_FAILED", message: reason, metaStatus: 0 },
-          timestamp: new Date(),
-        },
-      });
-      return ok({ id: failedRow.id, status: "FAILED", waMessageId: null, error: reason }, 202);
-    }
+    const mediaId = await uploadOutboundMedia({ data: buffer, mimeType: mime, fileName: file.name, config: senderConfig });
     const localPath = await mediaStore.save(buffer, extFromMime(mime));
 
     const message = await enqueueOutboundMessage({
