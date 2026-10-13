@@ -236,6 +236,26 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
   const [showTemplates, setShowTemplates] = useState(false);
   const [showFlows, setShowFlows] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // ponytail: throttle typing pings to the server. The server's Meta client
+  // already enforces TYPING_MIN_INTERVAL_MS, but we cap the request rate
+  // here to keep the network and auth hook quiet.
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastTypingSentRef = useRef<number>(0);
+  function sendTypingPing(draft: string) {
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    const now = Date.now();
+    const since = now - lastTypingSentRef.current;
+    const wait = since >= 2000 ? 0 : 2000 - since;
+    typingTimerRef.current = setTimeout(() => {
+      lastTypingSentRef.current = Date.now();
+      void apiFetch(`/api/tenants/${tenantId}/conversations/${conversationId}/typing`, {
+        method: "POST",
+        body: JSON.stringify({ draft }),
+      }).catch(() => {
+        // ponytail: best-effort; never let typing pings surface a toast
+      });
+    }, wait);
+  }
   // WA-ERA4-05: per-thread token guard for stale HTTP responses. The
   // query below returns the previously-cached thread when the active
   // tenant+conversation has moved on by the time the response arrives.
@@ -385,7 +405,11 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
             <Button variant="ghost" size="icon" title="Send template" onClick={() => setShowTemplates(true)}><LayoutTemplate className="h-4 w-4" /></Button>
             <Input
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setText(v);
+                if (v.trim()) sendTypingPing(v);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && text.trim()) {
                   e.preventDefault();

@@ -153,6 +153,29 @@ export const GET = handle(async (_req, { params }) => {
       where: { id: conversationId, tenantId: context.tenantId },
       data: { unreadCount: 0 },
     });
+
+    // ponytail: Meta's Cloud API only exposes a "mark as read" call bundled
+    // with the typing indicator. Fire it on the most recent inbound so the
+    // customer sees blue ticks as soon as the operator opens the thread,
+    // even if the operator never types a reply. The typing indicator shows
+    // for up to 25s; the read receipt persists.
+    const lastInbound = await prisma.message.findFirst({
+      where: { conversationId, direction: "IN" },
+      orderBy: { timestamp: "desc" },
+      select: { id: true },
+    });
+    if (lastInbound) {
+      // Fire-and-forget. Best-effort: a Meta error must not break the
+      // operator's thread load (the typing service already swallows errors
+      // and never throws).
+      const { sendTypingIndicator } = await import("@/lib/whatsapp/typing");
+      void sendTypingIndicator({
+        context,
+        conversationId,
+        inboundMessageId: lastInbound.id,
+        markAsRead: true,
+      });
+    }
   }
 
   return ok({
