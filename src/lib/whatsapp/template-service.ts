@@ -295,23 +295,26 @@ export function templateRuntimeComponents(
 
 /** Delete a template both on Meta (by name) and locally. */
 export async function deleteTemplate(templateId: string): Promise<void> {
-  const config = await getWabaConfig();
   const tmpl = await prisma.template.findUnique({ where: { id: templateId } });
   if (!tmpl) throw new WhatsAppApiError(404, "Template not found.");
 
-  // Only call Meta if it was actually submitted.
-  if (tmpl.metaTemplateId && config.wabaId) {
-    try {
-      await graphFetch({
-        method: "DELETE",
-        path: `/${config.wabaId}/message_templates`,
-        query: { name: tmpl.name },
-        related: { type: "template", id: templateId },
-        config,
-      });
-    } catch (e) {
-      // If Meta already removed it, continue with the local delete.
-      if (!(e instanceof WhatsAppApiError) || e.status !== 404) throw e;
+  // Only call Meta if it was actually submitted and we know its WABA.
+  if (tmpl.metaTemplateId && tmpl.tenantId) {
+    const config = await configForTemplate(tmpl.tenantId);
+    if (config.wabaId) {
+      try {
+        await graphFetch({
+          method: "DELETE",
+          path: `/${config.wabaId}/message_templates`,
+          query: { name: tmpl.name },
+          related: { type: "template", id: templateId },
+          config,
+          diagnostics: { tenantId: tmpl.tenantId, wabaId: config.wabaId ?? undefined },
+        });
+      } catch (e) {
+        // If Meta already removed it, continue with the local delete.
+        if (!(e instanceof WhatsAppApiError) || e.status !== 404) throw e;
+      }
     }
   }
 
