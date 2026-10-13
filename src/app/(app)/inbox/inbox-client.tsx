@@ -118,29 +118,46 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
   // WA-ERA4-05: route the event through the sync helpers to dedup
   // duplicates, reject stale timestamps, and decide whether the list
   // or the open thread actually needs a refetch.
-  useRealtime(tenantId || null, (msg) => {
-    const verdict = processEvent(
-      msg,
-      activeId,
-      seenRef.current,
-      orderingRef.current,
-      ["message:new", "message:status", "message:image-enriched", "conversation:updated"],
-    );
-    if (!verdict.admitted) return;
-    const action: SyncAction = verdict.action;
-    if (action.kind === "ignore") return;
-    if (action.kind === "refetch-list" || action.kind === "refetch-list-and-thread") {
-      // Bump the request token so any in-flight response is dropped
-      // (the queryFn returns the previous cache rather than throwing).
-      // Then trigger a refetch. We do NOT call cancelQueries — that
-      // would mark the in-flight query as failed.
+  useRealtime(
+    tenantId || null,
+    (msg) => {
+      const verdict = processEvent(
+        msg,
+        activeId,
+        seenRef.current,
+        orderingRef.current,
+        ["message:new", "message:status", "message:image-enriched", "conversation:updated"],
+      );
+      if (!verdict.admitted) return;
+      const action: SyncAction = verdict.action;
+      if (action.kind === "ignore") return;
+      if (action.kind === "refetch-list" || action.kind === "refetch-list-and-thread") {
+        // Bump the request token so any in-flight response is dropped
+        // (the queryFn returns the previous cache rather than throwing).
+        // Then trigger a refetch. We do NOT call cancelQueries — that
+        // would mark the in-flight query as failed.
+        listTokenRef.current.next();
+        qc.invalidateQueries({ queryKey: ["conversations", tenantId] });
+      }
+      if (action.kind === "refetch-thread" || action.kind === "refetch-list-and-thread") {
+        qc.invalidateQueries({ queryKey: ["thread", tenantId, action.conversationId] });
+      }
+    },
+    // WA-ERA4-09: on a successful reconnect (NOT the initial open), Redis
+    // Pub/Sub has already lost every event we missed — recovery is a
+    // canonical HTTP refetch of the conversations list and, if one is
+    // open, the active thread. Bumping the request token first ensures
+    // any in-flight response from before the disconnect is dropped by the
+    // queryFn guard rather than regressing the cache. Tenant-scoped keys
+    // make cross-tenant contamination impossible.
+    () => {
       listTokenRef.current.next();
       qc.invalidateQueries({ queryKey: ["conversations", tenantId] });
-    }
-    if (action.kind === "refetch-thread" || action.kind === "refetch-list-and-thread") {
-      qc.invalidateQueries({ queryKey: ["thread", tenantId, action.conversationId] });
-    }
-  });
+      if (activeId) {
+        qc.invalidateQueries({ queryKey: ["thread", tenantId, activeId] });
+      }
+    },
+  );
 
   function openConversation(id: string) {
     router.push(`${basePath}?c=${id}`);

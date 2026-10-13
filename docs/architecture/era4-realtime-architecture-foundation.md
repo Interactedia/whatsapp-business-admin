@@ -1547,3 +1547,223 @@ Tests:
 | Duplicate handling | `test/realtime-client-sync-integration.test.ts` "duplicate conversation:updated notifications are harmless" |
 | Stale-response protection | Pre-existing `RequestToken` test in `test/realtime-client-sync.test.ts` "RequestToken rejects stale responses" |
 | ERAs 1/2/3 preserved | No schema, no migrations, no Prisma client changes; no `message:status` semantics change |
+
+---
+
+## 18. WA-ERA4-09 — Presence & Reconnect Recovery Hardening
+
+**Task ID:** WA-ERA4-09
+**Status:** Implemented
+**Scope:** Local connection lifecycle + automatic canonical-state
+recovery after a successful reconnect. No new event types, no replay,
+no global presence authority.
+
+### 18.1 Motivation
+
+Redis Pub/Sub is an at-most-once ephemeral transport: it does not
+retain messages. A WebSocket disconnect therefore loses every
+notification published during the gap. The Inbox cannot reconstruct
+those notifications from the transport — it must reconcile from
+PostgreSQL, the system of record. ERA 4 already invalidated queries
+on individual events; WA-ERA4-09 closes the recovery loop for the
+disconnect-then-reconnect case by emitting a single recovery signal
+on a successful reconnect and letting the existing tenant-scoped
+query invalidation machinery do the rest.
+
+### 18.2 Reconnect signal contract
+
+`useRealtime(tenantId, onEvent, onReconnect?)` (third argument is
+new in WA-ERA4-09) emits `onReconnect` **only on a successful open
+that followed a previous close**. The first open is the initial
+connect, not a reconnect. Every subsequent open after a `close`
+event fires `onReconnect` exactly once.
+
+| Event | `onEvent` | `onReconnect` |
+|-------|-----------|---------------|
+| Initial open (first socket) | — | — |
+| Re-open after close + backoff | — | ✅ fires |
+| Component unmount (tenant switch, page leave) | — | — (no orphan) |
+| Multiple close/reconnect cycles | — | fires once per cycle |
+| Recovery callback throws | events still flow | — (socket survives) |
+
+The signal is intentional: it is the single, deterministic seam
+between the socket lifecycle and the canonical-state recovery path.
+The Inbox client wires it to invalidate the tenant-scoped
+`conversations` query (always) and the active `thread` query (only
+when a conversation is open).
+
+### 18.3 Canonical recovery path
+
+On `onReconnect`:
+
+1. `listTokenRef.current.next()` — bumps the `RequestToken` so any
+   in-flight list response from before the disconnect is dropped by
+   the queryFn guard (returns the previous cache, never throws).
+2. `qc.invalidateQueries({ queryKey: ["conversations", tenantId] })` —
+   triggers a refetch of the conversation list on the next render.
+3. If `activeId` is non-null:
+   `qc.invalidateQueries({ queryKey: ["thread", tenantId, activeId] })`
+   — triggers a refetch of the active thread.
+
+The refetch path is the same path the existing `processEvent`
+synchronization uses: it goes through the canonical GET endpoints,
+which read PostgreSQL. The Inbox never trusts a stale HTTP response
+(`RequestToken`), never trusts a stale notification (`SeenSet`),
+and never trusts an out-of-order one (`OrderingGuard`). All three
+guards are pre-existing and remain intact.
+
+### 18.4 Connection lifecycle guarantees
+
+| Guarantee | Where it is enforced |
+|-----------|---------------------|
+| Unexpected disconnect is detected | `ws.onclose` fires on any non-intentional close |
+| Reconnection follows exponential backoff (500ms × 2^retry, capped at 6) | `useRealtime` (unchanged) |
+| No duplicate concurrent sockets | Old socket's `close` runs BEFORE the new `WebSocket(...)` is created |
+| Old socket handlers are cleaned up | `closed` flag, `clearTimeout` in the effect cleanup |
+| Intentional disconnect does not reconnect | Effect cleanup sets `closed = true` and clears the pending timer |
+| Server shutdown cleans connections safely | `src/server/realtime.ts` `shutdownRealtime` (pre-existing WA-ERA4-01) drains connections |
+| Single `onReconnect` per cycle | `hasOpened` flag, set on first `onopen` |
+| Recovery callback failure does not break the socket | `try/catch` around the `onReconnect` invocation in `useRealtime` |
+
+### 18.5 Tenant authorization boundaries
+
+The reconnect signal is bound to the same `tenantId` the hook
+subscribes to. A tenant switch in the effect dependency array
+unmounts the previous socket and mounts a fresh one; the
+`prevTenantRef.current !== tenantId` check in the inbox-client
+tenant-switch effect already clears the previous tenant's cache
+and resets `SeenSet`/`OrderingGuard`/`RequestToken`. A reconnect
+on the NEW tenant therefore can never see the OLD tenant's
+queries or the OLD tenant's WebSocket frames.
+
+| Boundary | Enforcement |
+|----------|-------------|
+| Reconnect requires a valid session | `verifySessionToken` on `WebSocket` upgrade (pre-existing WA-ERA4-01) |
+| Missing membership prevents reconnect | `prisma.tenantMembership.findUnique` on upgrade (pre-existing WA-ERA4-01) |
+| Revoked membership is not silently restored | 60-second `revalidate` interval forces re-authorization (pre-existing WA-ERA4-01) |
+| Tenant changes clean up the old connection | Effect dependency `tenantId` change unmounts the socket; `qc.removeQueries` clears the previous tenant's cache |
+| No cross-tenant cache contamination | Query keys are tenant-scoped (`["conversations", tenantId]`, `["thread", tenantId, id]`) |
+| Old tenant events cannot mutate new tenant views | `tenantId` is captured in the socket URL and in the event delivery; `processEvent` is called with the active tenant's helpers only |
+
+### 18.6 Local connection-state limitations (presence boundary)
+
+The WebSocket connection state is a **local** indicator. It tells
+us one tab on one machine is currently holding an authorized
+socket. It does NOT tell us:
+
+- Whether the operator is at their keyboard.
+- Whether other tabs on other machines are also connected.
+- Whether the same operator has connected from a different browser.
+- Whether the operator's session is otherwise active (HTTP API
+  calls, background jobs).
+
+A local socket open is necessary but not sufficient evidence of
+"operator online". WA-ERA4-09 does NOT introduce a global presence
+authority. A future enhancement that needs presence (e.g. a shared
+"online now" indicator across the team) requires its own ADR.
+
+### 18.7 Redis interruption behavior
+
+The recovery path is independent of Redis:
+
+- If Redis was UP before the disconnect, missed notifications from
+  OTHER instances are also lost (Pub/Sub does not retain). The
+  reconnect invalidation recovers the current canonical state.
+- If Redis was DOWN, local delivery still works for the local
+  instance. The reconnect invalidation still recovers the current
+  canonical state.
+
+The Redis Pub/Sub subscriber reconnect is owned by `ioredis`
+(`src/lib/realtime/distribution.ts`, pre-existing WA-ERA4-02). The
+client reconnect is owned by `useRealtime` (this task). The two
+are independent: a Redis reconnect does not trigger the client's
+`onReconnect`, and a client reconnect does not require Redis.
+
+WA-ERA4-09 does NOT claim Redis replays missed publications.
+
+### 18.8 Missed notification limitations
+
+The recovery path reconstructs the **current canonical state** of
+the Inbox: conversation list, active thread, assignment, status,
+unread count, and per-message delivery/read status. It does NOT
+reconstruct:
+
+- The exact moment a missed change occurred.
+- Notifications about a conversation the operator had never opened.
+- Push-style history markers ("3 new messages arrived while you
+  were offline").
+
+These are deliberate omissions: replaying every missed event
+would require a durable event log (out of scope for ERA 4) and
+would not improve operator decision-making — what the operator
+needs to see is the current truth, which is exactly what the
+canonical refetch provides.
+
+### 18.9 Files changed
+
+Production:
+- `src/hooks/use-realtime.ts` — added optional `onReconnect`
+  callback argument; emits on the second and subsequent opens
+  only; survives a thrown callback.
+- `src/app/(app)/inbox/inbox-client.tsx` — wires the recovery
+  callback to invalidate the tenant-scoped list query and
+  (conditionally) the active thread query.
+
+Tests:
+- `test/realtime-reconnect-recovery.test.ts` — 13 unit tests
+  covering the reconnect-signal contract and the canonical
+  recovery path through a real `@tanstack/react-query`
+  `QueryClient`.
+- `test/helpers/realtime-loop.ts` — test-only helper exposing the
+  connection loop without a React renderer.
+
+### 18.10 Acceptance gate evidence
+
+| Gate | Evidence |
+|------|----------|
+| Initial open does NOT fire `onReconnect` | `realtime-reconnect-recovery.test.ts` "does not fire onReconnect on the initial open" |
+| Subsequent open fires `onReconnect` exactly once | "fires onReconnect on the second open (after a close + backoff)" |
+| Multiple cycles fire once per cycle | "fires onReconnect exactly once per disconnect/reconnect cycle" |
+| Unmount cancels pending reconnect | "dispose() cancels pending reconnect — no orphan socket, no callback" |
+| No duplicate concurrent sockets | "does not accumulate duplicate concurrent sockets across cycles" |
+| Recovery callback exception does not break the socket | "a thrown onReconnect callback does not break the socket lifecycle" |
+| Canonical list refetch on reconnect | "after a reconnect, the conversation list is refetched and reflects the new canonical state" |
+| Active thread refetch on reconnect | "when an active thread is open, the recovery also refetches the thread" |
+| Two-operator independence | "two independent QueryClients recover independently (two operators)" |
+| Tenant isolation | "recovery does not touch a previous tenant's queries (tenant isolation)" |
+| No refetch storm | "recovery does not loop or storm — exactly one invalidation per reconnect" |
+| No permanent error after reconnection | "no permanent error after reconnection: invalidation does not mark queries as failed" |
+| Existing client-sync tests preserved | `test/realtime-client-sync.test.ts` (unchanged, 100% pass) |
+| Existing integration tests preserved | `test/realtime-client-sync-integration.test.ts` (unchanged, 100% pass) |
+| Existing lifecycle tests preserved | `test/realtime-lifecycle.test.ts` (unchanged, 100% pass) |
+| Existing fan-out tests preserved | `test/realtime-conversation-event-fanout.test.ts` (unchanged; SKIP in this environment without Redis) |
+| Existing tenancy tests preserved | `test/realtime-tenancy.test.ts` (unchanged, 100% pass) |
+| Existing security tests preserved | `test/realtime-security-regression.test.ts` (unchanged, 100% pass) |
+| No public realtime event types added | `events.ts` `TENANT_EVENT_TYPES` unchanged |
+| No new event payload fields | Wire contract `{ type, payload }` unchanged |
+| No new WebSocket handshake fields | URL still `?tenantId=...` |
+| No schema changes | `prisma/schema.prisma` unchanged |
+| No migrations | `prisma/migrations/` unchanged |
+| No Redis Streams | `distribution.ts` still uses Pub/Sub |
+| No global presence authority | No new shared presence state introduced |
+| ERAs 1/2/3 preserved | No code in FROZEN ERAs touched |
+
+### 18.11 Remaining limitations
+
+1. **No historical replay.** An operator who reconnects after a
+   long disconnect does not see "what changed while I was gone";
+   they see the current state. This is intentional and aligned with
+   PostgreSQL-as-source-of-truth.
+2. **No operator-level presence.** A connected socket is a local
+   fact. A future "online now" indicator requires an ADR.
+3. **First-reconnect-only-on-real-open.** A socket that closes
+   before ever opening does not count as a "previous connection"
+   for the purposes of the reconnect signal. The first open of a
+   fresh hook is always an initial open. This is intentional: we
+   do not want to invalidate queries on a remount that never
+   actually disconnected.
+4. **Recovery callback is best-effort.** If the operator's
+   `invalidateQueries` itself fails (e.g. the QueryClient was
+   destroyed during the unmount), the next manual interaction or
+   `refetchInterval` tick will reconcile. The recovery path does
+   not block the UI.
