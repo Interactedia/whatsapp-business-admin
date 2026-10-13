@@ -71,18 +71,9 @@ export const PUT = handle(async (req) => {
     phoneNumberId: body.phoneNumberId,
     apiVersion: body.apiVersion,
     webhookVerifyToken: verifyToken,
-    accessToken:
-      body.accessToken === undefined
-        ? undefined
-        : body.accessToken === ""
-        ? null
-        : body.accessToken,
-    appSecret:
-      body.appSecret === undefined
-        ? undefined
-        : body.appSecret === ""
-        ? null
-        : body.appSecret,
+    // ponytail: empty string from the form means "no change" — don't clobber an existing secret.
+    accessToken: body.accessToken === "" ? undefined : body.accessToken,
+    appSecret: body.appSecret === "" ? undefined : body.appSecret,
   });
 
   const cfg = await getTenantWabaConfig(tenantId);

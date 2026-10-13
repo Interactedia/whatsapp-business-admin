@@ -340,7 +340,148 @@ describe("Tenant Settings Isolation and Security Enforcement", () => {
     });
   });
 
-  describe("6. Connection Test Endpoint", () => {
+  describe("6. Secret Preservation on Empty Input", () => {
+    // Regression: the Settings UI clears the secret inputs after a successful
+    // save, then on the next save it POSTs them as empty strings. The PUT
+    // handler used to translate "" → null, which `updateTenantWabaConfig`
+    // honored as "delete the encrypted blob". Fix: "" is now treated as
+    // "no change" (undefined → no-op in the partial update).
+    it("tenant PUT: empty accessToken preserves the existing encrypted token", async () => {
+      mockAuthUser = adminUserA;
+      mockWabaAccountFindFirst.mockImplementation(async ({ where: { tenantId } }: { where: { tenantId: string } }) =>
+        tenantId === "tenant-a" ? wabaTenantA : null,
+      );
+      mockWabaAccountUpdate.mockResolvedValue(wabaTenantA);
+
+      const res = await putTenantSettings(
+        new Request("http://localhost/api/tenants/tenant-a/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: "" }),
+        }),
+        { params: Promise.resolve({ tenantId: "tenant-a" }) },
+      );
+
+      expect(res.status).toBe(200);
+      expect(mockWabaAccountUpdate).toHaveBeenCalledTimes(1);
+      const data = mockWabaAccountUpdate.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty("accessTokenEnc");
+      expect(data).not.toHaveProperty("appSecret");
+    });
+
+    it("tenant PUT: empty appSecret preserves the existing appSecret", async () => {
+      mockAuthUser = adminUserA;
+      mockWabaAccountFindFirst.mockImplementation(async ({ where: { tenantId } }: { where: { tenantId: string } }) =>
+        tenantId === "tenant-a" ? wabaTenantA : null,
+      );
+      mockWabaAccountUpdate.mockResolvedValue(wabaTenantA);
+
+      const res = await putTenantSettings(
+        new Request("http://localhost/api/tenants/tenant-a/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ appSecret: "" }),
+        }),
+        { params: Promise.resolve({ tenantId: "tenant-a" }) },
+      );
+
+      expect(res.status).toBe(200);
+      const data = mockWabaAccountUpdate.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty("appSecret");
+      expect(data).not.toHaveProperty("accessTokenEnc");
+    });
+
+    it("tenant PUT: rotating accessToken while appSecret is empty keeps appSecret", async () => {
+      mockAuthUser = adminUserA;
+      mockWabaAccountFindFirst.mockImplementation(async ({ where: { tenantId } }: { where: { tenantId: string } }) =>
+        tenantId === "tenant-a" ? wabaTenantA : null,
+      );
+      mockWabaAccountUpdate.mockResolvedValue(wabaTenantA);
+
+      const res = await putTenantSettings(
+        new Request("http://localhost/api/tenants/tenant-a/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: "rotated_token", appSecret: "" }),
+        }),
+        { params: Promise.resolve({ tenantId: "tenant-a" }) },
+      );
+
+      expect(res.status).toBe(200);
+      const data = mockWabaAccountUpdate.mock.calls[0][0].data;
+      expect(data.accessTokenEnc).toBe("enc:rotated_token");
+      expect(data).not.toHaveProperty("appSecret");
+    });
+
+    it("tenant PUT: updating a non-secret field with empty secrets preserves both", async () => {
+      mockAuthUser = adminUserA;
+      mockWabaAccountFindFirst.mockImplementation(async ({ where: { tenantId } }: { where: { tenantId: string } }) =>
+        tenantId === "tenant-a" ? wabaTenantA : null,
+      );
+      mockWabaAccountUpdate.mockResolvedValue(wabaTenantA);
+
+      const res = await putTenantSettings(
+        new Request("http://localhost/api/tenants/tenant-a/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wabaId: "new_waba_id", accessToken: "", appSecret: "" }),
+        }),
+        { params: Promise.resolve({ tenantId: "tenant-a" }) },
+      );
+
+      expect(res.status).toBe(200);
+      const data = mockWabaAccountUpdate.mock.calls[0][0].data;
+      expect(data.metaWabaId).toBe("new_waba_id");
+      expect(data).not.toHaveProperty("accessTokenEnc");
+      expect(data).not.toHaveProperty("appSecret");
+    });
+
+    it("legacy PUT: empty accessToken preserves the existing encrypted token", async () => {
+      mockAuthUser = adminUserA;
+      mockWabaAccountFindFirst.mockImplementation(async ({ where: { tenantId } }: { where: { tenantId: string } }) =>
+        tenantId === "tenant-a" ? wabaTenantA : null,
+      );
+      mockWabaAccountUpdate.mockResolvedValue(wabaTenantA);
+
+      const res = await putLegacySettings(
+        new Request("http://localhost/api/settings?tenantId=tenant-a", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: "" }),
+        }),
+        { params: Promise.resolve({}) },
+      );
+
+      expect(res.status).toBe(200);
+      const data = mockWabaAccountUpdate.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty("accessTokenEnc");
+      expect(data).not.toHaveProperty("appSecret");
+    });
+
+    it("legacy PUT: rotating accessToken while appSecret is empty keeps appSecret", async () => {
+      mockAuthUser = adminUserA;
+      mockWabaAccountFindFirst.mockImplementation(async ({ where: { tenantId } }: { where: { tenantId: string } }) =>
+        tenantId === "tenant-a" ? wabaTenantA : null,
+      );
+      mockWabaAccountUpdate.mockResolvedValue(wabaTenantA);
+
+      const res = await putLegacySettings(
+        new Request("http://localhost/api/settings?tenantId=tenant-a", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accessToken: "rotated_token", appSecret: "" }),
+        }),
+        { params: Promise.resolve({}) },
+      );
+
+      expect(res.status).toBe(200);
+      const data = mockWabaAccountUpdate.mock.calls[0][0].data;
+      expect(data.accessTokenEnc).toBe("enc:rotated_token");
+      expect(data).not.toHaveProperty("appSecret");
+    });
+  });
+
+  describe("7. Connection Test Endpoint", () => {
     it("rejects cross-tenant test connection call with 403", async () => {
       mockAuthUser = adminUserA;
       const res = await testTenantSettings(new Request("http://localhost/api/tenants/tenant-b/settings/test", { method: "POST" }), {
