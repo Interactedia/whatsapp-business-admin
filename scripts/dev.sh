@@ -10,7 +10,7 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-PORT="${PORT:-4030}"
+PORT="${PORT:-4020}"
 PIDFILE="/tmp/whatsapp-admin-dev.pid"
 
 is_running() {
