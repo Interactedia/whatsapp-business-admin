@@ -1,0 +1,13 @@
+[Unit]
+Description=WhatsApp Business Admin Diagnostic Payload Retention
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=wa-admin
+Group=wa-admin
+WorkingDirectory=/opt/whatsapp-business-admin
+EnvironmentFile=/etc/whatsapp-business-admin/era5.env
+ExecStart=/usr/bin/env npm exec -- tsx scripts/diagnostic-retention.ts
+NoNewPrivileges=true
+PrivateTmp=true

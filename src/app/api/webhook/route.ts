@@ -15,6 +15,7 @@ import {
   processingErrorDiagnostic,
   rejectionSummary,
 } from "@/lib/whatsapp/inbound/diagnostics";
+import { boundedPayload, payloadExpiresAt, safeHeaders } from "@/lib/diagnostics/payload";
 
 /** Meta webhook verification handshake. */
 export async function GET(req: Request) {
@@ -57,6 +58,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const raw = await req.text();
   const signature = req.headers.get(SIGNATURE_HEADER);
+  const diagnosticHeaders = safeHeaders(req.headers);
 
   const auth = await authenticateMetaWebhook(raw, signature);
 
@@ -67,13 +69,21 @@ export async function POST(req: Request) {
     payload = { raw };
   }
 
-  const safePayload = redactFlowWebhookPayload(payload) as object;
+  const safePayload = boundedPayload(redactFlowWebhookPayload(payload));
 
   if (!auth.authenticated) {
     // Fail closed: no routing, no enqueue, no domain mutation. The audit row
     // is created first so its id can serve as the correlation identifier.
     const rejected = await prisma.webhookEvent.create({
-      data: { payload: safePayload, signatureValid: false, processedOk: false },
+      data: {
+        payload: safePayload.value as object,
+        payloadTruncated: safePayload.truncated,
+        headers: diagnosticHeaders,
+        signatureValid: false,
+        processedOk: false,
+        processingStage: "rejected",
+        payloadExpiresAt: payloadExpiresAt(),
+      },
     });
     await prisma.webhookEvent.update({
       where: { id: rejected.id },
@@ -120,14 +130,22 @@ export async function POST(req: Request) {
   }
 
   const event = await prisma.webhookEvent.create({
-    data: { payload: safePayload, signatureValid, processedOk: false },
+    data: {
+      payload: safePayload.value as object,
+      payloadTruncated: safePayload.truncated,
+      headers: diagnosticHeaders,
+      signatureValid,
+      processedOk: false,
+      processingStage: "received",
+      payloadExpiresAt: payloadExpiresAt(),
+    },
   });
 
   try {
     const summary = await processWebhook(payload);
     await prisma.webhookEvent.update({
       where: { id: event.id },
-      data: { processedOk: true, eventSummary: summary, error: null },
+      data: { processedOk: true, eventSummary: summary, error: null, processingStage: "processed" },
     });
   } catch (e) {
     await prisma.webhookEvent.update({
@@ -135,6 +153,7 @@ export async function POST(req: Request) {
       data: {
         error: formatWebhookError(processingErrorDiagnostic("inbound.processing", e, event.id)),
         eventSummary: "processing error",
+        processingStage: "error",
       },
     });
     console.error("Webhook processing error:", e);

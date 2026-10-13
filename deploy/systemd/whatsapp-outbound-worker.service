@@ -1,0 +1,21 @@
+[Unit]
+Description=WhatsApp Business Admin Outbound Worker
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wa-admin
+Group=wa-admin
+WorkingDirectory=/opt/whatsapp-business-admin
+EnvironmentFile=/etc/whatsapp-business-admin/era5.env
+ExecStart=/usr/bin/env npm exec -- tsx scripts/outbound-worker.ts
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

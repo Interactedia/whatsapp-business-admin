@@ -5,12 +5,14 @@ const apiLogFindMany = vi.hoisted(() => vi.fn());
 const apiLogCount = vi.hoisted(() => vi.fn());
 const webhookFindMany = vi.hoisted(() => vi.fn());
 const webhookCount = vi.hoisted(() => vi.fn());
+const tenantMembershipFindUnique = vi.hoisted(() => vi.fn());
 
 vi.mock("@/auth", () => ({ auth }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     apiLog: { findMany: apiLogFindMany, count: apiLogCount },
     webhookEvent: { findMany: webhookFindMany, count: webhookCount },
+    tenantMembership: { findUnique: tenantMembershipFindUnique },
   },
 }));
 
@@ -28,6 +30,7 @@ describe("logs API — authorization", () => {
     apiLogCount.mockResolvedValue(0);
     webhookFindMany.mockResolvedValue([]);
     webhookCount.mockResolvedValue(0);
+    tenantMembershipFindUnique.mockResolvedValue(null);
   });
 
   it("rejects unauthenticated requests with 401", async () => {
@@ -44,12 +47,20 @@ describe("logs API — authorization", () => {
     expect(webhookFindMany).not.toHaveBeenCalled();
   });
 
-  it("rejects tenant ADMIN with 403 — legacy logs have no tenant ownership", async () => {
+  it("rejects tenant ADMIN without tenant filter", async () => {
     auth.mockResolvedValue({ user: { id: "admin-1", role: "ADMIN" } });
     const res = await getResponse(makeRequest("/api/logs"));
     expect(res.status).toBe(403);
     expect(apiLogFindMany).not.toHaveBeenCalled();
     expect(webhookFindMany).not.toHaveBeenCalled();
+  });
+
+  it("allows tenant ADMIN only for a member tenant", async () => {
+    auth.mockResolvedValue({ user: { id: "admin-1", role: "ADMIN" } });
+    tenantMembershipFindUnique.mockResolvedValue({ id: "m-1" });
+    const res = await getResponse(makeRequest("/api/logs?tenantId=tenant-1"));
+    expect(res.status).toBe(200);
+    expect(apiLogFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ tenantId: "tenant-1" }) }));
   });
 
   it("allows SYSTEM_ADMIN platform-level audit access", async () => {
@@ -74,6 +85,7 @@ describe("logs API — pagination", () => {
     apiLogCount.mockResolvedValue(0);
     webhookFindMany.mockResolvedValue([]);
     webhookCount.mockResolvedValue(0);
+    tenantMembershipFindUnique.mockResolvedValue(null);
   });
 
   it("defaults to page 1 with PAGE_SIZE", async () => {
@@ -177,6 +189,7 @@ describe("logs API — webhook filters", () => {
     vi.clearAllMocks();
     webhookFindMany.mockResolvedValue([]);
     webhookCount.mockResolvedValue(0);
+    tenantMembershipFindUnique.mockResolvedValue(null);
   });
 
   it("applies sig=valid filter", async () => {

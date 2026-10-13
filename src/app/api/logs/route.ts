@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { handle, ok, requireAdmin, HttpError } from "@/lib/api";
+import { handle, ok, requireAdmin } from "@/lib/api";
+import { resolveLogScope, tenantWhere } from "@/lib/logs/access";
 
 const PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
@@ -22,10 +23,8 @@ const MAX_PAGE_SIZE = 200;
  */
 export const GET = handle(async (req) => {
   const session = await requireAdmin();
-  if (session.user.role !== "SYSTEM_ADMIN") {
-    throw new HttpError(403, "System administrators only");
-  }
   const url = new URL(req.url);
+  const scope = await resolveLogScope(session, url.searchParams.get("tenantId"));
   const type = url.searchParams.get("type") === "webhook" ? "webhook" : "api";
   const page = Math.max(1, Number(url.searchParams.get("page") || 1));
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(url.searchParams.get("pageSize") || PAGE_SIZE)));
@@ -45,7 +44,7 @@ export const GET = handle(async (req) => {
   }
 
   if (type === "webhook") {
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = tenantWhere(scope);
     if (Object.keys(createdAtFilter).length) where.createdAt = createdAtFilter;
     const sig = url.searchParams.get("sig");
     if (sig === "valid") where.signatureValid = true;
@@ -55,14 +54,14 @@ export const GET = handle(async (req) => {
     if (processed === "error") where.processedOk = false;
 
     const [items, total] = await Promise.all([
-      prisma.webhookEvent.findMany({ where, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
+      prisma.webhookEvent.findMany({ where, include: { tenant: { select: { id: true, name: true } } }, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
       prisma.webhookEvent.count({ where }),
     ]);
     return ok({ type, items, total, page, pageSize });
   }
 
   // API logs
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = tenantWhere(scope);
   if (Object.keys(createdAtFilter).length) where.createdAt = createdAtFilter;
   const method = url.searchParams.get("method");
   if (method) where.method = method.toUpperCase();
@@ -75,7 +74,7 @@ export const GET = handle(async (req) => {
   if (related) where.relatedType = related;
 
   const [items, total] = await Promise.all([
-    prisma.apiLog.findMany({ where, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
+    prisma.apiLog.findMany({ where, include: { tenant: { select: { id: true, name: true } } }, orderBy: { createdAt: "desc" }, skip, take: pageSize }),
     prisma.apiLog.count({ where }),
   ]);
   return ok({ type, items, total, page, pageSize });

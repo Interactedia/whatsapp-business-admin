@@ -11,6 +11,7 @@ import { buildTemplateContent, templateContentText, templateContentPreview } fro
 import { addOutboxEvent } from "@/lib/outbox";
 import { createOutboundMessageJobPayload } from "@/lib/queue";
 import type { KnownJobPayload } from "@/lib/queue";
+import { assertOutboundConsumerReady } from "@/lib/whatsapp/outbound/readiness";
 
 export { isWithinSessionWindow } from "@/lib/whatsapp/window";
 
@@ -296,6 +297,7 @@ export async function enqueueOutboundMessage(
   });
   if (!conversation) throw new WhatsAppApiError(404, "Conversation not found.");
   if (!conversation.phoneNumber) throw new WhatsAppApiError(403, "Conversation has no authorized sender phone number.");
+  await assertOutboundConsumerReady();
   const cfg = opts.config ?? phoneNumberConfig(conversation.phoneNumber);
   if (!cfg.phoneNumberId) throw new WhatsAppApiError(400, "WhatsApp is not connected.");
   // Extract IDs while phoneNumber narrowing is still active

@@ -97,6 +97,8 @@ model Tenant {
   canonicalDeliveries    CanonicalEventDelivery[]
   webhookDestinations    WebhookDestination[]
   outboundAttempts       OutboundSendAttempt[]
+  apiLogs                ApiLog[]
+  webhookEvents          WebhookEvent[]
 }
 
 // Persistence foundation only. Membership does not grant tenant authorization.
@@ -783,6 +785,8 @@ model BroadcastRecipient {
 // Every OUTBOUND Graph API call, written automatically by graphFetch().
 model ApiLog {
   id             String   @id @default(cuid())
+  tenantId       String?
+  tenant         Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   method         String
   endpoint       String
   requestBody    Json?
@@ -792,21 +796,44 @@ model ApiLog {
   durationMs     Int?
   relatedType    String? // e.g. "template", "message", "broadcast"
   relatedId      String?
+  requestHeaders Json?
+  responseHeaders Json?
+  wabaId         String?
+  phoneNumberId  String?
+  attemptId      String?
+  jobId          String?
+  attemptNumber  Int?
+  error          String?
+  requestTruncated Boolean @default(false)
+  responseTruncated Boolean @default(false)
+  payloadExpiresAt DateTime?
   createdAt      DateTime @default(now())
 
+  @@index([tenantId, createdAt])
   @@index([createdAt])
   @@index([relatedType, relatedId])
+  @@index([payloadExpiresAt])
 }
 
 // Every INBOUND webhook POST, raw payload stored before processing.
 model WebhookEvent {
   id             String   @id @default(cuid())
+  tenantId       String?
+  tenant         Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   payload        Json
+  headers        Json?
   signatureValid Boolean  @default(false)
   processedOk    Boolean  @default(false)
   eventSummary   String? // short human label, e.g. "message from 9199..., 1 status"
   error          String?
+  wabaId         String?
+  phoneNumberId  String?
+  processingStage String?
+  payloadTruncated Boolean @default(false)
+  payloadExpiresAt DateTime?
   createdAt      DateTime @default(now())
 
+  @@index([tenantId, createdAt])
   @@index([createdAt])
+  @@index([payloadExpiresAt])
 }

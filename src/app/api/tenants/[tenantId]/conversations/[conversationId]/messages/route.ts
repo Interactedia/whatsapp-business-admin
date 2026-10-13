@@ -5,7 +5,7 @@ import { resolveTenantContext, TenantAuthorizationError } from "@/lib/tenant";
 import { tenantMessagingRepository, type MessageListPagination } from "@/lib/tenant/repository";
 import { serializeMessage } from "@/lib/whatsapp/webhook";
 import { resolveTemplateContents } from "@/lib/whatsapp/template-history";
-import { isWithinSessionWindow, resolveConversationSenderConfig, sendMessage } from "@/lib/whatsapp/send";
+import { enqueueOutboundMessage, isWithinSessionWindow, resolveConversationSenderConfig } from "@/lib/whatsapp/send";
 import { uploadOutboundMedia } from "@/lib/whatsapp/media";
 import { mediaStore, extFromMime } from "@/lib/media";
 import { templateExampleComponents, templateRuntimeComponents } from "@/lib/whatsapp/template-service";
@@ -273,7 +273,7 @@ export const POST = handle(async (req, { params }) => {
     const mediaId = await uploadOutboundMedia({ data: buffer, mimeType: mime, fileName: file.name, config: senderConfig });
     const localPath = await mediaStore.save(buffer, extFromMime(mime));
 
-    const message = await sendMessage({
+    const message = await enqueueOutboundMessage({
       conversationId,
       to,
       sentById: session.user.id,
@@ -287,7 +287,7 @@ export const POST = handle(async (req, { params }) => {
         filename: file.name,
       },
     });
-    return ok(serializeMessage(message), 201);
+    return ok({ id: message.id, status: message.status, waMessageId: message.waMessageId }, 202);
   }
 
   // ---- Text / Template / Flow (JSON) ----
@@ -346,9 +346,9 @@ export const POST = handle(async (req, { params }) => {
       templateComponents,
     };
     try {
-      const message = await sendMessage({ conversationId, to, sentById: session.user.id, content });
+      const message = await enqueueOutboundMessage({ conversationId, to, sentById: session.user.id, content });
       if (prepared) await finishPreparedFlowLaunch(prepared.launchId, message.id);
-      return ok(serializeMessage(message), 201);
+      return ok({ id: message.id, status: message.status, waMessageId: message.waMessageId }, 202);
     } catch (error) {
       if (prepared) await finishPreparedFlowLaunch(prepared.launchId, undefined, error);
       throw error;
@@ -358,11 +358,11 @@ export const POST = handle(async (req, { params }) => {
   // text
   const parsed = textSchema.parse(body);
   if (!windowOpen) throw new HttpError(403, "This chat is outside the 24-hour window. Send an approved template instead.");
-  const message = await sendMessage({
+  const message = await enqueueOutboundMessage({
     conversationId,
     to,
     sentById: session.user.id,
     content: { kind: "text", text: parsed.text },
   });
-  return ok(serializeMessage(message), 201);
+  return ok({ id: message.id, status: message.status, waMessageId: message.waMessageId }, 202);
 });

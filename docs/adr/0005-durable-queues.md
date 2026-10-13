@@ -1,6 +1,6 @@
 # ADR-0005 — Durable background processing
 
-- Status: **Proposed — do not implement without approval**
+- Status: **Accepted for WA-ERA5-03 operational outbound runtime (D3/D4); broader queues remain proposed**
 - Date: 2026-10-09
 
 ## Context

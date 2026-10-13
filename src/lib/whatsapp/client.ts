@@ -1,7 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { getWabaConfig, type WabaConfig } from "@/lib/settings";
+import { boundedPayload, payloadExpiresAt, safeHeaders } from "@/lib/diagnostics/payload";
 
-const GRAPH_HOST = "https://graph.facebook.com";
+function graphHost() {
+  return process.env.GRAPH_API_BASE_URL || "https://graph.facebook.com";
+}
 
 export class WhatsAppApiError extends Error {
   constructor(
@@ -27,6 +30,14 @@ export type GraphRequest = {
   config?: WabaConfig;
   /** Optional AbortSignal for request-level cancellation/timeout. */
   signal?: AbortSignal;
+  diagnostics?: {
+    tenantId?: string | null;
+    wabaId?: string | null;
+    phoneNumberId?: string | null;
+    attemptId?: string | null;
+    jobId?: string | null;
+    attemptNumber?: number | null;
+  };
 };
 
 /**
@@ -47,12 +58,14 @@ export async function graphFetch<T = unknown>(req: GraphRequest): Promise<T> {
   }
   const query = qs.toString();
   const endpoint = `/${version}${req.path}${query ? `?${query}` : ""}`;
-  const url = `${GRAPH_HOST}${endpoint}`;
+  const url = `${graphHost()}${endpoint}`;
 
   const started = Date.now();
   let responseStatus: number | null = null;
   let responseBody: unknown = null;
+  let responseHeaders: Record<string, string> | undefined;
   let ok = false;
+  let error: string | undefined;
 
   try {
     const multipart = req.body instanceof FormData;
@@ -66,6 +79,7 @@ export async function graphFetch<T = unknown>(req: GraphRequest): Promise<T> {
       signal: req.signal,
     });
     responseStatus = res.status;
+    responseHeaders = safeHeaders(res.headers);
     const text = await res.text();
     responseBody = text ? safeJson(text) : null;
     ok = res.ok;
@@ -73,34 +87,49 @@ export async function graphFetch<T = unknown>(req: GraphRequest): Promise<T> {
     if (!res.ok) {
       const err = (responseBody as { error?: { message?: string; code?: number; error_data?: unknown } })
         ?.error;
+      error = err?.message || `Graph API error (${res.status})`;
       throw new WhatsAppApiError(
         res.status,
-        err?.message || `Graph API error (${res.status})`,
+        error,
         err?.code,
         err?.error_data,
       );
     }
     return responseBody as T;
   } catch (e) {
+    error = error ?? (e instanceof Error ? e.message : String(e));
     if (responseStatus === null) {
       // Network-level failure — record it too.
-      responseBody = { error: e instanceof Error ? e.message : String(e) };
+      responseBody = { error };
     }
     throw e;
   } finally {
-    // Persist the audit log regardless of success/failure.
+    const request = boundedPayload(sanitizeBody(req.body));
+    const response = boundedPayload(responseBody);
     await prisma.apiLog
       .create({
         data: {
+          tenantId: req.diagnostics?.tenantId ?? undefined,
           method: req.method,
           endpoint,
-          requestBody: sanitizeBody(req.body),
+          requestHeaders: safeHeaders({ "content-type": req.body && !(req.body instanceof FormData) ? "application/json" : undefined }),
+          requestBody: request.value as object | undefined,
           responseStatus: responseStatus ?? undefined,
-          responseBody: responseBody as object | undefined,
+          responseHeaders,
+          responseBody: response.value as object | undefined,
           ok,
           durationMs: Date.now() - started,
           relatedType: req.related?.type,
           relatedId: req.related?.id,
+          wabaId: req.diagnostics?.wabaId ?? config.wabaId ?? undefined,
+          phoneNumberId: req.diagnostics?.phoneNumberId ?? config.phoneNumberId ?? undefined,
+          attemptId: req.diagnostics?.attemptId ?? undefined,
+          jobId: req.diagnostics?.jobId ?? undefined,
+          attemptNumber: req.diagnostics?.attemptNumber ?? undefined,
+          error,
+          requestTruncated: request.truncated,
+          responseTruncated: response.truncated,
+          payloadExpiresAt: payloadExpiresAt(),
         },
       })
       .catch((logErr) => console.error("Failed to write ApiLog:", logErr));
@@ -115,25 +144,11 @@ function safeJson(text: string): unknown {
   }
 }
 
-/** Prisma Json can't store `undefined`; coerce to null. Also defensively drops any token field. */
 function sanitizeBody(body: unknown): object | undefined {
   if (body === undefined || body === null) return undefined;
   if (body instanceof FormData) {
-    return { multipart: true, fields: Array.from(body.keys()).filter((key) => key !== "file") };
+    return { multipart: true, fields: Array.from(body.keys()).filter((key) => !/token|secret|password|key|file/i.test(key)) };
   }
-  try {
-    const copy = JSON.parse(JSON.stringify(body)) as Record<string, unknown>;
-    // Flow tokens and initial/form data may contain credentials or PII.
-    const interactive = copy.interactive as { action?: { parameters?: Record<string, unknown> } } | undefined;
-    const params = interactive?.action?.parameters;
-    if (params?.flow_token) params.flow_token = "[REDACTED]";
-    if (params?.flow_action_payload) params.flow_action_payload = "[REDACTED]";
-    const template = copy.template as { components?: unknown[] } | undefined;
-    if (template?.components && JSON.stringify(template.components).includes("flow_token")) {
-      template.components = ["[REDACTED FLOW PARAMETERS]"];
-    }
-    return copy;
-  } catch {
-    return undefined;
-  }
+  if (typeof body === "object") return body as object;
+  return { value: String(body) };
 }

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run WhatsApp Business Admin diagnostic retention daily
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=whatsapp-diagnostic-retention.service
+
+[Install]
+WantedBy=timers.target

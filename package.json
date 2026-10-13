@@ -18,7 +18,10 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "worker:outbox": "tsx scripts/outbox-dispatcher.ts",
+    "worker:outbound": "tsx scripts/outbound-worker.ts",
+    "maintenance:diagnostics": "tsx scripts/diagnostic-retention.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

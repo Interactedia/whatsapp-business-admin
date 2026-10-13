@@ -66,17 +66,7 @@ vi.mock("@/lib/whatsapp/template-history", () => ({
   resolveTemplateContents: resolveTemplateContentsSpy,
 }));
 vi.mock("@/lib/whatsapp/send", () => ({
-  sendMessage: vi.fn().mockResolvedValue({
-    id: "msg-sent-1",
-    conversationId: "conv-1",
-    direction: "OUT",
-    type: "TEXT",
-    status: "SENT",
-    text: "Hello world",
-    timestamp: new Date("2026-01-01T12:00:00Z"),
-    waMessageId: "wamid.123",
-    payload: null,
-  }),
+  enqueueOutboundMessage: vi.fn().mockResolvedValue({ id: "msg-sent-1", status: "PENDING", waMessageId: null }),
   isWithinSessionWindow: vi.fn().mockReturnValue(true),
 }));
 
@@ -427,12 +417,12 @@ describe("GET /api/tenants/:tenantId/conversations/:conversationId/messages", ()
       expect(response.status).toBe(403);
     });
 
-    it("POST — cross-tenant conversation → 404 (no sendMessage called)", async () => {
+    it("POST — cross-tenant conversation → 404 (no enqueueOutboundMessage called)", async () => {
       mockAuth({ user: { id: "user-1", role: "AGENT" } });
       mockResolveResult = mockTenantContext;
       mockFindConversationResult = null;
-      const { sendMessage } = await import("@/lib/whatsapp/send");
-      const sendSpy = vi.mocked(sendMessage);
+      const { enqueueOutboundMessage } = await import("@/lib/whatsapp/send");
+      const sendSpy = vi.mocked(enqueueOutboundMessage);
       sendSpy.mockClear();
       const response = await postMessage(
         new Request("https://example.test/api/tenants/tenant-1/conversations/conv-other/messages", {
@@ -446,13 +436,13 @@ describe("GET /api/tenants/:tenantId/conversations/:conversationId/messages", ()
       expect(sendSpy).not.toHaveBeenCalled();
     });
 
-    it("POST — session window closed returns 403 (no sendMessage called)", async () => {
+    it("POST — session window closed returns 403 (no enqueueOutboundMessage called)", async () => {
       mockAuth({ user: { id: "user-1", role: "AGENT" } });
       mockResolveResult = mockTenantContext;
       mockFindConversationResult = conversationRow();
-      const { isWithinSessionWindow, sendMessage } = await import("@/lib/whatsapp/send");
+      const { isWithinSessionWindow, enqueueOutboundMessage } = await import("@/lib/whatsapp/send");
       vi.mocked(isWithinSessionWindow).mockReturnValue(false);
-      const sendSpy = vi.mocked(sendMessage);
+      const sendSpy = vi.mocked(enqueueOutboundMessage);
       sendSpy.mockClear();
       const response = await postMessage(
         new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1/messages", {
@@ -466,13 +456,13 @@ describe("GET /api/tenants/:tenantId/conversations/:conversationId/messages", ()
       expect(sendSpy).not.toHaveBeenCalled();
     });
 
-    it("POST — valid text send calls sendMessage with correct args", async () => {
+    it("POST — valid text send calls enqueueOutboundMessage with correct args", async () => {
       mockAuth({ user: { id: "user-1", role: "AGENT" } });
       mockResolveResult = mockTenantContext;
       mockFindConversationResult = conversationRow();
-      const { isWithinSessionWindow, sendMessage } = await import("@/lib/whatsapp/send");
+      const { isWithinSessionWindow, enqueueOutboundMessage } = await import("@/lib/whatsapp/send");
       vi.mocked(isWithinSessionWindow).mockReturnValue(true);
-      const sendSpy = vi.mocked(sendMessage);
+      const sendSpy = vi.mocked(enqueueOutboundMessage);
       sendSpy.mockClear();
       const response = await postMessage(
         new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1/messages", {
@@ -482,7 +472,7 @@ describe("GET /api/tenants/:tenantId/conversations/:conversationId/messages", ()
         }),
         makeSendParams("tenant-1", "conv-1"),
       );
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(202);
       expect(sendSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           conversationId: "conv-1",
@@ -494,12 +484,12 @@ describe("GET /api/tenants/:tenantId/conversations/:conversationId/messages", ()
     });
 
     it("POST — no external send before conversation ownership is verified", async () => {
-      // The sendMessage spy should NOT be called when findConversation is the gatekeeper.
+      // The enqueueOutboundMessage spy should NOT be called when findConversation is the gatekeeper.
       mockAuth({ user: { id: "user-1", role: "AGENT" } });
       mockResolveResult = mockTenantContext;
       mockFindConversationResult = null; // 404 before send
-      const { sendMessage } = await import("@/lib/whatsapp/send");
-      const sendSpy = vi.mocked(sendMessage);
+      const { enqueueOutboundMessage } = await import("@/lib/whatsapp/send");
+      const sendSpy = vi.mocked(enqueueOutboundMessage);
       sendSpy.mockClear();
       await postMessage(
         new Request("https://example.test/api/tenants/tenant-1/conversations/conv-not-found/messages", {
@@ -512,13 +502,13 @@ describe("GET /api/tenants/:tenantId/conversations/:conversationId/messages", ()
       expect(sendSpy).not.toHaveBeenCalled();
     });
 
-    it("POST — invalid payload → 400 (no sendMessage called)", async () => {
+    it("POST — invalid payload → 400 (no enqueueOutboundMessage called)", async () => {
       mockAuth({ user: { id: "user-1", role: "AGENT" } });
       mockResolveResult = mockTenantContext;
       mockFindConversationResult = conversationRow();
-      const { isWithinSessionWindow, sendMessage } = await import("@/lib/whatsapp/send");
+      const { isWithinSessionWindow, enqueueOutboundMessage } = await import("@/lib/whatsapp/send");
       vi.mocked(isWithinSessionWindow).mockReturnValue(true);
-      const sendSpy = vi.mocked(sendMessage);
+      const sendSpy = vi.mocked(enqueueOutboundMessage);
       sendSpy.mockClear();
       const response = await postMessage(
         new Request("https://example.test/api/tenants/tenant-1/conversations/conv-1/messages", {

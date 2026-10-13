@@ -14,8 +14,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
+type TenantLabel = { id: string; name: string } | null;
+
 type ApiLog = {
   id: string;
+  tenantId: string | null;
+  tenant?: TenantLabel;
   method: string;
   endpoint: string;
   requestBody: unknown;
@@ -30,6 +34,8 @@ type ApiLog = {
 
 type WebhookEvent = {
   id: string;
+  tenantId: string | null;
+  tenant?: TenantLabel;
   payload: unknown;
   signatureValid: boolean;
   processedOk: boolean;
@@ -39,6 +45,11 @@ type WebhookEvent = {
 };
 
 type Feed<T> = { type: string; items: T[]; total: number; page: number; pageSize: number };
+
+function tenantLabel(item: { tenantId: string | null; tenant?: TenantLabel }) {
+  if (item.tenant) return `${item.tenant.name} (${item.tenant.id})`;
+  return item.tenantId ? item.tenantId : "Sin resolver";
+}
 
 // ---- sanitized display: never expose raw request/response bodies to the browser ----
 type SanitizedApiLog = Omit<ApiLog, "requestBody" | "responseBody">;
@@ -175,6 +186,7 @@ export function LogsClient() {
                 <TableRow>
                   <TableHead className="w-40">Time</TableHead>
                   <TableHead className="w-16">Method</TableHead>
+                  <TableHead>Tenant</TableHead>
                   <TableHead>Endpoint</TableHead>
                   <TableHead className="w-20">Status</TableHead>
                   <TableHead className="w-20">Duration</TableHead>
@@ -188,12 +200,14 @@ export function LogsClient() {
                   <TableRow key={log.id}>
                     <TableCell data-label="Time" className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(log.createdAt)}</TableCell>
                     <TableCell data-label="Method"><Badge variant="outline">{log.method}</Badge></TableCell>
+                    <TableCell data-label="Tenant" className="text-xs text-muted-foreground">{tenantLabel(log)}</TableCell>
                     <TableCell data-label="Endpoint" className="max-w-0 break-all font-mono text-xs md:truncate">{log.endpoint}</TableCell>
                     <TableCell data-label="Status">
                       <Badge variant={log.ok ? "success" : "destructive"}>{log.responseStatus ?? "—"}</Badge>
                     </TableCell>
                     <TableCell data-label="Duration" className="text-xs text-muted-foreground">{log.durationMs != null ? `${log.durationMs} ms` : "—"}</TableCell>
                     <TableCell data-label="Related" className="text-xs text-muted-foreground">{log.relatedType ?? "—"}</TableCell>
+                    <TableCell><Button variant="outline" size="sm" onClick={async () => setDetail({ title: "Detalle HTTP", body: await apiFetch(`/api/logs/api/${log.id}`) })}>Ver detalle</Button></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -204,6 +218,7 @@ export function LogsClient() {
                 <TableRow>
                   <TableHead className="w-40">Time</TableHead>
                   <TableHead>Summary</TableHead>
+                  <TableHead>Tenant</TableHead>
                   <TableHead className="w-24">Signature</TableHead>
                   <TableHead className="w-24">Processed</TableHead>
                 </TableRow>
@@ -215,12 +230,14 @@ export function LogsClient() {
                   <TableRow key={ev.id}>
                     <TableCell data-label="Time" className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(ev.createdAt)}</TableCell>
                     <TableCell data-label="Summary" className="text-xs">{ev.eventSummary || ev.error || "—"}</TableCell>
+                    <TableCell data-label="Tenant" className="text-xs text-muted-foreground">{tenantLabel(ev)}</TableCell>
                     <TableCell data-label="Signature">
                       <Badge variant={ev.signatureValid ? "success" : "warning"}>{ev.signatureValid ? "valid" : "unverified"}</Badge>
                     </TableCell>
                     <TableCell data-label="Processed">
                       <Badge variant={ev.processedOk ? "success" : "destructive"}>{ev.processedOk ? "ok" : "error"}</Badge>
                     </TableCell>
+                    <TableCell><Button variant="outline" size="sm" onClick={async () => setDetail({ title: "Detalle webhook", body: await apiFetch(`/api/logs/webhook/${ev.id}`) })}>Ver detalle</Button></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

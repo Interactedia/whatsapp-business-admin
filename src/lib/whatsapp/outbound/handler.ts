@@ -251,7 +251,7 @@ export async function handleOutboundMessage(
           status: true,
           contact: { select: { waId: true } },
           phoneNumber: {
-            include: { wabaAccount: { select: { id: true } } },
+            include: { wabaAccount: { select: { id: true, tenantId: true, metaWabaId: true, name: true, metaAppId: true, accessTokenEnc: true, appSecret: true, apiVersion: true, webhookVerifyToken: true, createdAt: true, updatedAt: true } } },
           },
         },
       },
@@ -347,6 +347,14 @@ export async function handleOutboundMessage(
       body: apiPayload,
       related: { type: "message", id: messageId },
       config: cfg,
+      diagnostics: {
+        tenantId,
+        wabaId: wabaAccountId,
+        phoneNumberId,
+        attemptId: attempt.id,
+        jobId: messageId,
+        attemptNumber: attempt.attemptCount,
+      },
     });
 
     const waMessageId = res.messages?.[0]?.id;
