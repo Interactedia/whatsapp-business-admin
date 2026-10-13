@@ -47,6 +47,7 @@ type Msg = {
   mediaFilename: string | null;
   timestamp: string;
   waMessageId: string | null;
+  errorJson?: { code?: string; message?: string; uncertain?: boolean; metaStatus?: number } | null;
   templateContent?: TemplateContent;
 };
 type FlowSubmission = { id: string; waMessageId: string | null; flow: { name: string }; response: Record<string, unknown> | null; purgedAt: string | null; completedAt: string };
@@ -441,7 +442,7 @@ function MessageBubble({ m }: { m: Msg }) {
         </>}
         <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px] [&>svg]:shrink-0", out ? "text-zinc-600 dark:text-zinc-300" : "text-muted-foreground")}>
           <span className="min-w-0 text-right">{formatInboxTimestamp(m.timestamp)}</span>
-          {out && <StatusTick status={m.status} />}
+          {out && <StatusTick status={m.status} errorJson={m.errorJson} />}
         </div>
       </div>
     </div>
@@ -465,7 +466,13 @@ function MediaContent({ m }: { m: Msg }) {
   );
 }
 
-function StatusTick({ status }: { status: string }) {
+function StatusTick({ status, errorJson }: { status: string; errorJson?: { uncertain?: boolean } | null }) {
+  // WA-ERA5-05: UNCERTAIN (Meta accepted but response was timeout/5xx/parse) must
+  // be visually distinct from PENDING. The worker keeps status=PENDING and stamps
+  // errorJson.uncertain=true, so the client must look at errorJson to render it.
+  if (status === "PENDING" && errorJson?.uncertain) {
+    return <AlertCircle className="h-3 w-3 text-amber-500" />;
+  }
   switch (status) {
     case "PENDING": return <Clock className="h-3 w-3" />;
     case "SENT": return <Check className="h-3 w-3" />;

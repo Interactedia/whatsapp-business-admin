@@ -472,6 +472,7 @@ export function serializeMessage(m: {
   timestamp: Date;
   waMessageId?: string | null;
   payload?: unknown;
+  errorJson?: unknown;
 }) {
   const templateContent = m.type === "TEMPLATE" ? readTemplateContent(m.payload) : null;
   return {
@@ -488,5 +489,6 @@ export function serializeMessage(m: {
     mediaFilename: m.mediaFilename,
     timestamp: m.timestamp.toISOString(),
     waMessageId: m.waMessageId ?? null,
+    errorJson: m.errorJson ?? null,
   };
 }
