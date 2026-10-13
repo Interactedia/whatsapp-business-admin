@@ -84,7 +84,55 @@ async function main() {
     create: { userId: acmeAdmin.id, tenantId: tenant2.id },
   });
 
-  // 6. Ensure singleton settings row exists
+  // 6. Seed Tenant 1 AGENT (Default Organization only) for ERA 5 cross-tenant tests.
+  const defaultAgent = await prisma.user.upsert({
+    where: { email: "agent@default.com" },
+    update: { role: "AGENT", passwordHash, active: true },
+    create: {
+      email: "agent@default.com",
+      name: "Default Org Agent",
+      role: "AGENT",
+      passwordHash,
+    },
+  });
+
+  // 7. Seed Tenant 2 AGENT (Acme Corp only) for ERA 5 cross-tenant tests.
+  const acmeAgent = await prisma.user.upsert({
+    where: { email: "agent@acme.com" },
+    update: { role: "AGENT", passwordHash, active: true },
+    create: {
+      email: "agent@acme.com",
+      name: "Acme Corp Agent",
+      role: "AGENT",
+      passwordHash,
+    },
+  });
+
+  // 8. Seed authenticated user with NO tenant membership (for negative tests).
+  await prisma.user.upsert({
+    where: { email: "agent@nomember.com" },
+    update: { role: "AGENT", passwordHash, active: true },
+    create: {
+      email: "agent@nomember.com",
+      name: "No Membership Agent",
+      role: "AGENT",
+      passwordHash,
+    },
+  });
+
+  // 9. Agent memberships.
+  await prisma.tenantMembership.upsert({
+    where: { userId_tenantId: { userId: defaultAgent.id, tenantId: tenant1.id } },
+    update: {},
+    create: { userId: defaultAgent.id, tenantId: tenant1.id },
+  });
+  await prisma.tenantMembership.upsert({
+    where: { userId_tenantId: { userId: acmeAgent.id, tenantId: tenant2.id } },
+    update: {},
+    create: { userId: acmeAgent.id, tenantId: tenant2.id },
+  });
+
+  // 10. Ensure singleton settings row exists
   await prisma.wabaSettings.upsert({
     where: { id: "default" },
     update: {},
@@ -92,9 +140,12 @@ async function main() {
   });
 
   console.log("Seeded administrative users successfully:");
-  console.log("  1. System Admin:     admin@superadmin.com (role: SYSTEM_ADMIN, pass: " + seedPassword + ")");
-  console.log("  2. Default Org Admin: admin@default.com    (role: ADMIN,        pass: " + seedPassword + ") -> [Default Organization]");
-  console.log("  3. Acme Corp Admin:   admin@acme.com       (role: ADMIN,        pass: " + seedPassword + ") -> [Acme Corp]");
+  console.log("  1. System Admin:       admin@superadmin.com (role: SYSTEM_ADMIN, pass: " + seedPassword + ")");
+  console.log("  2. Default Org Admin:  admin@default.com    (role: ADMIN,        pass: " + seedPassword + ") -> [Default Organization]");
+  console.log("  3. Acme Corp Admin:    admin@acme.com       (role: ADMIN,        pass: " + seedPassword + ") -> [Acme Corp]");
+  console.log("  4. Default Org Agent:  agent@default.com    (role: AGENT,        pass: " + seedPassword + ") -> [Default Organization]");
+  console.log("  5. Acme Corp Agent:    agent@acme.com       (role: AGENT,        pass: " + seedPassword + ") -> [Acme Corp]");
+  console.log("  6. No Membership User: agent@nomember.com   (role: AGENT,        pass: " + seedPassword + ") -> [no tenant]");
 }
 
 main()

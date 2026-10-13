@@ -29,11 +29,24 @@ function LoginForm() {
     setLoading(true);
     setError(null);
     try {
-      const res = await signIn("credentials", { email, password, redirect: false });
-      if (res?.error) {
+      await signIn("credentials", { email, password, redirect: false });
+      // Auth.js v5 returns { url: callbackUrl } on success WITHOUT an `error`
+      // field, so we cannot rely on the signIn result alone. Verify the
+      // session before navigating.
+      const sessionRes = await fetch("/api/auth/session");
+      const session = (await sessionRes.json()) as { user?: { email?: string } } | null;
+      if (!session?.user?.email) {
         setError("Correo electrónico o contraseña incorrectos.");
         setLoading(false);
         return;
+      }
+      // Tell other tabs the session changed so they can refetch.
+      try {
+        const bc = new BroadcastChannel("next-auth");
+        bc.postMessage({ event: "session", data: { trigger: "signIn" } });
+        bc.close();
+      } catch {
+        // BroadcastChannel is unsupported in some browsers; safe to ignore.
       }
       router.push(params.get("callbackUrl") || "/");
       router.refresh();
