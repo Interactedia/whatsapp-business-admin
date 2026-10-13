@@ -34,12 +34,40 @@ function getTenantWabaConfig(tenantId?: string | null): Promise<WabaConfig> {
 }
 
 async function configForTemplate(tenantId?: string | null): Promise<WabaConfig> {
-  if (!tenantId) return getWabaConfig();
-  const account = await prisma.wabaAccount.findFirst({
-    where: { tenantId },
+  if (tenantId) {
+    const account = await prisma.wabaAccount.findFirst({
+      where: { tenantId },
+      orderBy: { createdAt: "asc" },
+    });
+    if (account) return wabaConfigFromAccount(account);
+    throw new WhatsAppApiError(
+      400,
+      `Tenant ${tenantId} has no WABA account configured. Open Settings to add one.`,
+    );
+  }
+  // ponytail: templates created before the multi-tenant migration have
+  // tenantId=null. As a last-resort fallback, use the only WABA on file so
+  // existing operators do not get blocked by historical drift.
+  const fallback = await prisma.wabaAccount.findFirst({
     orderBy: { createdAt: "asc" },
   });
-  if (!account) throw new WhatsAppApiError(400, "Set your tenant WABA account in Settings first.");
+  if (fallback) return wabaConfigFromAccount(fallback);
+  const legacy = await getWabaConfig();
+  if (!legacy.wabaId) {
+    throw new WhatsAppApiError(400, "Set your WABA ID in Settings first.");
+  }
+  return legacy;
+}
+
+function wabaConfigFromAccount(account: {
+  metaWabaId: string;
+  metaAppId: string | null;
+  name: string | null;
+  accessTokenEnc: string | null;
+  appSecret: string | null;
+  webhookVerifyToken: string | null;
+  apiVersion: string;
+}): WabaConfig {
   return {
     wabaId: account.metaWabaId,
     metaAppId: account.metaAppId ?? null,
@@ -81,6 +109,7 @@ export async function submitTemplate(templateId: string): Promise<{ status: Temp
     body: payload,
     related: { type: "template", id: templateId },
     config,
+    diagnostics: { tenantId: tmpl.tenantId ?? undefined, wabaId: config.wabaId ?? undefined },
   });
 
   const status = mapMetaStatus(res.status);
