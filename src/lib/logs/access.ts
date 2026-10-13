@@ -21,3 +21,16 @@ export function tenantWhere(scope: LogScope): { tenantId?: string | null } {
   if (scope.systemAdmin) return scope.tenantId ? { tenantId: scope.tenantId } : {};
   return { tenantId: scope.tenantId! };
 }
+
+export function detailAllowed(scope: LogScope, ownerTenantId: string | null): boolean {
+  if (scope.systemAdmin) return true;
+  return ownerTenantId !== null && ownerTenantId === scope.tenantId;
+}
+
+// Historical NULL-owned records stay SYSTEM_ADMIN-only; the detail endpoint
+// keeps that gate. Tenant admin attempts must return 404, not 200.
+export function detailAllowedForScope(scope: LogScope, ownerTenantId: string | null): "allow" | "not-found" | "forbidden" {
+  if (scope.systemAdmin) return "allow";
+  if (ownerTenantId === null) return "not-found";
+  return ownerTenantId === scope.tenantId ? "allow" : "forbidden";
+}

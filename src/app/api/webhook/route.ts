@@ -16,6 +16,7 @@ import {
   rejectionSummary,
 } from "@/lib/whatsapp/inbound/diagnostics";
 import { boundedPayload, payloadExpiresAt, safeHeaders } from "@/lib/diagnostics/payload";
+import { resolveInboundOwnership } from "@/lib/whatsapp/inbound/ownership";
 
 /** Meta webhook verification handshake. */
 export async function GET(req: Request) {
@@ -121,13 +122,18 @@ export async function POST(req: Request) {
 
   if (canUseAsyncStatus) {
     try {
-      await persistStatusWebhookReceipt({ payload, signatureValid });
+      const result = await persistStatusWebhookReceipt({ payload, signatureValid });
+      if (result?.webhookEventId) {
+        await prisma.webhookEvent.update({ where: { id: result.webhookEventId }, data: { headers: diagnosticHeaders, payloadExpiresAt: payloadExpiresAt() } });
+      }
       return NextResponse.json({ received: true });
     } catch {
       // If async receipt cannot be safely stored (e.g. unknown message, multi-phone),
       // fall through to legacy handling to preserve existing behavior and logging.
     }
   }
+
+  const inboundResolution = await resolveInboundOwnership(payload);
 
   const event = await prisma.webhookEvent.create({
     data: {
@@ -137,6 +143,9 @@ export async function POST(req: Request) {
       signatureValid,
       processedOk: false,
       processingStage: "received",
+      tenantId: inboundResolution.tenantId,
+      wabaId: inboundResolution.wabaId,
+      phoneNumberId: inboundResolution.phoneId,
       payloadExpiresAt: payloadExpiresAt(),
     },
   });

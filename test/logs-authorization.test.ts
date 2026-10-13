@@ -63,6 +63,13 @@ describe("logs API — authorization", () => {
     expect(apiLogFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ tenantId: "tenant-1" }) }));
   });
 
+  it("rejects tenant ADMIN for a non-member tenant", async () => {
+    auth.mockResolvedValue({ user: { id: "admin-1", role: "ADMIN" } });
+    tenantMembershipFindUnique.mockResolvedValue(null);
+    const res = await getResponse(makeRequest("/api/logs?tenantId=tenant-other"));
+    expect(res.status).toBe(403);
+  });
+
   it("allows SYSTEM_ADMIN platform-level audit access", async () => {
     auth.mockResolvedValue({ user: { id: "system-1", role: "SYSTEM_ADMIN" } });
     const res = await getResponse(makeRequest("/api/logs?type=webhook"));
