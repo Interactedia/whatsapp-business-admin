@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { WhatsAppApiError } from "@/lib/whatsapp/client";
 import type { Session } from "next-auth";
 
 export class HttpError extends Error {
@@ -49,6 +50,12 @@ export function handle(
       return await fn(req, ctx);
     } catch (err) {
       if (err instanceof HttpError) return fail(err.status, err.message);
+      if (err instanceof WhatsAppApiError) {
+        // ponytail: surface Meta's user-facing explanation (error_user_msg)
+        // when available; it is more actionable than the generic message.
+        const friendly = err.userMessage || err.message;
+        return fail(err.status, friendly);
+      }
       if (err && typeof err === "object" && "issues" in err) {
         // ZodError
         return fail(400, JSON.stringify((err as { issues: unknown }).issues));

@@ -12,6 +12,9 @@ export class WhatsAppApiError extends Error {
     message: string,
     public code?: number,
     public details?: unknown,
+    public userMessage?: string,
+    public userTitle?: string,
+    public subcode?: number,
   ) {
     super(message);
     this.name = "WhatsAppApiError";
@@ -85,14 +88,25 @@ export async function graphFetch<T = unknown>(req: GraphRequest): Promise<T> {
     ok = res.ok;
 
     if (!res.ok) {
-      const err = (responseBody as { error?: { message?: string; code?: number; error_data?: unknown } })
-        ?.error;
+      const err = (responseBody as {
+        error?: {
+          message?: string;
+          code?: number;
+          error_data?: unknown;
+          error_user_msg?: string;
+          error_user_title?: string;
+          error_subcode?: number;
+        };
+      })?.error;
       error = err?.message || `Graph API error (${res.status})`;
       throw new WhatsAppApiError(
         res.status,
         error,
         err?.code,
         err?.error_data,
+        err?.error_user_msg,
+        err?.error_user_title,
+        err?.error_subcode,
       );
     }
     return responseBody as T;
