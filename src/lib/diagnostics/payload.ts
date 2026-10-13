@@ -33,7 +33,9 @@ export function redactSecrets(value: unknown): unknown {
 
 export function boundedPayload(value: unknown): StoredPayload {
   const redacted = redactSecrets(value);
-  const json = JSON.stringify(redacted);
+  // JSON.stringify(undefined) returns undefined (not a string); Buffer.byteLength
+  // would throw ERR_INVALID_ARG_TYPE on it. Body-less Graph requests (GET) hit this.
+  const json = JSON.stringify(redacted) ?? "null";
   if (Buffer.byteLength(json, "utf8") <= MAX_BYTES) return { value: redacted, truncated: false };
   return {
     value: { truncated: true, bytes: Buffer.byteLength(json, "utf8"), preview: json.slice(0, MAX_BYTES) },

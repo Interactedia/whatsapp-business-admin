@@ -26,6 +26,7 @@ export const POST = handle(async (_req, { params }) => {
       query: { fields: "display_phone_number,verified_name,quality_rating" },
       config: cfg,
       related: { type: "settings" },
+      diagnostics: { tenantId },
     });
 
     await updateTenantWabaConfig(tenantId, {

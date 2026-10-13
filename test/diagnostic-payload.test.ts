@@ -15,6 +15,14 @@ describe("diagnostic payload security", () => {
     expect((out.list as Record<string, unknown>[])[1].ok).toBe(true);
   });
 
+  it("handles undefined payloads (body-less GET requests) without throwing", () => {
+    // Regression: JSON.stringify(undefined) === undefined made Buffer.byteLength
+    // throw ERR_INVALID_ARG_TYPE, breaking every graphFetch GET (Test connection).
+    const result = boundedPayload(undefined);
+    expect(result.truncated).toBe(false);
+    expect(result.value).toBeUndefined();
+  });
+
   it("keeps payloads below 64 KiB intact and marks them not truncated", () => {
     const small = { to: "521999", text: { body: "x".repeat(50_000) } };
     const result = boundedPayload(small);
