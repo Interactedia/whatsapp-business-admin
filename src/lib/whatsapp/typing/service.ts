@@ -157,6 +157,19 @@ function queueFor(phoneNumberId: string): PQueue {
 export async function sendTypingIndicator(
   opts: SendTypingOptions,
 ): Promise<SendTypingResult> {
+  return sendReceiptRequest(opts, true);
+}
+
+export async function sendReadReceipt(
+  opts: SendTypingOptions,
+): Promise<SendTypingResult> {
+  return sendReceiptRequest(opts, false);
+}
+
+async function sendReceiptRequest(
+  opts: SendTypingOptions,
+  includeTypingIndicator: boolean,
+): Promise<SendTypingResult> {
   assertTrustedTenantContext(opts.context);
 
   // ── Guard: capability must be explicitly enabled ───────────────────────────
@@ -245,7 +258,7 @@ export async function sendTypingIndicator(
   const queue = queueFor(phoneNumber.id);
 
   return await queue.add(async () =>
-    executeTypingRequest(cfg, wamid, phoneNumber.wabaAccount.tenantId),
+    executeTypingRequest(cfg, wamid, phoneNumber.wabaAccount.tenantId, includeTypingIndicator),
   );
 }
 
@@ -272,6 +285,7 @@ async function executeTypingRequest(
   cfg: WabaConfig,
   waMessageId: string,
   tenantId: string,
+  includeTypingIndicator: boolean,
 ): Promise<SendTypingResult> {
   const signal = AbortSignal.timeout(TYPING_REQUEST_TIMEOUT_MS);
 
@@ -280,7 +294,7 @@ async function executeTypingRequest(
       messaging_product: "whatsapp",
       status: "read",
       message_id: waMessageId,
-      typing_indicator: { type: "text" as const },
+      ...(includeTypingIndicator ? { typing_indicator: { type: "text" as const } } : {}),
     };
 
     await graphFetch<{ success?: boolean }>({
@@ -289,9 +303,9 @@ async function executeTypingRequest(
       body,
       config: cfg,
       signal,
-      // typing-indicator calls are ephemeral; do not create a durable ApiLog link
-      // since there is no business Message row to relate to
-      related: { type: "typing-indicator" },
+      // read receipts / typing indicators are ephemeral; do not create a durable
+      // ApiLog link since there is no business Message row to relate to
+      related: { type: includeTypingIndicator ? "typing-indicator" : "read-receipt" },
       diagnostics: { tenantId, wabaId: cfg.wabaId ?? undefined },
     });
 
