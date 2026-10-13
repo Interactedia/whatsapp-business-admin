@@ -51,7 +51,29 @@ const EVENT_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,191}$/;
 const TENANT_ID_PATTERN = ID_PATTERN;
 const CORRELATION_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,191}$/;
 const PRODUCER_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,63}$/;
-const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,191}$/;
+/**
+ * Provider message identifiers (Meta `wamid`).
+ *
+ * Meta wamid values are base64-encoded and legitimately contain `+`, `/` and
+ * `=` (observed in production: 82 chars, trailing `==`). The previous charset
+ * rejected authentic messages. The bound stays at 191 — `Message.waMessageId`
+ * is an unbounded TEXT column, so this is an application-level ceiling shared
+ * with the other envelope identifiers, not a storage constraint.
+ *
+ * Deliberately a character allowlist: it keeps rejecting empty values, spaces,
+ * control characters and anything outside the supported provider charset.
+ */
+const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_.:+\/=-]{1,191}$/;
+
+/**
+ * Single source of truth for provider identifier shape. Exported so the
+ * inbound webhook handler can fail fast on a malformed `wamid` BEFORE it
+ * creates any Contact/Conversation/Message, instead of discovering the
+ * rejection deep inside canonical-event construction.
+ */
+export function isValidProviderId(value: unknown): boolean {
+  return typeof value === "string" && PROVIDER_ID_PATTERN.test(value);
+}
 const PREVIEW_MAX_LENGTH = 280;
 const ALLOWED_ENTITY_KINDS: ReadonlySet<ExternalEntityKind> = new Set([
   "tenant",

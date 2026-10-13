@@ -30,7 +30,9 @@ const APP_URL = process.env.APP_URL ?? "http://localhost:4030";
 const OUT_DIR = process.env.OUT_DIR ?? "/tmp/era5-smoke";
 // Password for the locally-seeded ERA 5 test users. Supplied at run time via
 // SEED_PASSWORD env var; do NOT bake a credential into this script.
-const SEED_PASSWORD = process.env.SEED_PASSWORD;
+// Coalesced to "" so TS types this as `string` at every call site; the guard
+// below throws identically for a missing or empty value (runtime unchanged).
+const SEED_PASSWORD = process.env.SEED_PASSWORD ?? "";
 if (!SEED_PASSWORD) {
   throw new Error(
     "SEED_PASSWORD must be set for era5-browser-smoke. " +

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { addCanonicalEvent, type ExternalMessageType } from "@/lib/events";
+import { addCanonicalEvent, isValidProviderId, type ExternalMessageType } from "@/lib/events";
+import { isIdempotencyUniqueViolation } from "@/lib/idempotency";
 import { buildConversationChangedEvent, buildConversationStatusChangedEvent, buildInboundMessageReceivedEvent, buildOutboundMessageStatusChangedEvent } from "@/lib/events/producers";
 import { getWabaConfig } from "@/lib/settings";
 import { phoneNumberConfig, resolveInboundPhoneNumber } from "@/lib/tenant/waba";
@@ -151,13 +152,16 @@ async function handleInboundMessage(
 
   const tenantId = businessPhone.wabaAccount.tenantId;
 
+  // ---- validation gate: nothing below may mutate until all of it passes ----
+  // A rejected event must not leave behind a Contact, Conversation or Message.
+  // Provider id is checked against the same charset the canonical-event
+  // validator enforces, so a malformed wamid fails here rather than deep
+  // inside the transaction after rows were already written.
+  if (!waId) throw new Error("Inbound webhook message missing sender id");
+  if (!isValidProviderId(msg.id)) throw new Error("Inbound webhook message has a malformed provider message id");
+  if (Number.isNaN(ts.getTime())) throw new Error("Inbound webhook message has an invalid timestamp");
+
   const preview = summarizeText(msg);
-  const contact = await prisma.contact.upsert({
-    where: { tenantId_waId: { tenantId, waId } },
-    update: { profileName: profileName ?? undefined, lastInboundAt: ts },
-    create: { waId, profileName, lastInboundAt: ts, tenantId },
-  });
-  if (contact.tenantId !== tenantId) throw new Error("Inbound contact tenant mismatch");
   void fallbackConfig;
 
   // Media download for supported types.
@@ -192,7 +196,19 @@ async function handleInboundMessage(
   const existing = await prisma.message.findUnique({ where: { waMessageId: msg.id } });
   if (existing) return `dup ${msg.id}`;
 
-  const { conversation, created } = await prisma.$transaction(async (tx) => {
+  // Contact creation lives INSIDE the transaction: if the conversation, the
+  // message, or any canonical event is rejected, the contact rolls back with
+  // them. Keeping it outside used to orphan contacts on validation failure.
+  let committed;
+  try {
+    committed = await prisma.$transaction(async (tx) => {
+    const contact = await tx.contact.upsert({
+      where: { tenantId_waId: { tenantId, waId } },
+      update: { profileName: profileName ?? undefined, lastInboundAt: ts },
+      create: { waId, profileName, lastInboundAt: ts, tenantId },
+    });
+    if (contact.tenantId !== tenantId) throw new Error("Inbound contact tenant mismatch");
+
     const existingByContact = await tx.conversation.findFirst({ where: { contactId: contact.id } });
     if (existingByContact?.phoneNumberId && existingByContact.phoneNumberId !== businessPhone.id) {
       throw new Error("Inbound conversation sender mismatch");
@@ -280,9 +296,22 @@ async function handleInboundMessage(
         });
     if (conversationEvent) await addCanonicalEvent(tx, conversationEvent);
 
-    return { conversation, created };
+    return { contact, conversation, created };
   });
+  } catch (error) {
+    // Two deliveries of the same wamid raced past the pre-check above and one
+    // won the unique index. The winner already persisted everything, so this
+    // delivery is idempotently a duplicate — not a processing failure.
+    if (isIdempotencyUniqueViolation(error)) {
+      const winner = await prisma.message.findUnique({ where: { waMessageId: msg.id } });
+      if (winner) return `dup ${msg.id}`;
+    }
+    throw error;
+  }
+  const { contact, conversation, created } = committed;
 
+  // Published only after the transaction committed: a rolled-back message
+  // must never be announced to realtime clients as new.
   publish({
     type: "message:new",
     payload: { conversationId: conversation.id, contactId: contact.id, message: serializeMessage(created) },

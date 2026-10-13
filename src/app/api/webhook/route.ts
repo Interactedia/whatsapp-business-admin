@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getWabaConfig } from "@/lib/settings";
-import { verifySignature, processWebhook } from "@/lib/whatsapp/webhook";
+import { processWebhook } from "@/lib/whatsapp/webhook";
 import { redactFlowWebhookPayload } from "@/lib/whatsapp/flow-submission";
 import { classifyWebhookPayload } from "@/lib/whatsapp/inbound/classify";
 import { isInboundAsyncEnabled } from "@/lib/whatsapp/inbound/config";
 import { persistInboundWebhookReceipt } from "@/lib/whatsapp/inbound/receipt";
 import { isStatusAsyncEnabled } from "@/lib/whatsapp/status/config";
 import { persistStatusWebhookReceipt } from "@/lib/whatsapp/status/receipt";
+import { authenticateMetaWebhook, SIGNATURE_HEADER } from "@/lib/whatsapp/inbound/auth";
+import {
+  authRejectionDiagnostic,
+  formatWebhookError,
+  processingErrorDiagnostic,
+  rejectionSummary,
+} from "@/lib/whatsapp/inbound/diagnostics";
 
 /** Meta webhook verification handshake. */
 export async function GET(req: Request) {
@@ -32,27 +39,26 @@ export async function GET(req: Request) {
 }
 
 /**
- * Inbound webhook events. We ALWAYS store the raw payload first (even if the
- * signature is invalid or processing throws), then verify + process.
+ * Inbound Meta webhook events.
+ *
+ * Authentication is fail-closed and happens BEFORE any business mutation:
+ * the raw payload is authenticated with HMAC-SHA256 over the unmodified
+ * request bytes, and only an authenticated body is routed, enqueued, or
+ * allowed to touch Contact/Conversation/Message.
+ *
+ * A `WebhookEvent` audit row is still written for rejected deliveries — it is
+ * an observability record, not business data, and without it an operator
+ * cannot see that spoofed or misconfigured traffic arrived. Rejected events
+ * are marked unprocessed and carry bounded structured diagnostics.
+ *
+ * Always returns 200 once the delivery is recorded, so Meta does not retry a
+ * rejected request indefinitely.
  */
 export async function POST(req: Request) {
   const raw = await req.text();
-  const signature = req.headers.get("x-hub-signature-256");
+  const signature = req.headers.get(SIGNATURE_HEADER);
 
-  const cfg = await getWabaConfig();
-  let signatureValid = cfg.appSecret ? verifySignature(raw, signature, cfg.appSecret) : false;
-  if (!signatureValid && signature) {
-    const tenantAccounts = await prisma.wabaAccount.findMany({
-      where: { appSecret: { not: null } },
-      select: { appSecret: true },
-    });
-    for (const acc of tenantAccounts) {
-      if (acc.appSecret && verifySignature(raw, signature, acc.appSecret)) {
-        signatureValid = true;
-        break;
-      }
-    }
-  }
+  const auth = await authenticateMetaWebhook(raw, signature);
 
   let payload: unknown = null;
   try {
@@ -61,21 +67,27 @@ export async function POST(req: Request) {
     payload = { raw };
   }
 
-  const safePayload = redactFlowWebhookPayload(payload);
+  const safePayload = redactFlowWebhookPayload(payload) as object;
 
-  // If an app secret is configured, reject unsigned/invalid events (but keep the record).
-  if (cfg.appSecret && !signatureValid) {
-    const event = await prisma.webhookEvent.create({
-      data: { payload: safePayload as object, signatureValid, processedOk: false },
+  if (!auth.authenticated) {
+    // Fail closed: no routing, no enqueue, no domain mutation. The audit row
+    // is created first so its id can serve as the correlation identifier.
+    const rejected = await prisma.webhookEvent.create({
+      data: { payload: safePayload, signatureValid: false, processedOk: false },
     });
     await prisma.webhookEvent.update({
-      where: { id: event.id },
-      data: { error: "Invalid signature", eventSummary: "rejected: bad signature" },
+      where: { id: rejected.id },
+      data: {
+        error: formatWebhookError(authRejectionDiagnostic(auth.reason, rejected.id)),
+        eventSummary: rejectionSummary(auth.reason),
+      },
     });
-    // Still return 200 so Meta doesn't retry a spoofed request forever.
+    // No secret material in the log — only the rejection category.
+    console.warn(`[webhook] rejected inbound delivery: ${auth.reason}`);
     return NextResponse.json({ received: true });
   }
 
+  const signatureValid = auth.signatureValid;
   const classification = classifyWebhookPayload(payload);
   const canUseAsyncInbound = isInboundAsyncEnabled()
     && classification.hasInboundMessages
@@ -84,6 +96,9 @@ export async function POST(req: Request) {
     && !classification.hasFlowReplies;
 
   if (canUseAsyncInbound) {
+    // Intentionally uncaught: a receipt failure must surface as a 5xx so Meta
+    // retries the delivery. Recording it here would acknowledge (and lose) a
+    // transient failure. Existing retry semantics preserved.
     await persistInboundWebhookReceipt({ payload, signatureValid });
     return NextResponse.json({ received: true });
   }
@@ -105,19 +120,22 @@ export async function POST(req: Request) {
   }
 
   const event = await prisma.webhookEvent.create({
-    data: { payload: safePayload as object, signatureValid, processedOk: false },
+    data: { payload: safePayload, signatureValid, processedOk: false },
   });
 
   try {
     const summary = await processWebhook(payload);
     await prisma.webhookEvent.update({
       where: { id: event.id },
-      data: { processedOk: true, eventSummary: summary },
+      data: { processedOk: true, eventSummary: summary, error: null },
     });
   } catch (e) {
     await prisma.webhookEvent.update({
       where: { id: event.id },
-      data: { error: e instanceof Error ? e.message : String(e), eventSummary: "processing error" },
+      data: {
+        error: formatWebhookError(processingErrorDiagnostic("inbound.processing", e, event.id)),
+        eventSummary: "processing error",
+      },
     });
     console.error("Webhook processing error:", e);
   }

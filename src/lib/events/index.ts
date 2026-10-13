@@ -34,6 +34,7 @@ export {
 
 export {
   ExternalEventValidationError,
+  isValidProviderId,
   validateExternalEvent,
   validateExternalEventOfType,
   type ExternalEventValidationErrorCode,
