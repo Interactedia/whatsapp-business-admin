@@ -236,6 +236,7 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
   const [text, setText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
   const [showFlows, setShowFlows] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // ponytail: throttle typing pings to the server. The server's Meta client
   // already enforces TYPING_MIN_INTERVAL_MS, but we cap the request rate
@@ -379,7 +380,7 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
 
       {/* Messages */}
       <div ref={scrollRef} className="wa-wallpaper min-h-0 flex-1 space-y-1.5 overflow-auto p-2 scroll-thin sm:p-4">
-        {data.messages.map((m) => <div key={m.id}><MessageBubble m={m} />{data.flowSubmissions.filter((submission) => submission.waMessageId === m.waMessageId).map((submission) => <FlowSubmissionCard key={submission.id} submission={submission} />)}</div>)}
+        {data.messages.map((m) => <div key={m.id}><MessageBubble m={m} onPreviewImage={setPreviewImage} />{data.flowSubmissions.filter((submission) => submission.waMessageId === m.waMessageId).map((submission) => <FlowSubmissionCard key={submission.id} submission={submission} />)}</div>)}
         {data.messages.length === 0 && (
           <div className="mt-10 text-center text-xs text-muted-foreground">No messages yet. Say hello 👋</div>
         )}
@@ -442,6 +443,15 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
         pending={sendTemplate.isPending}
       />
       <FlowPicker open={showFlows} onClose={() => setShowFlows(false)} onPick={(id) => sendFlow.mutate(id)} pending={sendFlow.isPending} />
+      <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
+        <DialogContent className="max-w-5xl border-0 bg-transparent p-0 shadow-none">
+          <DialogHeader className="sr-only"><DialogTitle>{previewImage?.alt || "Image preview"}</DialogTitle></DialogHeader>
+          {previewImage && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewImage.url} alt={previewImage.alt} className="max-h-[85vh] w-full rounded-lg object-contain" />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -450,7 +460,7 @@ function FlowSubmissionCard({ submission }: { submission: FlowSubmission }) {
   return <div className="ml-2 mt-1 max-w-md rounded-lg border border-emerald-200 bg-white p-3 text-zinc-900 shadow-xs dark:border-emerald-900 dark:bg-[#202c33] dark:text-zinc-50"><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400"><Workflow className="h-4 w-4" /> {submission.flow.name} submitted</div>{submission.response ? <div className="space-y-1">{Object.entries(submission.response).map(([key, value]) => <div key={key} className="grid grid-cols-1 gap-0.5 text-xs min-[430px]:grid-cols-[110px_1fr] min-[430px]:gap-2"><span className="font-medium">{key}</span><span className="wrap-break-word text-muted-foreground">{typeof value === "object" ? JSON.stringify(value) : String(value)}</span></div>)}</div> : <div className="text-xs text-muted-foreground">Response data has been purged.</div>}</div>;
 }
 
-function MessageBubble({ m }: { m: Msg }) {
+function MessageBubble({ m, onPreviewImage }: { m: Msg; onPreviewImage: (image: { url: string; alt: string }) => void }) {
   const out = m.direction === "OUT";
   return (
     <div className={cn("flex", out ? "justify-end" : "justify-start")}>
@@ -462,7 +472,7 @@ function MessageBubble({ m }: { m: Msg }) {
       >
         {m.type === "TEMPLATE" && m.templateContent ? <TemplateMessage content={m.templateContent} messageId={m.id} hasMedia={m.hasMedia} /> : <>
           {m.type === "LOCATION" && m.location ? <LocationContent m={m} /> : null}
-          {m.hasMedia && <MediaContent m={m} />}
+          {m.hasMedia && <MediaContent m={m} onPreviewImage={onPreviewImage} />}
           {m.type !== "LOCATION" && m.text && <div className="whitespace-pre-wrap wrap-break-word">{m.text}</div>}
           {m.caption && <div className="whitespace-pre-wrap wrap-break-word">{m.caption}</div>}
         </>}
@@ -494,12 +504,17 @@ function LocationContent({ m }: { m: Msg }) {
   );
 }
 
-function MediaContent({ m }: { m: Msg }) {
+function MediaContent({ m, onPreviewImage }: { m: Msg; onPreviewImage: (image: { url: string; alt: string }) => void }) {
   const url = `/api/media/${m.id}`;
   const mime = m.mediaMime || "";
   if (mime.startsWith("image/")) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt="" className="mb-1 max-h-64 rounded-sm" />;
+    const alt = m.mediaFilename || m.caption || "Image";
+    return (
+      <button type="button" className="mb-1 block cursor-zoom-in overflow-hidden rounded-sm p-0" onClick={() => onPreviewImage({ url, alt })}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt={alt} className="max-h-64 rounded-sm" />
+      </button>
+    );
   }
   if (mime.startsWith("video/")) return <video src={url} controls className="mb-1 max-h-64 rounded-sm" />;
   if (mime.startsWith("audio/")) return <audio src={url} controls className="mb-1 w-56" />;
