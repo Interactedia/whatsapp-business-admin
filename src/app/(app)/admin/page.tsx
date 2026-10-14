@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/shell/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, UserCog, Users, MessageSquare, ListChecks } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Building2, UserCog, Users, MessageSquare, ListChecks, ArrowRight } from "lucide-react";
 
 /**
  * System Administration Dashboard — exclusive to SYSTEM_ADMIN.
@@ -28,8 +28,13 @@ export default async function SystemAdminDashboardPage() {
     { label: "Users", value: userCount, href: "/admin/users", icon: UserCog },
     { label: "Active Users", value: activeUserCount, href: "/admin/users", icon: Users },
     { label: "Memberships", value: membershipCount, href: "/admin/tenants", icon: Users },
-    { label: "Conversations (all tenants)", value: conversationCount, href: "/admin/tenants", icon: MessageSquare },
-    { label: "Queues & Outbox", value: "View", href: "/admin/queue-observability", icon: ListChecks },
+    { label: "Conversations", value: conversationCount, href: "/admin/tenants", icon: MessageSquare },
+  ];
+
+  const adminLinks = [
+    { label: "Manage tenants & memberships", href: "/admin/tenants", icon: Building2 },
+    { label: "Manage users", href: "/admin/users", icon: UserCog },
+    { label: "Queues & Outbox", href: "/admin/queue-observability", icon: ListChecks },
   ];
 
   return (
@@ -39,21 +44,22 @@ export default async function SystemAdminDashboardPage() {
         description="Platform-wide overview. Manage tenants and users from the administration section."
       />
 
-      <div className="flex-1 overflow-auto p-3 sm:p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        {/* Metrics Grid — 3 columns desktop, 2 tablet, 1 mobile */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {stats.map((stat) => {
             const Icon = stat.icon;
             return (
               <Link key={stat.label} href={stat.href}>
-                <Card className="h-full transition-colors hover:border-primary/50">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      <Icon className="h-3.5 w-3.5" />
-                      {stat.label}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-semibold tabular-nums">{stat.value}</div>
+                <Card className="h-full transition-all hover:border-primary/50 hover:shadow-sm focus-within:ring-2 focus-within:ring-primary/20">
+                  <CardContent className="flex items-center gap-4 p-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                      <Icon className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-2xl font-semibold tabular-nums leading-none">{stat.value}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{stat.label}</p>
+                    </div>
                   </CardContent>
                 </Card>
               </Link>
@@ -61,25 +67,26 @@ export default async function SystemAdminDashboardPage() {
           })}
         </div>
 
-        <Card className="mt-4">
-          <CardHeader>
-            <CardTitle className="text-sm">Administration</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2 text-sm">
-            <Link
-              href="/admin/tenants"
-              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent"
-            >
-              <Building2 className="h-4 w-4" /> Manage tenants &amp; memberships
-            </Link>
-            <Link
-              href="/admin/users"
-              className="inline-flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent"
-            >
-              <UserCog className="h-4 w-4" /> Manage users
-            </Link>
-          </CardContent>
-        </Card>
+        {/* Administration Section */}
+        <div className="mt-6">
+          <h2 className="mb-3 text-sm font-semibold text-foreground">Administration</h2>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {adminLinks.map((link) => {
+              const Icon = link.icon;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm font-medium text-foreground transition-all hover:border-primary/50 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+                >
+                  <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 truncate">{link.label}</span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
