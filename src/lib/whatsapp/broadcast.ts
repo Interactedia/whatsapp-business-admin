@@ -1,6 +1,6 @@
 import PQueue from "p-queue";
 import { prisma } from "@/lib/prisma";
-import { getWabaConfig } from "@/lib/settings";
+import { getTenantWabaConfig } from "@/lib/settings";
 import { ensureConversation, sendMessage } from "@/lib/whatsapp/send";
 import { templateExampleComponents } from "@/lib/whatsapp/template-service";
 import { WhatsAppApiError } from "@/lib/whatsapp/client";
@@ -53,9 +53,9 @@ export async function runLegacyBroadcast(broadcastId: string): Promise<void> {
     throw new WhatsAppApiError(400, "Broadcast template must be approved.");
   }
 
-  const config = await getWabaConfig();
-  if (!config.phoneNumberId) {
-    throw new WhatsAppApiError(400, "WhatsApp is not connected.");
+  const config = await getTenantWabaConfig(broadcast.tenantId);
+  if (!config?.phoneNumberId) {
+    throw new WhatsAppApiError(400, "Tenant WhatsApp is not connected.");
   }
   const phone = await prisma.phoneNumber.findFirst({
     where: { metaPhoneNumberId: config.phoneNumberId },

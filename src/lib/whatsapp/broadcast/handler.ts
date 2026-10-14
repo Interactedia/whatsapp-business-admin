@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { graphFetch as defaultGraphFetch, type GraphRequest } from "@/lib/whatsapp/client";
-import { getWabaConfig } from "@/lib/settings";
+import { getTenantWabaConfig } from "@/lib/settings";
 import { ensureConversation } from "@/lib/whatsapp/send";
 import { templateExampleComponents } from "@/lib/whatsapp/template-service";
 import type { ApiComponent } from "@/lib/whatsapp/template-types";
@@ -156,8 +156,11 @@ export async function handleBroadcastDispatch(
   }
 
   // 4. Conversation and Flow setup
-  const config = await getWabaConfig();
-  const phone = (config.phoneNumberId && db.phoneNumber?.findFirst)
+  const config = await getTenantWabaConfig(broadcast.tenantId);
+  if (!config?.phoneNumberId) {
+    throw new BroadcastHandlerError("CLIENT_ERROR", "Tenant WhatsApp is not connected", 400);
+  }
+  const phone = db.phoneNumber?.findFirst
     ? await db.phoneNumber.findFirst({
         where: { metaPhoneNumberId: config.phoneNumberId },
         include: { wabaAccount: true },
