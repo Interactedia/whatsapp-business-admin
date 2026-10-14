@@ -62,6 +62,7 @@ export function UsersClient({
   const [open, setOpen] = useState(false);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [resetFor, setResetFor] = useState<User | null>(null);
+  const [deleteFor, setDeleteFor] = useState<User | null>(null);
 
   // Only a SYSTEM_ADMIN may grant/revoke the SYSTEM_ADMIN role or modify
   // existing SYSTEM_ADMIN accounts (mirrors the server-side check in
@@ -277,9 +278,7 @@ export function UsersClient({
                           aria-label={`Delete ${u.name}`}
                           className="rounded-md hover:bg-destructive/10 hover:text-destructive"
                           disabled={self || (!canManageSystemAdmins && u.role === "SYSTEM_ADMIN")}
-                          onClick={() => {
-                            if (confirm(`Delete ${u.name}?`)) remove.mutate(u.id);
-                          }}
+                          onClick={() => setDeleteFor(u)}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -299,6 +298,35 @@ export function UsersClient({
             user={resetFor}
             onDone={() => setResetFor(null)}
           />
+        )}
+      </Dialog>
+
+      <Dialog open={!!deleteFor} onOpenChange={(o) => !o && setDeleteFor(null)}>
+        {deleteFor && (
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete user</DialogTitle>
+              <DialogDescription>
+                ¿Eliminar a <span className="font-medium text-foreground">{deleteFor.name}</span> (
+                {deleteFor.email})? Esta acción no se puede deshacer.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" size="sm" onClick={() => setDeleteFor(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={remove.isPending}
+                onClick={() => {
+                  remove.mutate(deleteFor.id, { onSettled: () => setDeleteFor(null) });
+                }}
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
         )}
       </Dialog>
     </div>
