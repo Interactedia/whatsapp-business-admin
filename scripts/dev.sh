@@ -12,6 +12,11 @@ cd "$(dirname "$0")/.."
 
 PORT="${PORT:-4020}"
 PIDFILE="/tmp/whatsapp-admin-dev.pid"
+OUTBOX_PIDFILE="/tmp/whatsapp-admin-outbox-dispatcher.pid"
+OUTBOUND_PIDFILE="/tmp/whatsapp-admin-outbound-worker.pid"
+DEV_LOG="/tmp/dev.log"
+OUTBOX_LOG="/tmp/outbox-dispatcher.log"
+OUTBOUND_LOG="/tmp/outbound-worker.log"
 
 is_running() {
   if ss -tlnp 2>/dev/null | grep -q ":$PORT "; then
@@ -21,13 +26,15 @@ is_running() {
 }
 
 stop() {
-  echo ">> killing any tsx watch / server.ts processes..."
+  echo ">> killing any tsx watch / server.ts / worker processes..."
   pkill -9 -f "tsx watch server.ts" 2>/dev/null || true
   pkill -9 -f "tsx server.ts" 2>/dev/null || true
-  for pid in $(ps aux | grep -E "tsx.*server\.ts" | grep -v grep | awk '{print $2}'); do
+  pkill -9 -f "scripts/outbox-dispatcher" 2>/dev/null || true
+  pkill -9 -f "scripts/outbound-worker" 2>/dev/null || true
+  for pid in $(ps aux | grep -E "tsx.*(server\.ts|scripts/(outbox-dispatcher|outbound-worker))" | grep -v grep | awk '{print $2}'); do
     kill -9 "$pid" 2>/dev/null || true
   done
-  rm -f "$PIDFILE"
+  rm -f "$PIDFILE" "$OUTBOX_PIDFILE" "$OUTBOUND_PIDFILE"
   for i in 1 2 3 4 5; do
     if ! is_running; then
       echo ">> port $PORT is free"
@@ -40,20 +47,28 @@ stop() {
 }
 
 start() {
-  stop
+  stop || true
   rm -rf .next-dev
   echo ">> starting dev server on port $PORT..."
-  nohup npm run dev > /tmp/dev.log 2>&1 &
-  echo $! > "$PIDFILE"
+  nohup npm run dev > "$DEV_LOG" 2>&1 &
+  local dev_pid=$!
+  echo $dev_pid > "$PIDFILE"
+  echo ">> starting queue workers..."
+  BULLMQ_PREFIX=wa-queue nohup npm run worker:outbox > "$OUTBOX_LOG" 2>&1 &
+  local outbox_pid=$!
+  echo $outbox_pid > "$OUTBOX_PIDFILE"
+  BULLMQ_PREFIX=wa-queue nohup npm run worker:outbound > "$OUTBOUND_LOG" 2>&1 &
+  local outbound_pid=$!
+  echo $outbound_pid > "$OUTBOUND_PIDFILE"
   for i in $(seq 1 20); do
     if is_running; then
-      echo ">> ready (pid $(cat $PIDFILE), port $PORT)"
+      echo ">> ready (dev pid $dev_pid, outbox pid $outbox_pid, outbound pid $outbound_pid, port $PORT)"
       return 0
     fi
     sleep 1
   done
   echo "!! server didn't come up in 20s, last log lines:" >&2
-  tail -n 20 /tmp/dev.log >&2
+  tail -n 20 "$DEV_LOG" >&2
   return 1
 }
 
@@ -63,10 +78,19 @@ case "${1:-start}" in
   restart) start ;;
   status)
     if is_running; then
-      echo "running on port $PORT (pid $(lsof -ti:$PORT 2>/dev/null | head -n1))"
+      echo "server running on port $PORT (pid $(lsof -ti:$PORT 2>/dev/null | head -n1))"
     else
-      echo "not running"
+      echo "server not running"
     fi
+    for item in "outbox-dispatcher:$OUTBOX_PIDFILE" "outbound-worker:$OUTBOUND_PIDFILE"; do
+      name="${item%%:*}"
+      file="${item#*:}"
+      if [ -f "$file" ] && kill -0 "$(cat "$file")" 2>/dev/null; then
+        echo "$name running (pid $(cat "$file"))"
+      else
+        echo "$name not running"
+      fi
+    done
     ;;
   *)
     echo "usage: $0 {start|stop|restart|status}" >&2
