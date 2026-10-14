@@ -5,11 +5,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, KeyRound, UserPlus, Check } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
 import { formatDateTime } from "@/lib/utils";
-import { PageHeader } from "@/components/shell/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
@@ -106,20 +106,25 @@ export function UsersClient({
 
   return (
     <div className="flex h-full flex-col">
-      <PageHeader
-        title={tenantName ? `Users & Members — ${tenantName}` : "Users"}
-        description={
-          tenantId
-            ? "Manage users and assign existing users as members of this tenant."
-            : "Manage who can access this admin. Agents see only the inbox and contacts."
-        }
-        actions={
-          <div className="flex items-center gap-2">
+      {/* Page Header */}
+      <div className="border-b bg-card px-4 py-5 sm:px-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              {tenantName ? `Users & Members — ${tenantName}` : "Users"}
+            </h1>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              {tenantId
+                ? "Administra los usuarios y asigna usuarios existentes como miembros de este tenant."
+                : "Administra quién puede acceder a este panel. Los agentes solo ven la bandeja de entrada y los contactos."}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
             {tenantId && currentRole === "SYSTEM_ADMIN" && (
               <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm" variant="outline">
-                    <UserPlus className="h-4 w-4 mr-1" /> Add member to tenant
+                  <Button variant="outline" className="h-9 gap-2 rounded-lg px-3 text-sm font-medium shadow-sm">
+                    <UserPlus className="h-4 w-4" /> Add member to tenant
                   </Button>
                 </DialogTrigger>
                 <AddTenantMemberDialog
@@ -135,7 +140,7 @@ export function UsersClient({
             )}
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
-                <Button size="sm">
+                <Button className="h-9 gap-2 rounded-lg px-4 text-sm font-medium shadow-sm">
                   <Plus className="h-4 w-4" /> New user
                 </Button>
               </DialogTrigger>
@@ -146,27 +151,26 @@ export function UsersClient({
               />
             </Dialog>
           </div>
-        }
-      />
+        </div>
+      </div>
 
-      <div className="p-3 sm:p-4">
-        <div className="rounded-lg border">
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        <div className="rounded-lg border bg-card">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                {tenantId && <TableHead className="w-32">Tenant Access</TableHead>}
-                <TableHead className="w-32">Role</TableHead>
-                <TableHead className="w-24">Status</TableHead>
-                <TableHead className="w-40">Created</TableHead>
-                <TableHead className="w-24 text-right">Actions</TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="pl-4">Usuario</TableHead>
+                {tenantId && <TableHead className="w-36">Acceso al tenant</TableHead>}
+                <TableHead className="w-40">Rol</TableHead>
+                <TableHead className="w-28">Estado</TableHead>
+                <TableHead className="w-40">Creado</TableHead>
+                <TableHead className="w-28 pr-4 text-right">Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading && (
                 <TableRow>
-                  <TableCell colSpan={tenantId ? 7 : 6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={tenantId ? 6 : 5} className="py-8 text-center text-muted-foreground">
                     Loading…
                   </TableCell>
                 </TableRow>
@@ -174,14 +178,41 @@ export function UsersClient({
               {users.map((u) => {
                 const self = u.id === currentUserId;
                 const isMember = memberUserIds.has(u.id);
+                const initials = u.name
+                  .trim()
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((w) => w[0]?.toUpperCase() ?? "")
+                  .join("");
                 return (
                   <TableRow key={u.id}>
-                    <TableCell data-label="Name" className="font-medium">
-                      {u.name} {self && <span className="text-xs text-muted-foreground">(you)</span>}
+                    <TableCell data-label="Usuario">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Avatar className="h-9 w-9 shrink-0">
+                          <AvatarFallback>{initials}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="truncate font-medium text-foreground" title={u.name}>
+                              {u.name}
+                            </span>
+                            {self && (
+                              <Badge
+                                variant="outline"
+                                className="shrink-0 rounded px-1.5 py-0 text-[10px] font-medium text-muted-foreground"
+                              >
+                                Tú
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="truncate text-xs text-muted-foreground" title={u.email}>
+                            {u.email}
+                          </p>
+                        </div>
+                      </div>
                     </TableCell>
-                    <TableCell data-label="Email" className="break-all text-muted-foreground">{u.email}</TableCell>
                     {tenantId && (
-                      <TableCell data-label="Tenant Access">
+                      <TableCell data-label="Acceso al tenant">
                         {isMember ? (
                           <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300">
                             <Check className="h-3 w-3 mr-1 inline" /> Member
@@ -191,13 +222,13 @@ export function UsersClient({
                         )}
                       </TableCell>
                     )}
-                    <TableCell data-label="Role">
+                    <TableCell data-label="Rol">
                       <Select
                         value={u.role}
                         onValueChange={(role) => patch.mutate({ id: u.id, body: { role: role as User["role"] } })}
                         disabled={self || (!canManageSystemAdmins && u.role === "SYSTEM_ADMIN")}
                       >
-                        <SelectTrigger className="h-7 w-36">
+                        <SelectTrigger className="h-8 w-36 rounded-md" aria-label={`Rol de ${u.name}`}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -209,27 +240,31 @@ export function UsersClient({
                         </SelectContent>
                       </Select>
                     </TableCell>
-                    <TableCell data-label="Status">
+                    <TableCell data-label="Estado">
                       <button
                         type="button"
                         disabled={self || (!canManageSystemAdmins && u.role === "SYSTEM_ADMIN")}
                         onClick={() => patch.mutate({ id: u.id, body: { active: !u.active } })}
-                        className="disabled:opacity-60"
+                        aria-label={u.active ? `Desactivar a ${u.name}` : `Activar a ${u.name}`}
+                        title={u.active ? "Desactivar" : "Activar"}
+                        className="rounded-md p-0.5 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Badge variant={u.active ? "success" : "secondary"}>
                           {u.active ? "Active" : "Disabled"}
                         </Badge>
                       </button>
                     </TableCell>
-                    <TableCell data-label="Created" className="text-xs text-muted-foreground">
+                    <TableCell data-label="Creado" className="text-xs tabular-nums text-muted-foreground">
                       {formatDateTime(u.createdAt)}
                     </TableCell>
-                    <TableCell data-label="Actions" className="text-right">
-                      <div className="flex justify-end gap-1">
+                    <TableCell data-label="Acciones" className="text-right">
+                      <div className="flex justify-end gap-1.5">
                         <Button
                           variant="ghost"
                           size="icon"
                           title="Reset password"
+                          aria-label={`Reset password for ${u.name}`}
+                          className="rounded-md text-muted-foreground hover:text-foreground"
                           disabled={!canManageSystemAdmins && u.role === "SYSTEM_ADMIN"}
                           onClick={() => setResetFor(u)}
                         >
@@ -239,6 +274,8 @@ export function UsersClient({
                           variant="ghost"
                           size="icon"
                           title="Delete"
+                          aria-label={`Delete ${u.name}`}
+                          className="rounded-md hover:bg-destructive/10 hover:text-destructive"
                           disabled={self || (!canManageSystemAdmins && u.role === "SYSTEM_ADMIN")}
                           onClick={() => {
                             if (confirm(`Delete ${u.name}?`)) remove.mutate(u.id);
