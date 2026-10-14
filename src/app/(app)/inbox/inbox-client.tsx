@@ -527,7 +527,7 @@ function MediaContent({ m, onPreviewImage }: { m: Msg; onPreviewImage: (image: {
 }
 
 function StatusTick({ status, errorJson }: { status: string; errorJson?: { uncertain?: boolean } | null }) {
-  // WA-ERA5-05: UNCERTAIN (Meta accepted but response was timeout/5xx/parse) must
+  // UNCERTAIN (Meta accepted but response was timeout/5xx/parse) must
   // be visually distinct from PENDING. The worker keeps status=PENDING and stamps
   // errorJson.uncertain=true, so the client must look at errorJson to render it.
   if (status === "PENDING" && errorJson?.uncertain) {

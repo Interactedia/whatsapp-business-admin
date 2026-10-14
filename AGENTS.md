@@ -78,12 +78,4 @@ Use the project scripts, do not invent ad-hoc commands.
   - Kills any running `tsx watch server.ts` / `tsx server.ts`, clears `.next-dev`, starts `npm run dev` in background, waits up to 20s for `:4020` to listen, prints pid.
   - `stop` is the only safe way to terminate a running instance. Do not run `nohup npm run dev` directly while a previous instance is alive.
 
-- ERA 5 isolated environment (port 4030, `whatsapp_era5_test` DB, `wa-queue-era5` Redis namespace, `BULLMQ_PREFIX=wa-queue-era5`):
-  `set -a && . ./.env.era5 && set +a && ./scripts/era5-start.sh`
-  Log: `/tmp/era5-server.log`. PID: `/tmp/era5-server.pid`.
-  Stop: `pkill -9 -f "tsx.*server.ts"`.
-
-- Browser evidence (ERA 5): `npx tsx scripts/era5-browser-smoke.ts`
-  Requires `SEED_PASSWORD` env var to be set from the local shell.
-
 When the user says "levanta el servicio", "start the server", "apaga el servicio" or similar, prefer these scripts over manual `nohup tsx server.ts` invocations. They handle pid files, port collision and log paths consistently and are the supported entry points.

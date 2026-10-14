@@ -4,7 +4,7 @@
 
 Implementado detrás de `WHATSAPP_INBOUND_ASYNC_ENABLED`. El valor por defecto es desactivado: cualquier valor distinto de `true` conserva el flujo legacy.
 
-## Contrato de autenticación (WA-ERA5-02)
+## Contrato de autenticación
 
 La autenticación es **fail-closed** y ocurre antes de cualquier mutación de negocio.
 
