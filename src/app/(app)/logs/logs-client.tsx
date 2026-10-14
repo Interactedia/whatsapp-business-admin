@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -77,8 +78,12 @@ function formatTime(date: Date): string {
 
 export function LogsClient() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
 
-  const [tab, setTab] = useState<"api" | "webhook">("api");
+  // Deep-link support: ?tab=api|webhook selects the initial tab (default api).
+  const [tab, setTab] = useState<"api" | "webhook">(
+    searchParams.get("tab") === "webhook" ? "webhook" : "api",
+  );
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<{ title: string; body: unknown } | null>(null);
 

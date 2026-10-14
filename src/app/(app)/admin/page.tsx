@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/shell/page-header";
 import { Card, CardContent } from "@/components/ui/card";
+import { RecentActivitySection } from "@/app/(app)/admin/recent-activity";
 import { Building2, UserCog, Users, MessageSquare, ListChecks, ArrowRight } from "lucide-react";
 
 /**
@@ -86,6 +87,11 @@ export default async function SystemAdminDashboardPage() {
               );
             })}
           </div>
+        </div>
+
+        {/* Recent Activity — reuses /api/logs (same source as /logs tabs) */}
+        <div className="mt-6">
+          <RecentActivitySection />
         </div>
       </div>
     </div>
