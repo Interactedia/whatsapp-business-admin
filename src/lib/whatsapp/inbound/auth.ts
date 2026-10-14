@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { getWabaConfig } from "@/lib/settings";
 import { verifySignature } from "@/lib/whatsapp/signature";
 
 /**
@@ -125,13 +124,10 @@ function reject(reason: Exclude<WebhookAuthRejectionReason, "APP_SECRET_UNCONFIG
   return { authenticated: false, signatureValid: false, reason, missingSecret: false };
 }
 
-type SecretCandidate = { secret: string; source: "global" | "tenant" };
+type SecretCandidate = { secret: string; source: "tenant" };
 
 async function resolveAppSecretCandidates(): Promise<SecretCandidate[]> {
   const candidates: SecretCandidate[] = [];
-
-  const cfg = await getWabaConfig();
-  if (cfg.appSecret) candidates.push({ secret: cfg.appSecret, source: "global" });
 
   const tenantAccounts = await prisma.wabaAccount.findMany({
     where: { appSecret: { not: null } },

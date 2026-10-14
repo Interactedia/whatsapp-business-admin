@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getTenantWabaConfig, getWabaConfig, type WabaConfig } from "@/lib/settings";
+import { getTenantWabaConfig, type WabaConfig } from "@/lib/settings";
 import { graphFetch, WhatsAppApiError } from "./client";
 import { emptyFlowJson, type FlowCategory, type FlowComponent, type FlowJson } from "./flow-types";
 import { flowUsesEndpoint, parseFlowJson, validateFlowJson } from "./flow-validate";
@@ -119,12 +119,18 @@ function applySensitiveFields(flowJson: FlowJson, sensitiveFields: string[]): Fl
   };
 }
 
+async function configForFlow(tenantId?: string | null): Promise<WabaConfig> {
+  if (!tenantId) throw new WhatsAppApiError(400, "Flow is not assigned to a tenant WABA.");
+  const config = await getTenantWabaConfig(tenantId);
+  if (!config?.wabaId) throw new WhatsAppApiError(400, "Set the tenant WABA in Settings first.");
+  return config;
+}
+
 async function ensureMetaDraft(flowId: string) {
   const flow = await prisma.flow.findUnique({ where: { id: flowId }, include: { activeVersion: true } });
   if (!flow?.activeVersion) throw new WhatsAppApiError(404, "Flow not found.");
-  if (flow.activeVersion.metaFlowId) return { flow, version: flow.activeVersion };
-  const config = await getWabaConfig();
-  if (!config.wabaId) throw new WhatsAppApiError(400, "Set the WABA ID in Settings first.");
+  const config = await configForFlow(flow.tenantId);
+  if (flow.activeVersion.metaFlowId) return { flow, version: flow.activeVersion, config };
   const createForm = new FormData();
   createForm.set("name", flow.name);
   createForm.set("categories", JSON.stringify(flow.categories));
@@ -140,11 +146,11 @@ async function ensureMetaDraft(flowId: string) {
     where: { id: flow.activeVersion.id },
     data: { metaFlowId: created.id, status: "DRAFT" },
   });
-  return { flow, version };
+  return { flow, version, config };
 }
 
 export async function uploadFlowDraft(flowId: string) {
-  const { flow, version } = await ensureMetaDraft(flowId);
+  const { flow, version, config } = await ensureMetaDraft(flowId);
   if (!version.metaFlowId) throw new WhatsAppApiError(500, "Meta Flow ID was not created.");
   const json = parseFlowJson(version.flowJson);
   const localIssues = validateFlowJson(json);
@@ -162,6 +168,7 @@ export async function uploadFlowDraft(flowId: string) {
       path: `/${version.metaFlowId}`,
       body: metadata,
       related: { type: "flow", id: flow.id },
+      config,
     });
   }
   const form = new FormData();
@@ -173,6 +180,7 @@ export async function uploadFlowDraft(flowId: string) {
     path: `/${version.metaFlowId}/assets`,
     body: form,
     related: { type: "flow", id: flow.id },
+    config,
   });
   const validationErrors = result.validation_errors || [];
   const preview = validationErrors.length ? null : await graphFetch<{ preview?: { preview_url?: string; expires_at?: string } }>({
@@ -180,6 +188,7 @@ export async function uploadFlowDraft(flowId: string) {
     path: `/${version.metaFlowId}`,
     query: { fields: "preview.invalidate(false)" },
     related: { type: "flow", id: flow.id },
+    config,
   }).catch(() => null);
   await prisma.flowVersion.update({
     where: { id: version.id },
@@ -198,7 +207,8 @@ export async function publishFlow(flowId: string) {
   if (uploaded.validationErrors.length) throw new WhatsAppApiError(422, "Meta rejected the Flow JSON. Resolve its validation errors first.");
   const flow = await prisma.flow.findUniqueOrThrow({ where: { id: flowId }, include: { activeVersion: true } });
   if (!flow.activeVersion?.metaFlowId) throw new WhatsAppApiError(500, "Meta Flow ID is missing.");
-  await graphFetch({ method: "POST", path: `/${flow.activeVersion.metaFlowId}/publish`, related: { type: "flow", id: flowId } });
+  const config = await configForFlow(flow.tenantId);
+  await graphFetch({ method: "POST", path: `/${flow.activeVersion.metaFlowId}/publish`, related: { type: "flow", id: flowId }, config });
   await prisma.flowVersion.update({ where: { id: flow.activeVersion.id }, data: { status: "PUBLISHED", publishedAt: new Date(), validationErrors: [] } });
   return { status: "PUBLISHED", metaFlowId: flow.activeVersion.metaFlowId };
 }
@@ -209,8 +219,7 @@ export async function cloneFlow(flowId: string) {
   const nextRevision = (flow.versions[0]?.revision || 0) + 1;
   let metaFlowId: string | undefined;
   if (flow.activeVersion.metaFlowId) {
-    const config = await getWabaConfig();
-    if (!config.wabaId) throw new WhatsAppApiError(400, "Set the WABA ID in Settings first.");
+    const config = await configForFlow(flow.tenantId);
     const cloneForm = new FormData();
     cloneForm.set("name", `${flow.name} v${nextRevision}`);
     cloneForm.set("categories", JSON.stringify(flow.categories));
@@ -244,38 +253,36 @@ export async function cloneFlow(flowId: string) {
 
 export async function deprecateFlow(flowId: string) {
   const flow = await prisma.flow.findUnique({ where: { id: flowId }, include: { versions: { where: { status: "PUBLISHED" }, orderBy: { revision: "desc" }, take: 1 } } });
-  const version = flow?.versions[0];
+  if (!flow) throw new WhatsAppApiError(404, "Flow not found.");
+  const version = flow.versions[0];
   if (!version?.metaFlowId) throw new WhatsAppApiError(404, "Published Meta Flow not found.");
-  await graphFetch({ method: "POST", path: `/${version.metaFlowId}/deprecate`, related: { type: "flow", id: flowId } });
+  const config = await configForFlow(flow.tenantId);
+  await graphFetch({ method: "POST", path: `/${version.metaFlowId}/deprecate`, related: { type: "flow", id: flowId }, config });
   await prisma.flowVersion.update({ where: { id: version.id }, data: { status: "DEPRECATED" } });
 }
 
 export async function deleteFlow(flowId: string) {
   const flow = await prisma.flow.findUnique({ where: { id: flowId }, include: { versions: true, launches: { take: 1 } } });
   if (!flow) return;
+  const config = flow.versions.some((version) => version.metaFlowId) ? await configForFlow(flow.tenantId) : null;
   if (flow.launches.length) throw new WhatsAppApiError(409, "Flows with launch history cannot be deleted; deprecate them instead.");
   for (const version of flow.versions) {
     if (version.status === "PUBLISHED") throw new WhatsAppApiError(409, "Published Flows must be deprecated, not deleted.");
     if (version.metaFlowId) {
-      try { await graphFetch({ method: "DELETE", path: `/${version.metaFlowId}`, related: { type: "flow", id: flowId } }); }
+      try { await graphFetch({ method: "DELETE", path: `/${version.metaFlowId}`, related: { type: "flow", id: flowId }, config: config! }); }
       catch (error) { if (!(error instanceof WhatsAppApiError) || error.status !== 404) throw error; }
     }
   }
   await prisma.flow.delete({ where: { id: flowId } });
 }
 
-async function fetchMetaFlowJson(metaFlowId: string, config?: WabaConfig): Promise<FlowJson | null> {
+async function fetchMetaFlowJson(metaFlowId: string, config: WabaConfig): Promise<FlowJson | null> {
   const assets = await graphFetch<{ data?: { download_url?: string }[] }>({ method: "GET", path: `/${metaFlowId}/assets`, related: { type: "flow" }, config });
   const url = assets.data?.[0]?.download_url;
   if (!url) return null;
   const response = await fetch(url, { headers: config?.accessToken ? { Authorization: `Bearer ${config.accessToken}` } : undefined, redirect: "error" });
   if (!response.ok) return null;
   return parseFlowJson(await response.json());
-}
-
-export async function syncFlows() {
-  const config = await getWabaConfig();
-  return syncFlowsWithConfig(config);
 }
 
 export async function syncFlowsForTenant(tenantId: string) {

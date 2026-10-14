@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getWabaConfig } from "@/lib/settings";
 import { processWebhook } from "@/lib/whatsapp/webhook";
 import { redactFlowWebhookPayload } from "@/lib/whatsapp/flow-submission";
 import { classifyWebhookPayload } from "@/lib/whatsapp/inbound/classify";
@@ -26,10 +25,6 @@ export async function GET(req: Request) {
   const challenge = url.searchParams.get("hub.challenge");
 
   if (mode === "subscribe" && token) {
-    const cfg = await getWabaConfig();
-    if (cfg.webhookVerifyToken && token === cfg.webhookVerifyToken) {
-      return new NextResponse(challenge ?? "", { status: 200 });
-    }
     const tenantWaba = await prisma.wabaAccount.findFirst({
       where: { webhookVerifyToken: token },
     });

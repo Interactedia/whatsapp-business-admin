@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { addCanonicalEvent, isValidProviderId, type ExternalMessageType } from "@/lib/events";
 import { isIdempotencyUniqueViolation } from "@/lib/idempotency";
 import { buildConversationChangedEvent, buildConversationStatusChangedEvent, buildInboundMessageReceivedEvent, buildOutboundMessageStatusChangedEvent } from "@/lib/events/producers";
-import { getWabaConfig } from "@/lib/settings";
 import { phoneNumberConfig, resolveInboundPhoneNumber } from "@/lib/tenant/waba";
 import { downloadInboundMedia } from "@/lib/whatsapp/media";
 import { publish, publishGlobal } from "@/server/realtime";
@@ -109,7 +108,6 @@ const TEMPLATE_EVENT_MAP: Record<string, TemplateStatus> = {
 
 /** Process a full webhook payload. Returns a short human summary for the log. */
 export async function processWebhook(payload: unknown): Promise<string> {
-  const config = await getWabaConfig();
   const root = payload as { entry?: { changes?: { field?: string; value?: WebhookValue }[] }[] };
   const summaries: string[] = [];
 
@@ -126,7 +124,7 @@ export async function processWebhook(payload: unknown): Promise<string> {
       // Inbound messages
       const profileName = value.contacts?.[0]?.profile?.name;
       for (const msg of value.messages ?? []) {
-        summaries.push(await handleInboundMessage(msg, profileName, value.metadata?.phone_number_id, config));
+        summaries.push(await handleInboundMessage(msg, profileName, value.metadata?.phone_number_id));
       }
       // Delivery statuses
       for (const st of value.statuses ?? []) {
@@ -142,7 +140,6 @@ async function handleInboundMessage(
   msg: WaMessage,
   profileName: string | undefined,
   metaPhoneNumberId: string | undefined,
-  fallbackConfig: Awaited<ReturnType<typeof getWabaConfig>>,
 ): Promise<string> {
   if (!metaPhoneNumberId) throw new Error("Inbound webhook missing business phone metadata");
   const businessPhone = await resolveInboundPhoneNumber(metaPhoneNumberId);
@@ -162,7 +159,6 @@ async function handleInboundMessage(
   if (Number.isNaN(ts.getTime())) throw new Error("Inbound webhook message has an invalid timestamp");
 
   const preview = summarizeText(msg);
-  void fallbackConfig;
 
   // Media download for supported types.
   let mediaPath: string | null = null;

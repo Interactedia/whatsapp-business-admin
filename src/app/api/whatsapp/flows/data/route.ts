@@ -1,23 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { getWabaConfig } from "@/lib/settings";
+import { getTenantWabaConfig } from "@/lib/settings";
 import { verifySignature } from "@/lib/whatsapp/signature";
 import { decryptFlowRequest, encryptFlowResponse, flowTokenHash, FlowEndpointError, type EncryptedFlowRequest } from "@/lib/whatsapp/flow-crypto";
 import { invokeFlowConnector } from "@/lib/whatsapp/flow-connector";
 
 export async function POST(req: Request) {
   const raw = await req.text();
-  const config = await getWabaConfig();
-  if (!config.appSecret) return new NextResponse("Flow endpoint is not configured.", { status: 503 });
-  if (!verifySignature(raw, req.headers.get("x-hub-signature-256"), config.appSecret)) return new NextResponse(null, { status: 432 });
 
   let cryptoContext: Awaited<ReturnType<typeof decryptFlowRequest>> | null = null;
   try {
     cryptoContext = await decryptFlowRequest(JSON.parse(raw) as EncryptedFlowRequest);
     const request = cryptoContext.body;
-    if (request.action === "ping") return encrypted({ data: { status: "active" } }, cryptoContext);
-    if (request.data?.error) return encrypted({ data: { acknowledged: true } }, cryptoContext);
     if (!request.flow_token) throw new FlowEndpointError(427, "This form is no longer available.");
     const launch = await prisma.flowLaunch.findUnique({
       where: { tokenHash: flowTokenHash(request.flow_token) },
@@ -26,6 +21,10 @@ export async function POST(req: Request) {
     if (!launch || launch.expiresAt <= new Date() || ["FAILED", "EXPIRED"].includes(launch.status)) {
       throw new FlowEndpointError(427, "This form is no longer available.");
     }
+    if (!launch.flow.tenantId) throw new FlowEndpointError(427, "This form is no longer available.");
+    const config = await getTenantWabaConfig(launch.flow.tenantId);
+    if (!config?.appSecret) return new NextResponse("Flow endpoint is not configured.", { status: 503 });
+    if (!verifySignature(raw, req.headers.get("x-hub-signature-256"), config.appSecret)) return new NextResponse(null, { status: 432 });
     if (request.action === "INIT" && launch.status === "SENT") {
       await prisma.flowLaunch.update({ where: { id: launch.id }, data: { status: "OPENED", openedAt: new Date() } });
     }
