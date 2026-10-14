@@ -36,10 +36,10 @@ describe("SYSTEM_ADMIN navigation scope", () => {
     expect(isNavActive(adminItem, "/admin/tenants", null)).toBe(false);
   });
 
-  it("/admin/tenants nav item is active on /admin/tenants and sub-paths", () => {
+  it("/admin/tenants nav item is active only on exact /admin/tenants, not on /admin", () => {
     const tenantsItem = NAV_ITEMS.find((i) => i.key === "/admin/tenants")!;
     expect(isNavActive(tenantsItem, "/admin/tenants", null)).toBe(true);
-    expect(isNavActive(tenantsItem, "/admin/tenants/x", null)).toBe(true);
+    expect(isNavActive(tenantsItem, "/admin/tenants/x", null)).toBe(false);
     expect(isNavActive(tenantsItem, "/admin", null)).toBe(false);
   });
 });

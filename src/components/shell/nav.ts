@@ -96,7 +96,7 @@ export function isNavActive(
   if (activeTenantId && href === `/t/${activeTenantId}`) {
     return pathname === href;
   }
-  return pathname === href || pathname.startsWith(`${href}/`);
+  return pathname === href;
 }
 
 /**
