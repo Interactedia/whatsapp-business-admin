@@ -24,12 +24,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const [settings, memberships] = await Promise.all([
-    prisma.wabaSettings.findUnique({ where: { id: "default" } }),
-    getMemberships(session.user.id),
-  ]);
+  const memberships = await getMemberships(session.user.id);
 
-  const wabaConnected = Boolean(settings?.phoneNumberId && settings?.accessTokenEnc);
+  const wabaConnected = false;
 
   return (
     <AppShellClient
@@ -40,7 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       }}
       memberships={memberships}
       wabaConnected={wabaConnected}
-      phoneNumber={settings?.phoneNumberDisplay ?? null}
+      phoneNumber={null}
     >
       {children}
     </AppShellClient>

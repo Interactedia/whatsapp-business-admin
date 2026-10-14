@@ -24,10 +24,9 @@ type TenantSettings = {
  * Client wrapper for AppShell with tenant context.
  * Extracts activeTenantId from the current URL path.
  *
- * The server layout only sees the legacy singleton (wabaSettings) and would
- * report "Not connected" for tenants that store their creds in the
- * multi-tenant WabaAccount table. Refetch the tenant-scoped settings on the
- * client so the sidebar footer reflects the active tenant's real state.
+ * The server layout intentionally does not choose a tenant WABA. Refetch the
+ * active tenant settings on the client so the sidebar footer follows tenant
+ * switches without falling back to another tenant or the legacy singleton.
  */
 export function AppShellClient({ user, memberships, wabaConnected, phoneNumber, children }: Props) {
   const pathname = usePathname();
@@ -45,8 +44,8 @@ export function AppShellClient({ user, memberships, wabaConnected, phoneNumber, 
     staleTime: 30_000,
   });
 
-  // Prefer the active tenant's connection state; fall back to the server
-  // (legacy singleton) when there is no active tenant or no data yet.
+  // Prefer the active tenant's connection state. Without an active tenant,
+  // show the neutral server value instead of guessing a WABA.
   const resolvedConnected = tenantSettings
     ? Boolean(tenantSettings.connected)
     : wabaConnected;
