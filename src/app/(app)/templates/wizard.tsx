@@ -92,7 +92,7 @@ export function TemplateWizard({ initial, templateId, tenantId }: { initial?: Te
           <Stepper step={step} onStep={setStep} />
           <div className="min-h-0 flex-1 overflow-auto p-3 scroll-thin sm:p-4">
             {step === 0 && <BasicsStep builder={builder} set={set} errorFor={errorFor} />}
-            {step === 1 && <HeaderStep builder={builder} set={set} errorFor={errorFor} />}
+            {step === 1 && <HeaderStep builder={builder} set={set} errorFor={errorFor} tenantId={tenantId} />}
             {step === 2 && <BodyStep builder={builder} set={set} errorFor={errorFor} />}
             {step === 3 && <FooterStep builder={builder} set={set} errorFor={errorFor} />}
             {step === 4 && <ButtonsStep builder={builder} set={set} errors={errors} />}
@@ -164,6 +164,7 @@ type StepProps = {
   builder: TemplateBuilder;
   set: (patch: Partial<TemplateBuilder>) => void;
   errorFor: (field: string) => string | undefined;
+  tenantId?: string | null;
 };
 
 function ErrorLine({ msg }: { msg?: string }) {
@@ -232,7 +233,7 @@ function BasicsStep({ builder, set, errorFor }: StepProps) {
   );
 }
 
-function HeaderStep({ builder, set, errorFor }: StepProps) {
+function HeaderStep({ builder, set, errorFor, tenantId }: StepProps) {
   const types: { value: HeaderType; label: string }[] = [
     { value: "NONE", label: "None" },
     { value: "TEXT", label: "Text" },
@@ -288,7 +289,7 @@ function HeaderStep({ builder, set, errorFor }: StepProps) {
         </>
       )}
 
-      {["IMAGE", "VIDEO", "DOCUMENT"].includes(builder.header.type) && <MediaUpload builder={builder} setHeader={setHeader} />}
+      {["IMAGE", "VIDEO", "DOCUMENT"].includes(builder.header.type) && <MediaUpload builder={builder} setHeader={setHeader} tenantId={tenantId} />}
 
       <ErrorLine msg={errorFor("header")} />
     </div>
@@ -298,9 +299,11 @@ function HeaderStep({ builder, set, errorFor }: StepProps) {
 function MediaUpload({
   builder,
   setHeader,
+  tenantId,
 }: {
   builder: TemplateBuilder;
   setHeader: (patch: Partial<TemplateBuilder["header"]>) => void;
+  tenantId?: string | null;
 }) {
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
@@ -312,6 +315,7 @@ function MediaUpload({
     try {
       const fd = new FormData();
       fd.append("file", file);
+      if (tenantId) fd.append("tenantId", tenantId);
       const res = await fetch("/api/templates/upload-sample", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Upload failed");

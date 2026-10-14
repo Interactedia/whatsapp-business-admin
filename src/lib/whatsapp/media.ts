@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getWabaConfig, type WabaConfig } from "@/lib/settings";
+import type { WabaConfig } from "@/lib/settings";
 import { mediaStore, extFromMime } from "@/lib/media";
 import { graphFetch, WhatsAppApiError } from "@/lib/whatsapp/client";
 
@@ -11,9 +11,9 @@ const GRAPH_HOST = "https://graph.facebook.com";
  */
 export async function downloadInboundMedia(
   mediaId: string,
-  config?: WabaConfig,
+  config: WabaConfig,
 ): Promise<{ path: string; mime: string } | null> {
-  const cfg = config ?? (await getWabaConfig());
+  const cfg = config;
   if (!cfg.accessToken) return null;
 
   // 1) Resolve the media ID to a temporary download URL (logged via graphFetch).
@@ -64,9 +64,9 @@ export async function uploadOutboundMedia(opts: {
   data: Buffer;
   mimeType: string;
   fileName: string;
-  config?: WabaConfig;
+  config: WabaConfig;
 }): Promise<string> {
-  const cfg = opts.config ?? (await getWabaConfig());
+  const cfg = opts.config;
   if (!cfg.accessToken || !cfg.phoneNumberId) {
     throw new WhatsAppApiError(400, "WhatsApp is not connected.");
   }

@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import { phoneNumberConfig } from "@/lib/tenant/waba";
 import { downloadInboundMedia, storeFromLink } from "./media";
 import { resolveTemplateContents } from "./template-history";
 
 type MediaMessage = {
   id: string; type: string; templateId: string | null; payload: unknown; text: string | null; waMessageId: string | null;
   mediaPath: string | null; mediaMime: string | null; mediaFilename: string | null;
+  conversation?: { phoneNumber?: { id: string; metaPhoneNumberId: string; displayPhone: string | null; verifiedName: string | null; wabaAccount: { id: string; tenantId: string; metaWabaId: string; metaAppId: string | null; name: string | null; accessTokenEnc: string | null; appSecret: string | null; apiVersion: string } } | null };
 };
 const pending = new Map<string, Promise<MediaMessage>>();
 
@@ -20,7 +22,9 @@ export async function resolveTemplateMedia(message: MediaMessage): Promise<Media
       if (!media) return message;
       let stored: { path: string; mime: string } | null = null;
       if (media.link && /^https?:\/\//i.test(media.link)) stored = await storeFromLink(media.link);
-      else if (/^\d+$/.test(media.id)) stored = await downloadInboundMedia(media.id);
+      else if (/^\d+$/.test(media.id) && message.conversation?.phoneNumber) {
+        stored = await downloadInboundMedia(media.id, phoneNumberConfig(message.conversation.phoneNumber));
+      }
       if (!stored) return message;
       // Never serve remote HTML as an inline document from the app's origin.
       const supported = media.type === "image" ? /^image\/(jpeg|png|gif|webp|avif)$/i.test(stored.mime)

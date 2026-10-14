@@ -9,7 +9,10 @@ export const GET = handle(async (_req, { params }) => {
   await requireUser();
   const { messageId } = await params;
 
-  const storedMessage = await prisma.message.findUnique({ where: { id: messageId } });
+  const storedMessage = await prisma.message.findUnique({
+    where: { id: messageId },
+    include: { conversation: { include: { phoneNumber: { include: { wabaAccount: true } } } } },
+  });
   const message = storedMessage ? await resolveTemplateMedia(storedMessage) : null;
   if (!message || !message.mediaPath) throw new HttpError(404, "Media not found");
 

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getWabaConfig, type WabaConfig } from "@/lib/settings";
+import type { WabaConfig } from "@/lib/settings";
 import { WhatsAppApiError } from "@/lib/whatsapp/client";
 
 const GRAPH_HOST = "https://graph.facebook.com";
@@ -29,9 +29,9 @@ export async function uploadTemplateMediaSample(opts: {
   data: Buffer;
   mimeType: string;
   fileName: string;
-  config?: WabaConfig;
+  config: WabaConfig;
 }): Promise<string> {
-  const config = opts.config ?? (await getWabaConfig());
+  const config = opts.config;
   if (!config.accessToken) throw new WhatsAppApiError(400, "WhatsApp is not connected.");
   if (!config.metaAppId) {
     throw new WhatsAppApiError(400, "Set your Meta App ID in Settings to use media-header templates.");

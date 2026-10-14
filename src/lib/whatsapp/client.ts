@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getWabaConfig, type WabaConfig } from "@/lib/settings";
+import type { WabaConfig } from "@/lib/settings";
 import { boundedPayload, payloadExpiresAt, safeHeaders } from "@/lib/diagnostics/payload";
 
 function graphHost() {
@@ -29,8 +29,8 @@ export type GraphRequest = {
   query?: Record<string, string | number | undefined>;
   /** For linking the ApiLog row to a domain object. */
   related?: { type: string; id?: string };
-  /** Provide a config to avoid a second DB read; otherwise loaded automatically. */
-  config?: WabaConfig;
+  /** Tenant/channel-scoped WABA config. Required for operational Graph calls. */
+  config: WabaConfig;
   /** Optional AbortSignal for request-level cancellation/timeout. */
   signal?: AbortSignal;
   diagnostics?: {
@@ -49,7 +49,7 @@ export type GraphRequest = {
  * The access token is never written to the log.
  */
 export async function graphFetch<T = unknown>(req: GraphRequest): Promise<T> {
-  const config = req.config ?? (await getWabaConfig());
+  const config = req.config;
   if (!config.accessToken) {
     throw new WhatsAppApiError(400, "WhatsApp is not connected. Set your access token in Settings.");
   }
