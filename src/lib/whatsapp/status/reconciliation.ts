@@ -48,7 +48,7 @@ function statusesFor(payload: unknown, waMessageId: string) {
   );
 }
 
-function nextStatus(current: MessageStatus, incoming: MessageStatus): MessageStatus {
+export function nextStatus(current: MessageStatus, incoming: MessageStatus): MessageStatus {
   if (incoming === "FAILED" && STATUS_RANK[current] > STATUS_RANK.SENT) return current;
   return STATUS_RANK[incoming] >= STATUS_RANK[current] ? incoming : current;
 }

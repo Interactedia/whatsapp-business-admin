@@ -4,6 +4,7 @@ import { isIdempotencyUniqueViolation } from "@/lib/idempotency";
 import { buildConversationChangedEvent, buildConversationStatusChangedEvent, buildInboundMessageReceivedEvent, buildOutboundMessageStatusChangedEvent } from "@/lib/events/producers";
 import { phoneNumberConfig, resolveInboundPhoneNumber } from "@/lib/tenant/waba";
 import { downloadInboundMedia } from "@/lib/whatsapp/media";
+import { nextStatus as nextStatusMonotonic } from "@/lib/whatsapp/status/reconciliation";
 import { publish, publishGlobal } from "@/server/realtime";
 import type { MessageStatus, MessageType, TemplateStatus } from "@/generated/prisma/client";
 import { recordFlowSubmission, redactFlowWebhookPayload } from "@/lib/whatsapp/flow-submission";
@@ -363,18 +364,22 @@ async function handleStatus(st: WaStatus, metaPhoneNumberId?: string): Promise<s
   if (!status) return "";
   const errorJson = st.errors && st.errors.length > 0 ? (st.errors as object) : undefined;
 
-  // Only downgrade never (read > delivered > sent); simplest: update if message exists.
+  // Status monotonicity (read > delivered > sent): an out-of-order status
+  // (e.g. delivered arriving after read) must NOT downgrade. Reuse the same
+  // `nextStatus` helper the canonical reconciliator uses, so legacy fallback
+  // and canonical path agree on terminal state.
   const msg = await prisma.message.findUnique({
     where: { waMessageId: st.id },
     include: { conversation: { select: { phoneNumberId: true } } },
   });
   if (msg) {
     if (msg.tenantId !== businessPhone.wabaAccount.tenantId) throw new Error("Status tenant mismatch");
-    if (msg.status !== status) {
+    const targetStatus = nextStatusMonotonic(msg.status, status);
+    if (targetStatus !== msg.status) {
       await prisma.$transaction(async (tx) => {
         await tx.message.update({
           where: { id: msg.id },
-          data: { status, errorJson: errorJson ?? undefined },
+          data: { status: targetStatus, errorJson: errorJson ?? undefined },
         });
         await addCanonicalEvent(tx, buildOutboundMessageStatusChangedEvent({
           tenantId: msg.tenantId!,
@@ -384,12 +389,12 @@ async function handleStatus(st: WaStatus, metaPhoneNumberId?: string): Promise<s
           wabaAccountId: businessPhone.wabaAccount.id,
           providerMessageId: st.id,
           previousStatus: msg.status,
-          status,
+          status: targetStatus,
           occurredAt: new Date(Number(st.timestamp) * 1000),
         }));
       });
     }
-    publish({ type: "message:status", payload: { conversationId: msg.conversationId, waMessageId: st.id, status } }, msg.tenantId);
+    publish({ type: "message:status", payload: { conversationId: msg.conversationId, waMessageId: st.id, status: targetStatus } }, msg.tenantId);
   }
 
   // Broadcast recipient tracking.
