@@ -41,7 +41,8 @@ export function AppShellClient({ user, memberships, wabaConnected, phoneNumber, 
     queryKey: ["shell", "tenant-settings", activeTenantId],
     queryFn: () => apiFetch<TenantSettings>(`/api/tenants/${activeTenantId}/settings`),
     enabled: Boolean(activeTenantId),
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   // Prefer the active tenant's connection state. Without an active tenant,

@@ -98,10 +98,15 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
       setTestResult(r);
       if (r.success) {
         toast({ title: "Connected", description: r.verifiedName });
-        qc.invalidateQueries({ queryKey: ["settings", tenantId] });
       }
+      qc.invalidateQueries({ queryKey: ["settings", tenantId] });
+      qc.invalidateQueries({ queryKey: ["shell", "tenant-settings", tenantId] });
     },
-    onError: (e: Error) => setTestResult({ success: false, message: e.message }),
+    onError: (e: Error) => {
+      setTestResult({ success: false, message: e.message });
+      qc.invalidateQueries({ queryKey: ["settings", tenantId] });
+      qc.invalidateQueries({ queryKey: ["shell", "tenant-settings", tenantId] });
+    },
   });
   const rotateFlowKey = useMutation({
     mutationFn: () => apiFetch<FlowKey>(`/api/tenants/${tenantId}/settings/flow-key`, { method: "POST" }),
