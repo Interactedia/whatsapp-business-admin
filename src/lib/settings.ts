@@ -105,6 +105,29 @@ export async function getTenantWabaConfig(tenantId: string): Promise<WabaConfig 
   if (!waba) return null;
 
   const phone = waba.phoneNumbers[0];
+  return wabaAccountConfig({
+    metaWabaId: waba.metaWabaId,
+    metaAppId: waba.metaAppId,
+    name: waba.name,
+    accessTokenEnc: waba.accessTokenEnc,
+    appSecret: waba.appSecret,
+    webhookVerifyToken: waba.webhookVerifyToken,
+    apiVersion: waba.apiVersion,
+  }, phone);
+}
+
+export function wabaAccountConfig(
+  waba: {
+    metaWabaId: string;
+    metaAppId: string | null;
+    name: string | null;
+    accessTokenEnc: string | null;
+    appSecret: string | null;
+    webhookVerifyToken: string | null;
+    apiVersion: string;
+  },
+  phone?: { metaPhoneNumberId: string; displayPhone: string | null; verifiedName: string | null } | null,
+): WabaConfig {
   return {
     wabaId: waba.metaWabaId,
     metaAppId: waba.metaAppId ?? null,

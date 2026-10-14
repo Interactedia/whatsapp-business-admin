@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getWabaConfig, type WabaConfig } from "@/lib/settings";
-import { decrypt } from "@/lib/crypto";
+import { wabaAccountConfig, type WabaConfig } from "@/lib/settings";
 import { graphFetch, WhatsAppApiError } from "@/lib/whatsapp/client";
 import {
   builderToComponents,
@@ -28,57 +27,19 @@ function mapMetaStatus(status: string): TemplateStatus {
   }
 }
 
-function getTenantWabaConfig(tenantId?: string | null): Promise<WabaConfig> {
-  if (!tenantId) return getWabaConfig();
-  return configForTemplate(tenantId);
-}
-
 async function configForTemplate(tenantId?: string | null): Promise<WabaConfig> {
-  if (tenantId) {
-    const account = await prisma.wabaAccount.findFirst({
-      where: { tenantId },
-      orderBy: { createdAt: "asc" },
-    });
-    if (account) return wabaConfigFromAccount(account);
+  if (!tenantId) throw new WhatsAppApiError(400, "Template is not assigned to a tenant WABA.");
+  const account = await prisma.wabaAccount.findFirst({
+    where: { tenantId },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!account) {
     throw new WhatsAppApiError(
       400,
       `Tenant ${tenantId} has no WABA account configured. Open Settings to add one.`,
     );
   }
-  // ponytail: templates created before the multi-tenant migration have
-  // tenantId=null. As a last-resort fallback, use the only WABA on file so
-  // existing operators do not get blocked by historical drift.
-  const fallback = await prisma.wabaAccount.findFirst({
-    orderBy: { createdAt: "asc" },
-  });
-  if (fallback) return wabaConfigFromAccount(fallback);
-  const legacy = await getWabaConfig();
-  if (!legacy.wabaId) {
-    throw new WhatsAppApiError(400, "Set your WABA ID in Settings first.");
-  }
-  return legacy;
-}
-
-function wabaConfigFromAccount(account: {
-  metaWabaId: string;
-  metaAppId: string | null;
-  name: string | null;
-  accessTokenEnc: string | null;
-  appSecret: string | null;
-  webhookVerifyToken: string | null;
-  apiVersion: string;
-}): WabaConfig {
-  return {
-    wabaId: account.metaWabaId,
-    metaAppId: account.metaAppId ?? null,
-    phoneNumberId: null,
-    phoneNumberDisplay: null,
-    businessName: account.name,
-    accessToken: account.accessTokenEnc ? decrypt(account.accessTokenEnc) : null,
-    appSecret: account.appSecret ?? null,
-    webhookVerifyToken: account.webhookVerifyToken ?? null,
-    apiVersion: account.apiVersion ?? "v21.0",
-  };
+  return wabaAccountConfig(account);
 }
 
 /** Submit a locally-stored template to Meta for approval. */
@@ -138,21 +99,6 @@ type MetaTemplate = {
   components: ApiComponent[];
   rejected_reason?: string;
 };
-
-/** Pull template statuses from Meta and reconcile local rows. */
-export async function syncTemplates(): Promise<{ synced: number }> {
-  const config = await getWabaConfig();
-  if (!config.wabaId) throw new WhatsAppApiError(400, "Set your WABA ID in Settings first.");
-
-  const res = await graphFetch<{ data: MetaTemplate[] }>({
-    method: "GET",
-    path: `/${config.wabaId}/message_templates`,
-    query: { fields: "name,status,category,language,components,id,rejected_reason", limit: 200 },
-    related: { type: "template" },
-    config,
-  });
-  return reconcileTemplateList(res.data ?? [], null);
-}
 
 /** Pull templates for a specific tenant using the tenant's WabaAccount. */
 export async function syncTemplatesForTenant(tenantId: string): Promise<{ synced: number }> {
