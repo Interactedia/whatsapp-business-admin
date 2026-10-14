@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Users, Building2, UserPlus } from "lucide-react";
+import { Plus, Building2, UserPlus } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
 import { formatDateTime } from "@/lib/utils";
 import { PageHeader } from "@/components/shell/page-header";
@@ -96,51 +96,57 @@ export function AdminTenantsClient() {
         <div className="rounded-lg border bg-card">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Organization / Tenant</TableHead>
-                <TableHead>Tenant ID</TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="pl-4">Organization</TableHead>
                 <TableHead>Members</TableHead>
                 <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right pr-4">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                     Loading tenants...
                   </TableCell>
                 </TableRow>
               ) : tenants.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                     No tenants found. Click &quot;New tenant&quot; to create one.
                   </TableCell>
                 </TableRow>
               ) : (
                 tenants.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
-                        <span>{t.name}</span>
+                  <TableRow
+                    key={t.id}
+                    className="group hover:bg-accent/50"
+                  >
+                    <TableCell className="pl-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                          <Building2 className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{t.name}</p>
+                          <p className="text-xs font-mono text-muted-foreground truncate">{t.id}</p>
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">{t.id}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">
-                        <Users className="h-3 w-3 mr-1 inline" />
-                        {t._count?.tenantMemberships ?? 0}
+                    <TableCell className="py-3">
+                      <Badge variant="secondary" className="font-normal">
+                        {t._count?.tenantMemberships ?? 0} member{t._count?.tenantMemberships !== 1 ? "s" : ""}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{formatDateTime(t.createdAt)}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="py-3 text-sm text-muted-foreground">{formatDateTime(t.createdAt)}</TableCell>
+                    <TableCell className="py-3 pr-4 text-right">
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
                         onClick={() => setSelectedTenant(t)}
+                        className="hover:bg-accent"
                       >
-                        <Users className="h-4 w-4 mr-1" /> Member detail
+                        Member detail
                       </Button>
                     </TableCell>
                   </TableRow>
