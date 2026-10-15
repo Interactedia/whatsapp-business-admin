@@ -124,27 +124,30 @@ export function ContactsClient({
           </Dialog>
         }
       />
-      {/* Scope B: Toolbar compacta con buscador y contador */}
-      <div className="flex flex-col gap-3 border-b bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="h-8 pl-9 text-sm"
-            placeholder="Buscar por nombre o teléfono..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        {!isLoading && contacts.length > 0 && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Users className="h-3.5 w-3.5" />
-            <span>{contacts.length} contacto{contacts.length !== 1 ? "s" : ""}</span>
-          </div>
-        )}
-      </div>
 
-      <div className="flex-1 overflow-auto">
-        <div className="overflow-x-auto">
+      {/* Content area - padding uniforme como Users */}
+      <div className="flex-1 overflow-auto p-4 sm:p-6">
+        {/* Table container - borde y fondo como Users */}
+        <div className="rounded-lg border bg-card">
+          {/* Scope B: Toolbar compacta con buscador y contador */}
+          <div className="flex flex-col gap-3 border-b px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-8 pl-9 text-sm"
+                placeholder="Buscar por nombre o teléfono..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {!isLoading && contacts.length > 0 && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Users className="h-3.5 w-3.5" />
+                <span>{contacts.length} contacto{contacts.length !== 1 ? "s" : ""}</span>
+              </div>
+            )}
+          </div>
+
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
