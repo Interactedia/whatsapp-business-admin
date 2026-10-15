@@ -61,6 +61,8 @@ type Msg = {
   errorJson?: { code?: string; message?: string; uncertain?: boolean; metaStatus?: number } | null;
   templateContent?: TemplateContent;
   location?: { latitude: number; longitude: number; name: string | null; address: string | null; url: string | null };
+  /** Present only for OUT messages sent from the Inbox UI (sentById links to a User). */
+  sentById?: string | null;
 };
 type FlowSubmission = { id: string; waMessageId: string | null; flow: { name: string }; response: Record<string, unknown> | null; purgedAt: string | null; completedAt: string };
 type Thread = {
@@ -828,12 +830,38 @@ function MessageBubble({ m, onPreviewImage }: { m: Msg; onPreviewImage: (image: 
           {m.type !== "LOCATION" && m.text && <div className="whitespace-pre-wrap wrap-break-word">{m.text}</div>}
           {m.caption && <div className="whitespace-pre-wrap wrap-break-word">{m.caption}</div>}
         </>}
-        <div className={cn("mt-0.5 flex items-center justify-end gap-1 text-[10px] [&>svg]:shrink-0", out ? "text-zinc-600 dark:text-zinc-300" : "text-muted-foreground")}>
+        <div className={cn("mt-0.5 flex flex-wrap items-center justify-end gap-x-1 gap-y-0.5 text-[10px] [&>svg]:shrink-0", out ? "text-zinc-600 dark:text-zinc-300" : "text-muted-foreground")}>
+          {out && <MessageOrigin sentById={m.sentById} />}
           <span className="min-w-0 text-right">{formatInboxTimestamp(m.timestamp)}</span>
           {out && <StatusTick status={m.status} errorJson={m.errorJson} />}
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Discrete origin indicator for OUT messages.
+ * Uses sentById as the source of truth:
+ * - present + truthy  → HUMAN (sent from Inbox by an operator)
+ * - null / undefined  → API / Automation (external or internal system)
+ * Never infers origin from Copilot state.
+ */
+function MessageOrigin({ sentById }: { sentById?: string | null }) {
+  if (!sentById) {
+    // External API or internal automation — no sentById on the record.
+    return (
+      <span className="flex items-center gap-0.5" title="Enviado por API o automatización">
+        <Bot className="h-3 w-3" aria-hidden="true" />
+        <span>API</span>
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-0.5" title="Enviado por un agente">
+      <User className="h-3 w-3" aria-hidden="true" />
+      <span>Humano</span>
+    </span>
   );
 }
 

@@ -474,6 +474,8 @@ export function serializeMessage(m: {
   waMessageId?: string | null;
   payload?: unknown;
   errorJson?: unknown;
+  sentById?: string | null;
+  sentBy?: { id: string; name: string | null } | null;
 }) {
   const templateContent = m.type === "TEMPLATE" ? readTemplateContent(m.payload) : null;
   const payload = m.payload && typeof m.payload === "object" ? m.payload as { location?: unknown } : null;
@@ -504,5 +506,6 @@ export function serializeMessage(m: {
     timestamp: m.timestamp.toISOString(),
     waMessageId: m.waMessageId ?? null,
     errorJson: m.errorJson ?? null,
+    sentById: m.sentById ?? null,
   };
 }
