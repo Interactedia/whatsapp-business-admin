@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Building2, UserPlus } from "lucide-react";
+import { Plus, Building2, UserPlus, UserMinus } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
 import { formatDateTime } from "@/lib/utils";
 import { PageHeader } from "@/components/shell/page-header";
@@ -230,6 +230,7 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState("");
+  const [removeFor, setRemoveFor] = useState<Membership | null>(null);
 
   const { data: members = [], isLoading: loadingMembers } = useQuery({
     queryKey: ["admin", "tenants", tenant.id, "memberships"],
@@ -260,6 +261,23 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
     },
     onError: (err: Error) => {
       toast({ variant: "destructive", title: "Failed to add member", description: err.message });
+    },
+  });
+
+  const removeMember = useMutation({
+    mutationFn: (userId: string) =>
+      apiFetch<{ deleted: boolean }>(
+        `/api/tenants/${tenant.id}/memberships?userId=${encodeURIComponent(userId)}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: () => {
+      toast({ title: "Member removed from organization" });
+      setRemoveFor(null);
+      invalidateMembers();
+    },
+    onError: (err: Error) => {
+      toast({ variant: "destructive", title: "Failed to remove member", description: err.message });
+      setRemoveFor(null);
     },
   });
 
@@ -323,18 +341,19 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Added</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loadingMembers ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
                       Loading members...
                     </TableCell>
                   </TableRow>
                 ) : members.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground py-4">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
                       No members assigned to this tenant yet.
                     </TableCell>
                   </TableRow>
@@ -349,6 +368,17 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDateTime(m.createdAt)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-muted-foreground hover:text-destructive"
+                          disabled={removeMember.isPending}
+                          onClick={() => setRemoveFor(m)}
+                        >
+                          <UserMinus className="h-3.5 w-3.5 mr-1" /> Quitar
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))
                 )}
@@ -363,6 +393,38 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <Dialog open={!!removeFor} onOpenChange={(o) => !o && !removeMember.isPending && setRemoveFor(null)}>
+        {removeFor && (
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>¿Quitar miembro de la organización?</DialogTitle>
+              <DialogDescription>
+                Este usuario perderá acceso a esta organización. Su cuenta y sus accesos a otras
+                organizaciones no serán eliminados.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={removeMember.isPending}
+                onClick={() => setRemoveFor(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={removeMember.isPending}
+                onClick={() => removeMember.mutate(removeFor.userId)}
+              >
+                {removeMember.isPending ? "Quitando..." : "Quitar acceso"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
     </Dialog>
   );
 }
