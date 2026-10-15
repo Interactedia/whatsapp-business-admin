@@ -195,10 +195,10 @@ function ConversationItem({
           <button
             type="button"
             onClick={(e) => e.stopPropagation()}
-            className="absolute right-1.5 top-1/2 z-10 flex h-8 w-8 shrink-0 -translate-y-1/2 items-center justify-center rounded-md opacity-0 transition-all hover:bg-[var(--icon-hover)] focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+            className="absolute right-1.5 top-1/2 z-10 flex h-8 w-8 shrink-0 -translate-y-1/2 items-center justify-center rounded-md text-[var(--text-muted)] opacity-0 transition-all hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--conv-active)] group-hover:opacity-100 data-[state=open]:opacity-100"
             aria-label="Opciones de conversación"
           >
-            <ChevronDown className="h-4 w-4 text-[var(--text-muted)]" />
+            <ChevronDown className="h-4 w-4" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={6} className="w-56 rounded-xl border-[var(--menu-border)] bg-[var(--menu-bg)] p-1 shadow-[var(--menu-shadow)]" onClick={(e) => e.stopPropagation()}>
