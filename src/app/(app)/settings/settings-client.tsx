@@ -231,8 +231,8 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
       )}
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex-1 overflow-hidden">
-        <div className="border-b bg-card px-4 sm:px-6">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="shrink-0 border-b bg-card px-4 sm:px-6">
           <TabsList>
             <TabsTrigger value="meta">Conexión con Meta</TabsTrigger>
             <TabsTrigger value="automation">Automatización</TabsTrigger>
@@ -240,7 +240,7 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
         </div>
 
         {/* TAB: Conexión con Meta */}
-        <TabsContent value="meta" className="flex-1 overflow-auto">
+        <TabsContent value="meta" className="min-h-0 flex-1 overflow-auto">
           <MetaConnectionTab
             form={form}
             setForm={(f) => { setForm(f); handleFormChange(); }}
@@ -260,7 +260,7 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
         </TabsContent>
 
         {/* TAB: Automatización */}
-        <TabsContent value="automation" className="flex-1 overflow-auto">
+        <TabsContent value="automation" className="min-h-0 flex-1 overflow-auto">
           <AutomationPreviewTab automation={automation} setAutomation={setAutomation} />
         </TabsContent>
       </Tabs>
