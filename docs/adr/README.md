@@ -19,3 +19,4 @@ Update an ADR by recording a new one or an explicit amendment; do not rewrite hi
 | [0006](0006-webhook-relay.md) | Proposed | Canonical events and relay |
 | [0007](0007-change-control.md) | Accepted | Agent change control |
 | [0008](0008-centralized-tenant-authorization.md) | Accepted | Centralized tenant authorization |
+| [0009](0009-copilot-control-handoff-followup.md) | Proposed | Copilot control, human handoff, automated follow-up (`ADR-WA-COPILOT-001`) |
