@@ -79,3 +79,22 @@ Use the project scripts, do not invent ad-hoc commands.
   - `stop` is the only safe way to terminate a running instance. Do not run `nohup npm run dev` directly while a previous instance is alive.
 
 When the user says "levanta el servicio", "start the server", "apaga el servicio" or similar, prefer these scripts over manual `nohup tsx server.ts` invocations. They handle pid files, port collision and log paths consistently and are the supported entry points.
+
+## 9. UI work: mandatory visual contract
+
+Before modifying any UI component, page, or screen, consult `docs/ui/visual-contract.md` — the authoritative visual contract for this project. The contract formalizes the active patterns (PageHeader, Card, Button, Table, tokens, states) and defines exceptions.
+
+**Rules for any UI task:**
+
+1. **Locate the contract first** — `docs/ui/visual-contract.md` is the single source of truth for visual conventions. Read it before editing any screen.
+2. **Inspect existing patterns** — check the active implementation of the target screen before modifying. Compare against the contract.
+3. **Reuse existing components** — use `src/components/ui/` and `src/components/shell/` primitives. Do not create parallel components.
+4. **Do not invent local patterns** — if the contract covers a case, follow it. New visual patterns require explicit task scope.
+5. **Preserve documented exceptions** — Inbox uses a three-column full-height layout; it is explicitly exempt from the administrative page pattern. Flows and complex builders may have specialized layouts.
+6. **Limit scope to one screen or flow** — unless the task explicitly authorizes broader scope. Avoid mixing UI and backend changes.
+7. **Verify visually** — after any UI change, confirm the result looks correct on desktop and mobile (375px viewport).
+8. **Consider all breakpoints** — mobile (< 640px), tablet (640-1023px), desktop (≥ 1024px). Usable content matters more than no overflow.
+9. **Do not mix backend work during WA-UI-CLOSURE** — unless a technical need is demonstrated. Keep UI and backend work in separate tasks.
+10. **Do not declare a screen complete solely because it compiles or tests pass** — visual verification is required.
+
+**Visual vs. functional completion:** A screen can be visually finished while its backend is still pending. Pending-functional controls must not fake success (no mock success toasts, no fake data shown as production).
