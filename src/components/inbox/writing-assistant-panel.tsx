@@ -120,8 +120,13 @@ export function WritingAssistantPanel({
   if (!open) return null;
 
   // Determine which text to show as original
-  const displayOriginal = originalText.trim() || DEMO_SUGGESTION.original;
-  const isDemoMode = !originalText.trim();
+  // WA-UI-018: Always show demo warning because suggestion is always demo (no LLM backend)
+  const hasUserText = originalText.trim();
+  const displayOriginal = hasUserText ? originalText : DEMO_SUGGESTION.original;
+  // isDemoMode: true when showing example/demo content (no user text)
+  const isDemoMode = !hasUserText;
+  // canApplySuggestion: false until LLM backend is implemented
+  const canApplySuggestion = false; // TODO: Enable when LLM backend is implemented
 
   return (
     <div
@@ -137,16 +142,21 @@ export function WritingAssistantPanel({
       aria-label="Mejorar escritura"
       onKeyDown={handleKeyDown}
     >
+      {/* WA-UI-018: Prominent DEMO warning banner - always visible */}
+      <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+        <span className="text-xs font-medium text-amber-800">
+          {isDemoMode
+            ? "DEMOSTRACIÓN — No se ha procesado tu texto"
+            : "DEMOSTRACIÓN — Sugerencia de ejemplo, no procesada por IA"}
+        </span>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between border-b px-3 py-2">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
           <h2 className="text-sm font-semibold">Mejorar escritura</h2>
-          {isDemoMode && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-              DEMO
-            </span>
-          )}
         </div>
         <Button
           variant="ghost"
@@ -188,27 +198,47 @@ export function WritingAssistantPanel({
         {/* Original Text */}
         <div>
           <label className="mb-1 block text-xs font-medium text-muted-foreground">
-            Texto original
+            {isDemoMode ? "Ejemplo de texto original" : "Tu texto original"}
           </label>
-          <div className="rounded-md border bg-muted/30 p-2">
+          <div
+            className={cn(
+              "rounded-md border p-2",
+              isDemoMode
+                ? "border-dashed border-amber-200 bg-amber-50/50"
+                : "bg-muted/30 border-muted"
+            )}
+          >
             <p className="whitespace-pre-wrap text-sm">{displayOriginal}</p>
           </div>
+          {isDemoMode && (
+            <p className="mt-1 text-[10px] text-amber-600">
+              Este es un ejemplo para demostración
+            </p>
+          )}
+        </div>
+
+        {/* Visual separator */}
+        <div className="flex items-center gap-2">
+          <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
+          <span className="shrink-0 text-[10px] text-muted-foreground">Sugerencia</span>
+          <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
         </div>
 
         {/* Suggested Text */}
         <div>
           <label className="mb-1 block text-xs font-medium text-muted-foreground">
-            Sugerencia
+            {isDemoMode ? "Ejemplo de sugerencia" : "Sugerencia mejorada"}
           </label>
           <textarea
             ref={suggestionRef}
             value={editedSuggestion}
             onChange={(e) => setEditedSuggestion(e.target.value)}
             className={cn(
-              "w-full rounded-md border bg-background p-2 text-sm",
+              "w-full rounded-md border p-2 text-sm",
               "placeholder:text-muted-foreground",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              "resize-none min-h-[80px]"
+              "resize-none min-h-[80px]",
+              isDemoMode ? "border-amber-200 bg-amber-50/30" : "bg-background border-input"
             )}
             aria-label="Texto sugerido - editable"
             placeholder="Escribe algo para ver sugerencias..."
@@ -216,7 +246,7 @@ export function WritingAssistantPanel({
           {isDemoMode && (
             <p className="mt-1 flex items-center gap-1 text-[10px] text-amber-600">
               <AlertTriangle className="h-3 w-3" />
-              Ejemplo demostrativo - no procesa tu texto real
+              Ejemplo demostrativo — esta sugerencia no se aplica a tu texto real
             </p>
           )}
         </div>
@@ -238,11 +268,15 @@ export function WritingAssistantPanel({
         <Button
           size="sm"
           onClick={() => {
-            onAccept(editedSuggestion);
-            onClose();
+            // Only accept if there's actual user text AND LLM backend exists
+            if (canApplySuggestion && hasUserText) {
+              onAccept(editedSuggestion);
+              onClose();
+            }
           }}
           className="text-xs"
-          disabled={!editedSuggestion.trim()}
+          disabled={!editedSuggestion.trim() || !canApplySuggestion}
+          title={!canApplySuggestion ? "Backend de IA no conectado" : "Aplicar sugerencia al mensaje"}
         >
           <Check className="mr-1 h-3 w-3" />
           Usar sugerencia
@@ -251,7 +285,14 @@ export function WritingAssistantPanel({
 
       {/* Footer hint */}
       <div className="flex items-center justify-between border-t bg-muted/30 px-3 py-1.5 text-[10px] text-muted-foreground">
-        <span>Usa ↑↓ para cambiar modo · esc para cerrar</span>
+        <span>
+          {isDemoMode
+            ? "Modo demostración · esc para cerrar"
+            : "Usa ↑↓ para cambiar modo · esc para cerrar"}
+        </span>
+        {isDemoMode && (
+          <span className="text-amber-600">Backend de IA no conectado</span>
+        )}
       </div>
     </div>
   );
