@@ -18,6 +18,12 @@ import {
   Calendar,
   User,
   Send,
+  Paperclip,
+  Image,
+  File,
+  Trash2,
+  Lock,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -610,17 +616,397 @@ function TasksPanelContent({ onClose }: TasksPanelContentProps) {
 }
 
 // ============================================================================
-// AI ASSISTANT PANEL CONTENT
+// AI ASSISTANT PANEL CONTENT (WA-UI-020)
 // ============================================================================
 
+interface AttachmentFile {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  previewUrl?: string;
+}
+
+interface ChatMessage {
+  id: string;
+  role: "operator" | "assistant";
+  content: string;
+  timestamp: Date;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getFileIcon(type: string) {
+  if (type.startsWith("image/")) return Image;
+  if (type === "application/pdf") return FileText;
+  return File;
+}
+
+/**
+ * AiAssistantPanelContent - WA-UI-020
+ *
+ * Implements the complete AI Assistant chat interface within the Inbox.
+ * Pure UI implementation - no backend, no LLM, no real file uploads.
+ *
+ * Features:
+ * - Compact header with "Chat interno" badge
+ * - Context area showing current conversation
+ * - Scrollable chat history with demo messages
+ * - Attachment preview with thumbnails for images
+ * - Independent composer with file picker
+ * - Full accessibility support
+ * - Demo safety: no real sends, uploads, or responses
+ */
 function AiAssistantPanelContent() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
+
+  // State
+  const [messageText, setMessageText] = useState("");
+  const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Demo greeting shown on first load
+  const hasSeenGreeting = useRef(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  // Show greeting when panel first renders
+  useEffect(() => {
+    if (!hasSeenGreeting.current) {
+      hasSeenGreeting.current = true;
+      setMessages([
+        {
+          id: "greeting",
+          role: "assistant",
+          content: "👋 ¡Hola! Soy tu asistente de IA.\n\nPuedo ayudarte a:\n• Resumir la conversación\n• Sugerir respuestas\n• Identificar pendientes\n\nSelecciona archivos o escribe tu consulta.",
+          timestamp: new Date(),
+        },
+      ]);
+    }
+  }, []);
+
+  // Auto-scroll to latest message
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Handle file selection
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      const newAttachments: AttachmentFile[] = files.map((file) => ({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+      }));
+
+      setAttachments((prev) => [...prev, ...newAttachments]);
+      // Reset input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    },
+    []
+  );
+
+  // Remove attachment
+  const handleRemoveAttachment = useCallback((id: string) => {
+    setAttachments((prev) => {
+      const attachment = prev.find((a) => a.id === id);
+      if (attachment?.previewUrl) {
+        URL.revokeObjectURL(attachment.previewUrl);
+      }
+      return prev.filter((a) => a.id !== id);
+    });
+  }, []);
+
+  // Clean up all preview URLs on unmount
+  // Note: We intentionally only cleanup on unmount, not on attachments change
+  useEffect(() => {
+    const currentAttachments = attachments;
+    return () => {
+      currentAttachments.forEach((a) => {
+        if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Handle send - DISABLED per demo safety
+  const handleSend = useCallback(() => {
+    // No-op: backend not connected
+    // In future implementation, this would send to LLM agent
+  }, []);
+
+  // Keyboard handler for composer
+  const handleComposerKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // Shift+Enter = newline
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        // Enter without Shift would send - but we keep disabled for demo
+      }
+    },
+    []
+  );
+
+  const canSend = messageText.trim().length > 0 || attachments.length > 0;
+  const isSendDisabled = true; // Always disabled until backend exists
+
   return (
-    <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-      <Bot className="mb-3 h-10 w-10 text-muted-foreground/50" aria-hidden="true" />
-      <p className="text-sm text-muted-foreground">
-        Próximamente podrás consultar información<br />
-        relacionada con esta conversación.
-      </p>
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Header */}
+      <div className="shrink-0 border-b bg-card/50 px-3 py-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+            <span className="text-sm font-medium">Asistente IA</span>
+          </div>
+          {/* Chat internal badge */}
+          <div className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+            <Lock className="h-3 w-3" aria-hidden="true" />
+            <span>Chat interno · No visible para el cliente</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Context Area */}
+      <div className="shrink-0 border-b bg-muted/30 px-3 py-2">
+        <div className="flex items-center gap-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
+            <MessageSquare className="h-3 w-3 text-primary" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="text-xs font-medium">Contexto: </span>
+            <span className="text-xs text-muted-foreground">conversación actual</span>
+          </div>
+        </div>
+        <p className="mt-1 text-[10px] text-muted-foreground/70">
+          El contexto se conectará cuando se habilite el asistente
+        </p>
+      </div>
+
+      {/* Demo banner */}
+      <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 dark:border-amber-800 dark:bg-amber-900/20">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" aria-hidden="true" />
+        <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
+          DEMOSTRACIÓN — Sin conexión al asistente de IA
+        </span>
+      </div>
+
+      {/* Chat History */}
+      <div className="flex-1 overflow-y-auto p-3">
+        <div className="space-y-3">
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={cn(
+                "flex",
+                msg.role === "operator" ? "justify-end" : "justify-start"
+              )}
+            >
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-lg px-3 py-2",
+                  msg.role === "operator"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted"
+                )}
+              >
+                {/* Role indicator */}
+                <div className="mb-1 flex items-center gap-1.5">
+                  {msg.role === "operator" ? (
+                    <>
+                      <User className="h-3 w-3" aria-hidden="true" />
+                      <span className="text-[10px] font-medium opacity-70">Tú</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3 w-3 text-primary" aria-hidden="true" />
+                      <span className="text-[10px] font-medium text-muted-foreground">
+                        Asistente
+                      </span>
+                    </>
+                  )}
+                </div>
+                {/* Message content */}
+                <p className="whitespace-pre-wrap text-sm">{msg.content}</p>
+              </div>
+            </div>
+          ))}
+
+          {/* Demo suggestions when no messages from operator */}
+          {messages.filter((m) => m.role === "operator").length === 0 && (
+            <div className="mt-4 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                💡 Ejemplos de consultas (DEMO)
+              </p>
+              <div className="space-y-1.5">
+                {[
+                  "Resumir conversación",
+                  "Sugerir respuesta",
+                  "Identificar pendientes",
+                ].map((example) => (
+                  <div
+                    key={example}
+                    className="flex items-center gap-2 text-xs text-muted-foreground/70"
+                  >
+                    <div className="h-1 w-1 rounded-full bg-muted-foreground/50" />
+                    <span>{example}</span>
+                    <span className="text-[9px] font-medium uppercase text-amber-600 dark:text-amber-500">
+                      DEMO
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div ref={chatEndRef} />
+        </div>
+      </div>
+
+      {/* Attachments Preview */}
+      {attachments.length > 0 && (
+        <div className="shrink-0 border-t bg-muted/30 p-2">
+          <div className="flex flex-wrap gap-2">
+            {attachments.map((file) => {
+              const FileIcon = getFileIcon(file.type);
+              return (
+                <div
+                  key={file.id}
+                  className="group relative flex items-center gap-2 rounded-md border bg-background p-2 pr-8"
+                >
+                  {/* Thumbnail for images */}
+                  {file.previewUrl ? (
+                    <div className="h-10 w-10 overflow-hidden rounded">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={file.previewUrl}
+                        alt={file.name}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex h-10 w-10 items-center justify-center rounded bg-muted">
+                      <FileIcon className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
+                    </div>
+                  )}
+                  {/* File info */}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium">{file.name}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {file.type.split("/")[1] || "Archivo"} · {formatFileSize(file.size)}
+                    </p>
+                  </div>
+                  {/* Remove button */}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAttachment(file.id)}
+                    className="absolute right-1 top-1 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 focus-visible:opacity-100"
+                    aria-label={`Eliminar ${file.name}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Composer */}
+      <div className="shrink-0 border-t bg-card p-2">
+        <div className="flex flex-col gap-2">
+          {/* Textarea */}
+          <div className="relative">
+            <textarea
+              ref={composerRef}
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              onKeyDown={handleComposerKeyDown}
+              placeholder="Pregunta al asistente..."
+              rows={2}
+              className={cn(
+                "w-full resize-none rounded-md border bg-background px-3 py-2 pr-20 text-sm",
+                "placeholder:text-muted-foreground",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                isFocused && "ring-2 ring-ring"
+              )}
+              aria-label="Mensaje para el asistente IA"
+            />
+            {/* Character hint */}
+            <span className="absolute bottom-2 right-20 text-[10px] text-muted-foreground/50">
+              {messageText.length > 0 && `${messageText.length}`}
+            </span>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-between">
+            {/* Attachment button */}
+            <div className="flex items-center gap-1">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx"
+                className="hidden"
+                onChange={handleFileSelect}
+                aria-label="Seleccionar archivos para adjuntar"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                className="h-8 w-8"
+                aria-label="Adjuntar archivo"
+                title="Adjuntar archivo"
+              >
+                <Paperclip className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Send button */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground/50">
+                {isSendDisabled && "Asistente no conectado"}
+              </span>
+              <Button
+                type="button"
+                size="icon"
+                disabled={isSendDisabled || !canSend}
+                onClick={handleSend}
+                className="h-8 w-8"
+                aria-label="Enviar mensaje al asistente"
+                title={
+                  isSendDisabled
+                    ? "El asistente aún no está conectado"
+                    : canSend
+                      ? "Enviar mensaje"
+                      : "Escribe algo para enviar"
+                }
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Keyboard hint */}
+          <p className="text-center text-[10px] text-muted-foreground/50">
+            Enter = enviar · Shift+Enter = nueva línea
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
