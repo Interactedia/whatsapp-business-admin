@@ -75,6 +75,17 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
   const [search, setSearch] = useState("");
   const [showAiAssistant, setShowAiAssistant] = useState(false);
 
+  // Close the AI Assistant panel on Escape (works for both the inline
+  // desktop column and the tablet/mobile overlay drawer).
+  useEffect(() => {
+    if (!showAiAssistant) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowAiAssistant(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showAiAssistant]);
+
   // WA-ERA4-05: per-tenant sync helpers. Reset on tenant switch so
   // seen ids and high-water marks from a previous tenant never leak.
   const seenRef = useRef(new SeenSet());
@@ -217,31 +228,53 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
       <div className={cn("min-w-0 flex-1", activeId ? "block" : "hidden md:block")}>
         {activeId ? <ThreadPane tenantId={tenantId} conversationId={activeId} onBack={() => router.push(basePath)} showAiAssistant={showAiAssistant} onToggleAi={() => setShowAiAssistant(!showAiAssistant)} /> : <EmptyThread onToggleAi={() => setShowAiAssistant(!showAiAssistant)} />}
       </div>
-      {/* AI Assistant Panel */}
-      <div className={cn(
-        "hidden xl:flex w-80 shrink-0 flex-col border-l bg-background",
-        showAiAssistant ? "flex" : "hidden"
-      )}>
-        <div className="flex min-h-12 shrink-0 items-center justify-between border-b px-3 py-2">
-          <span className="text-sm font-medium">Asistente IA</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setShowAiAssistant(false)}
-            aria-label="Cerrar asistente IA"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-          <Bot className="mb-3 h-10 w-10 text-muted-foreground/50" />
-          <p className="text-sm text-muted-foreground">
-            Próximamente podrás consultar información<br />relacionada con esta conversación.
-          </p>
-        </div>
+      {/* AI Assistant — inline third column (desktop xl+). Below xl the
+          overlay drawer below renders instead, so the chat is never squeezed. */}
+      <div className={cn("hidden w-80 shrink-0 flex-col border-l bg-background", showAiAssistant && "xl:flex")}>
+        <AiAssistantPanel onClose={() => setShowAiAssistant(false)} />
       </div>
+      {/* AI Assistant — overlay drawer (below xl): accessible on tablet/mobile
+          without compressing the conversation. Backdrop, close button and
+          Escape all dismiss it. */}
+      {showAiAssistant && (
+        <div className="fixed inset-0 z-50 xl:hidden" role="dialog" aria-modal="true" aria-label="Asistente IA">
+          <button
+            type="button"
+            aria-label="Cerrar asistente IA"
+            className="absolute inset-0 h-full w-full cursor-default bg-black/40"
+            onClick={() => setShowAiAssistant(false)}
+          />
+          <div className="absolute inset-y-0 right-0 flex w-full max-w-80 flex-col border-l bg-background shadow-lg">
+            <AiAssistantPanel onClose={() => setShowAiAssistant(false)} />
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function AiAssistantPanel({ onClose }: { onClose: () => void }) {
+  return (
+    <>
+      <div className="flex min-h-12 shrink-0 items-center justify-between border-b px-3 py-2">
+        <span className="text-sm font-medium">Asistente IA</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={onClose}
+          aria-label="Cerrar asistente IA"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+        <Bot className="mb-3 h-10 w-10 text-muted-foreground/50" />
+        <p className="text-sm text-muted-foreground">
+          Próximamente podrás consultar información<br />relacionada con esta conversación.
+        </p>
+      </div>
+    </>
   );
 }
 
