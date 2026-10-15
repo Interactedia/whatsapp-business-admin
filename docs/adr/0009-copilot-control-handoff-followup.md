@@ -1,8 +1,8 @@
 # ADR-0009 — Control de Copilot, handoff humano y seguimiento automático
 
-- Identificador: `ADR-WA-COPILOT-001`
+- Identificador: `ADR-WA-COPILOT-001` (enmienda de aprobación: `ADR-WA-COPILOT-002`)
 - Proyecto: WhatsApp Business Admin
-- Status: **Proposed** (PROPUESTO — pendiente de aprobación formal)
+- Status: **Accepted** (aprobado formalmente el 2026-10-14 mediante `ADR-WA-COPILOT-002`; ejecución de follow-up DIFERIDA — ver §10–§11)
 - Date: 2026-10-14
 - Alcance: conversaciones tenant-scoped, automatización por IA y recordatorios por falta de respuesta del cliente
 - Contexto visual: simulación del Inbox con Copilot, handoff y seguimiento aprobada por producto
@@ -69,6 +69,8 @@ En el encabezado del chat seleccionado se ubican dos switches independientes: Co
 
 ## 5. Decisiones pendientes antes de habilitar follow-ups reales
 
+(Formalizadas como DIFERIDAS en §10 por la enmienda `ADR-WA-COPILOT-002`.)
+
 Estas variables no están aprobadas todavía y no deben resolverse mediante valores hardcoded arbitrarios:
 
 1. Retraso predeterminado desde el inicio de la espera (30 minutos fue solo un ejemplo).
@@ -112,6 +114,78 @@ Pruebas de aceptación indispensables, usando la aplicación real y componentes 
 3. **Reapertura controlada de la era:** inventario de capacidades existentes y brechas, sin reconstrucción especulativa.
 4. **Implementación acotada:** solo brechas demostradas; verificar escenarios reales antes de aceptar.
 
+## 9. Enmienda ADR-WA-COPILOT-002 — Decisiones formalmente aprobadas (2026-10-14)
+
+Esta sección registra la aprobación formal del contrato. Estado: **Accepted**.
+
+### 9.1 COPILOT CONTROL (aprobado)
+
+- Estado ON/OFF persistente por conversación.
+- ON permite respuestas automáticas autorizadas.
+- OFF reserva la atención al humano.
+- La plataforma es autoridad sobre el estado.
+- El operador autorizado puede activar Copilot.
+- El agente no puede reactivarlo unilateralmente después de un handoff.
+- El estado debe verificarse antes de autorizar cada respuesta automática.
+
+### 9.2 HANDOFF (aprobado)
+
+- Handoff desactiva Copilot.
+- La intervención humana desactiva Copilot.
+- El operador puede devolver el control a la IA.
+- Reactivar Copilot no procesa automáticamente mensajes históricos.
+- Deben prevenirse respuestas simultáneas.
+
+### 9.3 FOLLOW-UP (principios aprobados; implementación diferida — ver §10)
+
+- Es independiente del estado Copilot.
+- Debe ser configurable mediante reglas de negocio.
+- Debe soportar políticas por tenant.
+- Debe respetar permisos y restricciones de WhatsApp.
+- Debe cancelar seguimientos cuando corresponde.
+- No puede modificar automáticamente Copilot.
+
+Los principios anteriores rigen el diseño de cualquier implementación futura, pero su ejecución, temporización y configuración quedan DIFERIDAS (§10–§11).
+
+### 9.4 Valores temporales NO aprobados como contrato
+
+Los siguientes valores aparecieron únicamente como ejemplos ilustrativos y **no** son decisiones permanentes ni contrato obligatorio:
+
+- Primer seguimiento a los 30 minutos.
+- Segundo seguimiento a las 24 horas.
+- Máximo de dos recordatorios.
+
+Cualquier valor concreto deberá aprobarse en su momento mediante reglas de negocio configurables (§5), nunca como constantes hardcoded.
+
+## 10. Capacidades DIFERIDAS (fuera de la etapa autorizada)
+
+Se registran explícitamente como diferidas y **no autorizadas** en esta aprobación:
+
+- Motor de reglas de negocio.
+- Configuración de tiempos.
+- Intervalos entre seguimientos.
+- Cantidad máxima de recordatorios.
+- Horarios de envío.
+- Generación contextual de recordatorios.
+- Programación y ejecución automática de recordatorios.
+- Configuración de políticas por tenant.
+
+## 11. Alcance autorizado para la siguiente etapa
+
+### 11.1 Autorizado
+
+- Inspeccionar la implementación existente (inventario del runtime real según §7).
+- Verificar contratos de control (ON/OFF, handoff, autorización de envío).
+- Identificar capacidades faltantes frente a §9.1–§9.3.
+- Preparar tareas específicas para Copilot y handoff.
+
+### 11.2 No autorizado todavía
+
+- Implementar el motor de follow-up.
+- Crear nuevas colas de seguimiento.
+- Crear configuración de políticas.
+- Enviar recordatorios automáticos.
+
 ---
 
-**Estado final de este documento: PROPUESTO.** No se declara implementado ni verificado el comportamiento Copilot/handoff/follow-up por la aprobación de la interfaz.
+**Estado final de este documento: ACEPTADO (Accepted)** por la enmienda `ADR-WA-COPILOT-002` del 2026-10-14, con las capacidades de follow-up explícitamente DIFERIDAS (§10) y el alcance de la siguiente etapa delimitado en §11. La aprobación del diseño de interfaz y de este contrato no declara implementado ni verificado el comportamiento Copilot/handoff/follow-up; se preservan íntegras las invariantes de seguridad (§3), la tenancy, la autorización, la arquitectura de webhooks y la separación entre plataforma y agentes (§2 D6), así como todas las decisiones anteriores que no entren en conflicto con este alcance.
