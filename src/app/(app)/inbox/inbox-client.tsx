@@ -33,6 +33,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { TemplateMessage } from "@/components/whatsapp/template-message";
 import { TemplatePicker } from "@/components/whatsapp/template-picker";
 import { CopilotControls } from "@/components/inbox/copilot-controls";
+import { StatusFilter, type StatusFilterState } from "@/components/inbox/status-filter";
+import { AutomationIndicators } from "@/components/inbox/automation-indicators";
 import type { TemplateContent } from "@/lib/whatsapp/template-content";
 
 type Contact = { id: string; waId: string; name: string | null; profileName: string | null; tags: string[] };
@@ -163,17 +165,21 @@ function ConversationItem({
 
       {/* Main content */}
       <div className="min-w-0 flex-1">
-        {/* Header row: name + time + unread */}
+        {/* Header row: name + indicators + time + unread */}
         <div className="flex items-center justify-between gap-2">
-          <span
-            className={cn(
-              "truncate text-[13px]",
-              c.unreadCount > 0 ? "font-semibold text-foreground" : "font-medium text-[var(--text-secondary)]",
-            )}
-          >
-            {displayName(c.contact)}
-          </span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span
+              className={cn(
+                "truncate text-[13px]",
+                c.unreadCount > 0 ? "font-semibold text-foreground" : "font-medium text-[var(--text-secondary)]",
+              )}
+            >
+              {displayName(c.contact)}
+            </span>
+            {/* WA-UI-016: Automation status indicators */}
+            <AutomationIndicators />
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
             {c.lastMessageAt && (
               <span className="whitespace-nowrap text-[11px] text-[var(--text-muted)]">
                 {formatInboxTimestamp(c.lastMessageAt)}
@@ -292,6 +298,11 @@ export function InboxClient({
   const [search, setSearch] = useState("");
   const [showAiAssistant, setShowAiAssistant] = useState(false);
   const [filter, setFilter] = useState<ConversationFilter>("all");
+  // WA-UI-016: Status filter for Copilot/Human and Follow-up
+  const [statusFilter, setStatusFilter] = useState<StatusFilterState>({
+    attention: "all",
+    followUp: "all",
+  });
 
   // Close the AI Assistant panel on Escape (works for both the inline
   // desktop column and the tablet/mobile overlay drawer).
@@ -472,6 +483,8 @@ export function InboxClient({
             <FilterChip active={filter === "mine"} onClick={() => setFilter("mine")}>
               Mis conversaciones
             </FilterChip>
+            {/* WA-UI-016: Status filter for automation controls */}
+            <StatusFilter value={statusFilter} onChange={setStatusFilter} />
           </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto scroll-thin p-2">
