@@ -14,6 +14,7 @@ type ConversationRead = {
     waId: string;
     name: string | null;
     profileName: string | null;
+    tags: string[];
   };
   status: "OPEN" | "CLOSED";
   unreadCount: number;
@@ -40,6 +41,7 @@ function toConversationRead(raw: unknown): ConversationRead | null {
       waId: contact.waId,
       name: contact.name as string | null,
       profileName: contact.profileName as string | null,
+      tags: (contact.tags as string[]) ?? [],
     },
     status: r.status,
     unreadCount: typeof r.unreadCount === "number" ? r.unreadCount : 0,

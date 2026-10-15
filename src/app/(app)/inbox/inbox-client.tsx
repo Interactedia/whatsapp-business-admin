@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search, Send, Paperclip, Check, CheckCheck, Clock, AlertCircle, MessageSquare, FileText, LayoutTemplate, Workflow, ArrowLeft, Bot, X,
+  MoreHorizontal, Mail, User, Star, ListFilter, Clock3, Lock,
 } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
 import { cn, formatInboxTimestamp } from "@/lib/utils";
@@ -21,18 +22,27 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { TemplateMessage } from "@/components/whatsapp/template-message";
 import { TemplatePicker } from "@/components/whatsapp/template-picker";
 import type { TemplateContent } from "@/lib/whatsapp/template-content";
 
-type Contact = { id: string; waId: string; name: string | null; profileName: string | null };
+type Contact = { id: string; waId: string; name: string | null; profileName: string | null; tags: string[] };
 type Conversation = {
   id: string;
   contact: Contact;
+  status: "OPEN" | "CLOSED";
   lastPreview: string | null;
   lastMessageAt: string | null;
   unreadCount: number;
+  assignedUserId: string | null;
   windowOpen: boolean;
 };
 type Msg = {
@@ -65,10 +75,180 @@ function initials(c: Contact) {
   return displayName(c).replace("+", "").slice(0, 2).toUpperCase();
 }
 
+const TAG_COLORS = [
+  "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+  "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+  "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300",
+  "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+  "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-300",
+];
+
+function tagColor(tag: string): string {
+  // Consistent color per tag name
+  let hash = 0;
+  for (let i = 0; i < tag.length; i++) {
+    hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+}
+
+interface ConversationItemProps {
+  conversation: Conversation;
+  isActive: boolean;
+  onClick: () => void;
+  onMarkUnread: () => void;
+  onToggleStatus: () => void;
+  onAssign: () => void;
+  isPending: boolean;
+}
+
+function ConversationItem({
+  conversation: c,
+  isActive,
+  onClick,
+  onMarkUnread,
+  onToggleStatus,
+  onAssign,
+  isPending,
+}: ConversationItemProps) {
+  const hasTags = c.contact.tags.length > 0;
+  const visibleTags = c.contact.tags.slice(0, 2);
+  const extraTags = c.contact.tags.length - 2;
+
+  return (
+    <div
+      className={cn(
+        "group relative flex w-full items-start gap-3 border-b px-3 py-3 text-left transition-colors hover:bg-muted/50",
+        isActive && "bg-muted",
+        isPending && "opacity-70",
+      )}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(); }}
+      aria-label={`Open conversation with ${displayName(c.contact)}`}
+    >
+      {/* Avatar */}
+      <Avatar className="mt-0.5 h-10 w-10 shrink-0">
+        <AvatarFallback className="bg-muted text-xs font-medium">{initials(c.contact)}</AvatarFallback>
+      </Avatar>
+
+      {/* Main content */}
+      <div className="min-w-0 flex-1">
+        {/* Header row: name + time + unread */}
+        <div className="flex items-baseline justify-between gap-2">
+          <span
+            className={cn(
+              "truncate text-sm",
+              c.unreadCount > 0 ? "font-semibold" : "font-medium",
+            )}
+          >
+            {displayName(c.contact)}
+          </span>
+          <div className="flex items-center gap-1.5">
+            {c.unreadCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
+                {c.unreadCount > 99 ? "99+" : c.unreadCount}
+              </span>
+            )}
+            {c.lastMessageAt && (
+              <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                {formatInboxTimestamp(c.lastMessageAt)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Preview row */}
+        <p className={cn("mt-0.5 truncate text-xs", c.unreadCount > 0 ? "text-foreground" : "text-muted-foreground")}>
+          {c.lastPreview || "—"}
+        </p>
+
+        {/* Tags row */}
+        {hasTags && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {visibleTags.map((tag) => (
+              <span
+                key={tag}
+                className={cn(
+                  "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                  tagColor(tag),
+                )}
+              >
+                {tag}
+              </span>
+            ))}
+            {extraTags > 0 && (
+              <span className="text-[10px] text-muted-foreground">+{extraTags}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Context menu */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute right-2 top-2 z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity hover:bg-muted-foreground/10 focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+            aria-label="Conversation options"
+          >
+            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" sideOffset={4} className="min-w-44" onClick={(e) => e.stopPropagation()}>
+          <DropdownMenuItem
+            onClick={(e) => { e.stopPropagation(); onMarkUnread(); }}
+            disabled={isPending}
+          >
+            <Mail className="mr-2 h-4 w-4" />
+            {c.unreadCount > 0 ? "Mark as read" : "Mark as unread"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={(e) => { e.stopPropagation(); onToggleStatus(); }}
+            disabled={isPending}
+          >
+            <Clock3 className="mr-2 h-4 w-4" />
+            {c.status === "OPEN" ? "Close conversation" : "Reopen conversation"}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={(e) => { e.stopPropagation(); onAssign(); }}
+            disabled
+            className="text-muted-foreground"
+          >
+            <User className="mr-2 h-4 w-4" />
+            Assign agent
+            <span className="ml-auto text-[10px]">(Próximamente)</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled className="text-muted-foreground">
+            <Star className="mr-2 h-4 w-4" />
+            Add to favorites
+            <span className="ml-auto text-[10px]">(Próximamente)</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled className="text-muted-foreground">
+            <ListFilter className="mr-2 h-4 w-4" />
+            Add to list
+            <span className="ml-auto text-[10px]">(Próximamente)</span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled className="text-muted-foreground">
+            <Lock className="mr-2 h-4 w-4" />
+            View contact
+            <span className="ml-auto text-[10px]">(Próximamente)</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: string; basePath: string }) {
   const router = useRouter();
   const params = useSearchParams();
   const qc = useQueryClient();
+  const { toast } = useToast();
   const activeId = params.get("c");
   // Derive tenantId from the explicit tenant-scoped basePath (/t/:tenantId/conversations).
   const tenantId = basePath.startsWith("/t/") ? basePath.split("/")[2] : "";
@@ -177,10 +357,23 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
     router.push(`${basePath}?c=${id}`);
   }
 
+  // Mutation for context menu actions (mark unread, close/reopen, assign)
+  const conversationMutation = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Record<string, unknown> }) =>
+      apiFetch(`${conversationsUrl}/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["conversations", tenantId] });
+      if (activeId) {
+        qc.invalidateQueries({ queryKey: ["thread", tenantId, activeId] });
+      }
+    },
+    onError: (e: Error) => toast({ variant: "destructive", title: "Action failed", description: e.message }),
+  });
+
   return (
     <div className="flex h-full min-w-0">
       {/* Conversation list */}
-      <div className={cn("w-full shrink-0 flex-col border-r md:flex md:w-64 lg:w-72", activeId ? "hidden" : "flex")}>
+      <div className={cn("w-full shrink-0 flex-col border-r md:flex", activeId ? "hidden" : "flex", /* ~320px target width */ "md:w-80")}>
         <div className="border-b p-2">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -192,34 +385,16 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
             <div className="p-6 text-center text-xs text-muted-foreground">No conversations yet.</div>
           )}
           {conversations.map((c) => (
-            <button
+            <ConversationItem
               key={c.id}
+              conversation={c}
+              isActive={c.id === activeId}
               onClick={() => openConversation(c.id)}
-              className={cn(
-                "flex min-h-14 w-full items-center gap-2 border-b px-3 py-2 text-left transition-colors hover:bg-accent md:min-h-0 md:px-2.5",
-                c.id === activeId && "bg-accent",
-              )}
-            >
-              <Avatar className="h-9 w-9">
-                <AvatarFallback>{initials(c.contact)}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5">
-                  <span className="truncate text-sm font-medium">{displayName(c.contact)}</span>
-                  {c.lastMessageAt && (
-                    <span className="ml-auto max-w-full text-right text-[10px] text-muted-foreground">{formatInboxTimestamp(c.lastMessageAt)}</span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-xs text-muted-foreground">{c.lastPreview || "—"}</span>
-                  {c.unreadCount > 0 && (
-                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
-                      {c.unreadCount}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </button>
+              onMarkUnread={() => conversationMutation.mutate({ id: c.id, patch: { unreadCount: c.unreadCount > 0 ? 0 : (c.unreadCount || 1) + 1 } })}
+              onToggleStatus={() => conversationMutation.mutate({ id: c.id, patch: { status: c.status === "OPEN" ? "CLOSED" : "OPEN" } })}
+              onAssign={() => {/* TODO: assign agent UI */}}
+              isPending={conversationMutation.isPending && conversationMutation.variables?.id === c.id}
+            />
           ))}
         </div>
       </div>
