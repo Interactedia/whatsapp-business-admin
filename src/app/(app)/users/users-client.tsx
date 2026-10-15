@@ -108,7 +108,7 @@ export function UsersClient({
   return (
     <div className="flex h-full flex-col">
       {/* Page Header */}
-      <div className="flex flex-col gap-2 border-b bg-card px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-4 sm:py-2.5">
+      <div className="flex flex-col gap-2 border-b bg-card px-4 py-5 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-6 sm:py-5">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Users
