@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Search, Send, Paperclip, Check, CheckCheck, Clock, AlertCircle, MessageSquare, FileText, LayoutTemplate, Workflow, ArrowLeft, Bot, X,
+  Search, Send, Paperclip, Check, CheckCheck, Clock, AlertCircle, MessageSquare, FileText, LayoutTemplate, Workflow, ArrowLeft, Bot,
   Mail, User, Star, ListFilter, Clock3, Lock, ChevronDown, MessageSquareText,
 } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
@@ -37,6 +37,7 @@ import { StatusFilter, type StatusFilterState } from "@/components/inbox/status-
 import { AutomationIndicators } from "@/components/inbox/automation-indicators";
 import { QuickReplySelector } from "@/components/inbox/quick-reply-selector";
 import { WritingAssistantPanel, WritingAssistantButton, type WritingMode } from "@/components/inbox/writing-assistant-panel";
+import { AssistantPanel, TasksButton, type AssistantTab } from "@/components/inbox/tasks-panel";
 import type { TemplateContent } from "@/lib/whatsapp/template-content";
 
 type Contact = { id: string; waId: string; name: string | null; profileName: string | null; tags: string[] };
@@ -299,6 +300,8 @@ export function InboxClient({
   const tenantId = basePath.startsWith("/t/") ? basePath.split("/")[2] : "";
   const [search, setSearch] = useState("");
   const [showAiAssistant, setShowAiAssistant] = useState(false);
+  // WA-UI-019: Active tab in assistant panel (AI Assistant or Tasks)
+  const [assistantTab, setAssistantTab] = useState<AssistantTab>("ai");
   const [filter, setFilter] = useState<ConversationFilter>("all");
   // WA-UI-016: Status filter for Copilot/Human and Follow-up
   const [statusFilter, setStatusFilter] = useState<StatusFilterState>({
@@ -512,55 +515,30 @@ export function InboxClient({
 
       {/* Thread */}
       <div className={cn("min-w-0 flex-1", activeId ? "block" : "hidden md:block")}>
-        {activeId ? <ThreadPane tenantId={tenantId} conversationId={activeId} onBack={() => router.push(basePath)} showAiAssistant={showAiAssistant} onToggleAi={() => setShowAiAssistant(!showAiAssistant)} /> : <EmptyThread onToggleAi={() => setShowAiAssistant(!showAiAssistant)} />}
+        {activeId ? <ThreadPane tenantId={tenantId} conversationId={activeId} onBack={() => router.push(basePath)} showAiAssistant={showAiAssistant} onToggleAi={() => setShowAiAssistant(!showAiAssistant)} assistantTab={assistantTab} onTabChange={setAssistantTab} /> : <EmptyThread onToggleAi={() => setShowAiAssistant(!showAiAssistant)} />}
       </div>
-      {/* AI Assistant — inline third column (desktop xl+). Below xl the
+      {/* Assistant Panel (AI + Tasks) — inline third column (desktop xl+). Below xl the
           overlay drawer below renders instead, so the chat is never squeezed. */}
       <div className={cn("hidden w-80 shrink-0 flex-col border-l bg-background", showAiAssistant && "xl:flex")}>
-        <AiAssistantPanel onClose={() => setShowAiAssistant(false)} />
+        <AssistantPanel activeTab={assistantTab} onTabChange={setAssistantTab} onClose={() => setShowAiAssistant(false)} />
       </div>
-      {/* AI Assistant — overlay drawer (below xl): accessible on tablet/mobile
+      {/* Assistant Panel — overlay drawer (below xl): accessible on tablet/mobile
           without compressing the conversation. Backdrop, close button and
           Escape all dismiss it. */}
       {showAiAssistant && (
-        <div className="fixed inset-0 z-50 xl:hidden" role="dialog" aria-modal="true" aria-label="Asistente IA">
+        <div className="fixed inset-0 z-50 xl:hidden" role="dialog" aria-modal="true" aria-label="Panel de asistente">
           <button
             type="button"
-            aria-label="Cerrar asistente IA"
+            aria-label="Cerrar panel"
             className="absolute inset-0 h-full w-full cursor-default bg-black/40"
             onClick={() => setShowAiAssistant(false)}
           />
           <div className="absolute inset-y-0 right-0 flex w-full max-w-80 flex-col border-l bg-background shadow-lg">
-            <AiAssistantPanel onClose={() => setShowAiAssistant(false)} />
+            <AssistantPanel activeTab={assistantTab} onTabChange={setAssistantTab} onClose={() => setShowAiAssistant(false)} />
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-function AiAssistantPanel({ onClose }: { onClose: () => void }) {
-  return (
-    <>
-      <div className="flex min-h-12 shrink-0 items-center justify-between border-b px-3 py-2">
-        <span className="text-sm font-medium">Asistente IA</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={onClose}
-          aria-label="Cerrar asistente IA"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-      <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
-        <Bot className="mb-3 h-10 w-10 text-muted-foreground/50" />
-        <p className="text-sm text-muted-foreground">
-          Próximamente podrás consultar información<br />relacionada con esta conversación.
-        </p>
-      </div>
-    </>
   );
 }
 
@@ -582,7 +560,7 @@ function EmptyThread({ onToggleAi }: { onToggleAi: () => void }) {
   );
 }
 
-function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggleAi }: { tenantId: string; conversationId: string; onBack: () => void; showAiAssistant: boolean; onToggleAi: () => void }) {
+function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggleAi, assistantTab, onTabChange }: { tenantId: string; conversationId: string; onBack: () => void; showAiAssistant: boolean; onToggleAi: () => void; assistantTab: AssistantTab; onTabChange: (tab: AssistantTab) => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -737,12 +715,33 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Badge variant={windowOpen ? "success" : "warning"} className="hidden sm:inline-flex">{windowInfo?.label}</Badge>
+            {/* WA-UI-019: Tasks shortcut button */}
+            <TasksButton
+              onClick={() => {
+                if (!showAiAssistant) {
+                  onToggleAi();
+                  onTabChange("tasks");
+                } else if (assistantTab === "ai") {
+                  onTabChange("tasks");
+                } else {
+                  onToggleAi();
+                }
+              }}
+              active={showAiAssistant && assistantTab === "tasks"}
+            />
             <Button
               variant="ghost"
               size="icon"
-              className={cn("h-8 w-8", showAiAssistant && "bg-accent")}
-              onClick={onToggleAi}
-              aria-label={showAiAssistant ? "Cerrar asistente IA" : "Abrir asistente IA"}
+              className={cn("h-8 w-8", showAiAssistant && assistantTab === "ai" && "bg-accent")}
+              onClick={() => {
+                if (!showAiAssistant) {
+                  onToggleAi();
+                  onTabChange("ai");
+                } else if (assistantTab === "tasks") {
+                  onTabChange("ai");
+                }
+              }}
+              aria-label={showAiAssistant && assistantTab === "ai" ? "Cerrar asistente IA" : "Abrir asistente IA"}
             >
               <Bot className="h-4 w-4" />
             </Button>
