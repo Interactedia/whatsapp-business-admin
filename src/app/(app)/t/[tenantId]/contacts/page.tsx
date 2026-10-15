@@ -47,12 +47,9 @@ export default async function TenantContactsPage({
     );
   }
 
-  const allMemberships = await getMemberships(session.user.id);
-
   return (
     <TenantContactsClient
       tenant={{ id: membership.tenant.id, name: membership.tenant.name }}
-      memberships={allMemberships}
       isAdmin={session.user.role === "ADMIN"}
     />
   );

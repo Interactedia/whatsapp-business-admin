@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
+import { SmartTagsCombobox } from "@/components/ui/smart-tags-combobox";
 
 // Tag colors consistent with Inbox (WA-UI-014 pattern)
 const TAG_COLORS = [
@@ -84,6 +85,9 @@ export function ContactsClient({
   });
   const invalidate = () => qc.invalidateQueries({ queryKey: [listUrl] });
 
+  // Extract all unique tags from loaded contacts for suggestions
+  const allTags = [...new Set(contacts.flatMap((c) => c.tags ?? []))].sort();
+
   const remove = useMutation({
     mutationFn: (id: string) => apiFetch(`${baseUrl}/${id}`, { method: "DELETE" }),
     onSuccess: () => {
@@ -116,7 +120,7 @@ export function ContactsClient({
                 <Plus className="h-4 w-4" /> Nuevo contacto
               </Button>
             </DialogTrigger>
-            <ContactDialog onClose={() => setOpen(false)} onSaved={invalidate} baseUrl={baseUrl} />
+            <ContactDialog onClose={() => setOpen(false)} onSaved={invalidate} baseUrl={baseUrl} allTags={allTags} />
           </Dialog>
         }
       />
@@ -284,18 +288,18 @@ export function ContactsClient({
       </div>
 
       <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}>
-        {edit && <ContactDialog contact={edit} onClose={() => setEdit(null)} onSaved={invalidate} baseUrl={baseUrl} />}
+        {edit && <ContactDialog contact={edit} onClose={() => setEdit(null)} onSaved={invalidate} baseUrl={baseUrl} allTags={allTags} />}
       </Dialog>
     </div>
   );
 }
 
-function ContactDialog({ contact, onClose, onSaved, baseUrl }: { contact?: Contact; onClose: () => void; onSaved: () => void; baseUrl: string }) {
+function ContactDialog({ contact, onClose, onSaved, baseUrl, allTags }: { contact?: Contact; onClose: () => void; onSaved: () => void; baseUrl: string; allTags: string[] }) {
   const { toast } = useToast();
   const [form, setForm] = useState({
     waId: contact?.waId ?? "",
     name: contact?.name ?? "",
-    tags: (contact?.tags ?? []).join(", "),
+    tags: contact?.tags ?? [],
     notes: contact?.notes ?? "",
   });
 
@@ -303,7 +307,7 @@ function ContactDialog({ contact, onClose, onSaved, baseUrl }: { contact?: Conta
     mutationFn: () => {
       const payload = {
         name: form.name || undefined,
-        tags: form.tags.split(",").map((s) => s.trim()).filter(Boolean),
+        tags: form.tags,
         notes: form.notes || undefined,
       };
       return contact
@@ -338,8 +342,13 @@ function ContactDialog({ contact, onClose, onSaved, baseUrl }: { contact?: Conta
           <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div className="space-y-1">
-          <Label>Etiquetas (separadas por coma)</Label>
-          <Input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="vip, lead" />
+          <Label>Etiquetas</Label>
+          <SmartTagsCombobox
+            value={form.tags}
+            onChange={(tags) => setForm({ ...form, tags })}
+            suggestions={allTags}
+            placeholder="Buscar o crear etiqueta..."
+          />
         </div>
         <div className="space-y-1">
           <Label>Notas</Label>
