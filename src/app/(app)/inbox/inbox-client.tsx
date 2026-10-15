@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search, Send, Paperclip, Check, CheckCheck, Clock, AlertCircle, MessageSquare, FileText, LayoutTemplate, Workflow, ArrowLeft, Bot, X,
-  Mail, User, Star, ListFilter, Clock3, Lock, ChevronDown,
+  Mail, User, Star, ListFilter, Clock3, Lock, ChevronDown, MessageSquareText,
 } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
 import { cn, formatInboxTimestamp } from "@/lib/utils";
@@ -35,6 +35,7 @@ import { TemplatePicker } from "@/components/whatsapp/template-picker";
 import { CopilotControls } from "@/components/inbox/copilot-controls";
 import { StatusFilter, type StatusFilterState } from "@/components/inbox/status-filter";
 import { AutomationIndicators } from "@/components/inbox/automation-indicators";
+import { QuickReplySelector } from "@/components/inbox/quick-reply-selector";
 import type { TemplateContent } from "@/lib/whatsapp/template-content";
 
 type Contact = { id: string; waId: string; name: string | null; profileName: string | null; tags: string[] };
@@ -587,8 +588,12 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
   const [text, setText] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
   const [showFlows, setShowFlows] = useState(false);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [slashCommandQuery, setSlashCommandQuery] = useState("");
   const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   // ponytail: throttle typing pings to the server. The server's Meta client
   // already enforces TYPING_MIN_INTERVAL_MS, but we cap the request rate
   // here to keep the network and auth hook quiet.
@@ -754,9 +759,9 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
       </div>
 
       {/* Composer */}
-      <div className="safe-bottom shrink-0 border-t bg-card p-2">
+      <div ref={containerRef} className="safe-bottom relative shrink-0 border-t bg-card p-2">
         {windowOpen ? (
-          <div className="flex items-end gap-2">
+          <div className="relative flex items-end gap-2">
             <input
               ref={fileRef}
               type="file"
@@ -767,29 +772,123 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
                 e.target.value = "";
               }}
             />
-            <Button variant="ghost" size="icon" title="Attach" onClick={() => fileRef.current?.click()} disabled={sendMedia.isPending}>
+            <Button variant="ghost" size="icon" title="Adjuntar archivo" onClick={() => fileRef.current?.click()} disabled={sendMedia.isPending}>
               <Paperclip className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" title="Send Flow" onClick={() => setShowFlows(true)}><Workflow className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" title="Send template" onClick={() => setShowTemplates(true)}><LayoutTemplate className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" title="Enviar Flow" onClick={() => setShowFlows(true)}><Workflow className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" title="Enviar plantilla" onClick={() => setShowTemplates(true)}><LayoutTemplate className="h-4 w-4" /></Button>
+            {/* WA-UI-017: Quick replies button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              title="Respuestas rápidas"
+              onClick={() => {
+                setShowQuickReplies(!showQuickReplies);
+                setSlashCommandQuery("");
+              }}
+              className={showQuickReplies ? "bg-accent text-accent-foreground" : ""}
+            >
+              <MessageSquareText className="h-4 w-4" />
+            </Button>
             <Input
+              ref={messageInputRef}
               value={text}
               onChange={(e) => {
                 const v = e.target.value;
                 setText(v);
                 if (v.trim()) sendTypingPing(v);
+
+                // WA-UI-017: Detect slash commands
+                const cursorPos = e.target.selectionStart ?? v.length;
+                const textBeforeCursor = v.slice(0, cursorPos);
+                const lastSpaceIndex = textBeforeCursor.lastIndexOf(" ");
+                const wordStart = lastSpaceIndex === -1 ? 0 : lastSpaceIndex + 1;
+                const currentWord = textBeforeCursor.slice(wordStart);
+
+                // Check if we're typing a slash command (starts with "/" at word boundary)
+                if (currentWord.startsWith("/") && (wordStart === 0 || textBeforeCursor[wordStart - 1] === " ")) {
+                  setShowQuickReplies(true);
+                  setSlashCommandQuery(currentWord);
+                } else if (showQuickReplies) {
+                  // Check if still in slash command context
+                  const slashIndex = v.indexOf("/");
+                  if (slashIndex !== -1) {
+                    const afterSlash = v.slice(slashIndex + 1, cursorPos);
+                    const hasSpaceAfterSlash = afterSlash.includes(" ");
+                    if (!hasSpaceAfterSlash && afterSlash.length >= 0) {
+                      setSlashCommandQuery(slashIndex === 0 ? "/" + afterSlash : "/" + afterSlash);
+                    } else {
+                      setShowQuickReplies(false);
+                      setSlashCommandQuery("");
+                    }
+                  } else {
+                    setShowQuickReplies(false);
+                    setSlashCommandQuery("");
+                  }
+                }
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && text.trim()) {
+                // WA-UI-017: If quick replies selector is open, handle keyboard navigation
+                if (showQuickReplies) {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setShowQuickReplies(false);
+                    setSlashCommandQuery("");
+                    return;
+                  }
+                  // Arrow keys and Enter are handled by QuickReplySelector via keyboard
+                  // Only prevent default for Enter if selector has items
+                  // For now, prevent Enter from sending when selector is open
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    return;
+                  }
+                }
+
+                // Normal Enter to send (only if no slash command active)
+                if (e.key === "Enter" && !e.shiftKey && text.trim() && !showQuickReplies) {
                   e.preventDefault();
                   sendText.mutate(text.trim());
                 }
               }}
-              placeholder="Type a message…"
+              onBlur={() => {
+                // Delay close to allow click on quick reply items
+                setTimeout(() => {
+                  if (!containerRef.current?.contains(document.activeElement)) {
+                    setShowQuickReplies(false);
+                  }
+                }, 150);
+              }}
+              placeholder="Escribe un mensaje o / para respuestas rápidas…"
             />
             <Button size="icon" disabled={!text.trim() || sendText.isPending} onClick={() => sendText.mutate(text.trim())}>
               <Send className="h-4 w-4" />
             </Button>
+
+            {/* WA-UI-017: Quick Reply Selector */}
+            <QuickReplySelector
+              open={showQuickReplies}
+              onClose={() => {
+                setShowQuickReplies(false);
+                setSlashCommandQuery("");
+              }}
+              onSelect={(content) => {
+                // Replace slash command with quick reply content
+                const slashIndex = text.indexOf("/");
+                if (slashIndex !== -1) {
+                  const beforeSlash = text.slice(0, slashIndex);
+                  setText(beforeSlash + content);
+                } else {
+                  // No slash command, just append or replace
+                  setText(text ? text + " " + content : content);
+                }
+                setShowQuickReplies(false);
+                setSlashCommandQuery("");
+                // Focus back to input
+                messageInputRef.current?.focus();
+              }}
+              initialQuery={slashCommandQuery}
+            />
           </div>
         ) : (
           <div className="flex flex-col items-stretch gap-2 rounded-md bg-muted/50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
