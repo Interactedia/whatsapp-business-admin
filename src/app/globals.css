@@ -83,22 +83,26 @@
     --input: 214 18% 89%;
     --ring: 168 76% 30%;
     --radius: 0.5rem;
-    /* WA-UI-012-R2: Inbox conversation list refinamiento visual */
-    --conv-hover: 210 20% 96%;
-    --conv-selected: 160 50% 95%;
-    --conv-active: 160 70% 42%;
-    --avatar-bg: 160 40% 94%;
-    --avatar-text: 160 70% 28%;
-    --text-secondary: 222 15% 35%;
-    --text-muted: 215 14% 50%;
-    --text-disabled: 215 14% 65%;
-    --unread-badge: 174 76% 36%;
-    --icon-hover: 210 20% 90%;
-    --menu-bg: 0 0% 100%;
-    --menu-border: 214 18% 89%;
-    --menu-shadow: 0 4px 16px -2px rgba(0,0,0,0.12), 0 2px 4px -1px rgba(0,0,0,0.08);
-    --menu-item-hover: 210 20% 96%;
-    --separator: 214 18% 89%;
+    /* WA-UI-012-R2/R4: colores completos (hsl) para arbitrary values de Tailwind.
+       Patrón lienzo+card: la lista es un lienzo gris suave y cada conversación
+       una card clara, diferenciadas sin bordes de tabla. */
+    --conv-canvas: hsl(210 20% 96%);
+    --conv-card: hsl(0 0% 100%);
+    --conv-hover: hsl(210 16% 93%);
+    --conv-selected: hsl(160 55% 95%);
+    --conv-active: hsl(160 70% 32%);
+    --avatar-bg: hsl(160 40% 94%);
+    --avatar-text: hsl(160 70% 28%);
+    --text-secondary: hsl(222 15% 35%);
+    --text-muted: hsl(215 14% 50%);
+    --text-disabled: hsl(215 14% 65%);
+    --unread-badge: hsl(174 76% 36%);
+    --icon-hover: hsl(210 20% 90%);
+    --menu-bg: hsl(0 0% 100%);
+    --menu-border: hsl(214 18% 89%);
+    --menu-shadow: 0 4px 16px -2px rgb(0 0 0 / 0.12), 0 2px 4px -1px rgb(0 0 0 / 0.08);
+    --menu-item-hover: hsl(210 20% 96%);
+    --separator: hsl(214 18% 89%);
   }
 
   .dark {
@@ -121,22 +125,25 @@
     --border: 217 20% 20%;
     --input: 217 20% 22%;
     --ring: 160 70% 42%;
-    /* WA-UI-012-R2: Inbox conversation list refinamiento visual */
-    --conv-hover: 217 20% 18%;
-    --conv-selected: 160 40% 94%;
-    --conv-active: 160 70% 42%;
-    --avatar-bg: 160 40% 92%;
-    --avatar-text: 160 70% 30%;
-    --text-secondary: 222 15% 35%;
-    --text-muted: 215 14% 50%;
-    --text-disabled: 215 14% 65%;
-    --unread-badge: 174 76% 36%;
-    --icon-hover: 217 20% 22%;
-    --menu-bg: 0 0% 100%;
-    --menu-border: 214 18% 89%;
-    --menu-shadow: 0 4px 16px -2px rgba(0,0,0,0.12), 0 2px 4px -1px rgba(0,0,0,0.08);
-    --menu-item-hover: 210 20% 96%;
-    --separator: 214 18% 89%;
+    /* WA-UI-012-R2/R4: colores completos (hsl) para arbitrary values de Tailwind.
+       Patrón lienzo+card (dark): lienzo más oscuro que las cards. */
+    --conv-canvas: hsl(222 20% 7%);
+    --conv-card: hsl(222 22% 12%);
+    --conv-hover: hsl(217 20% 16%);
+    --conv-selected: hsl(160 30% 16%);
+    --conv-active: hsl(160 70% 45%);
+    --avatar-bg: hsl(160 30% 20%);
+    --avatar-text: hsl(160 70% 55%);
+    --text-secondary: hsl(210 15% 80%);
+    --text-muted: hsl(215 14% 58%);
+    --text-disabled: hsl(215 14% 45%);
+    --unread-badge: hsl(174 76% 40%);
+    --icon-hover: hsl(217 20% 22%);
+    --menu-bg: hsl(222 22% 12%);
+    --menu-border: hsl(217 20% 24%);
+    --menu-shadow: 0 4px 16px -2px rgb(0 0 0 / 0.4), 0 2px 4px -1px rgb(0 0 0 / 0.3);
+    --menu-item-hover: hsl(217 20% 18%);
+    --separator: hsl(217 20% 24%);
   }
 
   * {

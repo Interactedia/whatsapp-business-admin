@@ -118,15 +118,19 @@ function ConversationItem({
   return (
     <div
       className={cn(
-        "group relative flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-[var(--conv-hover)]",
-        isActive && "bg-[var(--conv-selected)] border-l-2 border-l-[var(--conv-active)]",
+        // WA-UI-012-R4: card clara sobre lienzo gris, separada por gap (no bordes de tabla)
+        "group relative flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors",
         isPending && "opacity-70",
+        isActive
+          ? "bg-[var(--conv-selected)] before:absolute before:top-1/2 before:left-1 before:h-7 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-[var(--conv-active)] before:content-['']"
+          : "bg-[var(--conv-card)] hover:bg-[var(--conv-hover)]",
       )}
       onClick={onClick}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(); }}
       aria-label={`Open conversation with ${displayName(c.contact)}`}
+      aria-current={isActive ? "true" : undefined}
     >
       {/* Avatar - 36-40px, fondo suave, iniciales centradas */}
       <Avatar className="mt-0.5 h-9 w-9 shrink-0">
@@ -372,14 +376,14 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
   return (
     <div className="flex h-full min-w-0">
       {/* Conversation list - Scope B: ~340px width */}
-      <div className={cn("w-full shrink-0 flex-col border-r md:flex", activeId ? "hidden" : "flex", /* ~340px target width */ "md:w-[340px]")}>
+      <div className={cn("w-full shrink-0 flex-col border-r md:flex md:w-[340px]", activeId ? "hidden" : "flex", "bg-[var(--conv-canvas)]")}>
         <div className="border-b p-2">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input className="pl-8" placeholder="Buscar conversaciones…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto scroll-thin">
+        <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto scroll-thin p-2">
           {conversations.length === 0 && (
             <div className="p-6 text-center text-xs text-muted-foreground">Sin conversaciones aún.</div>
           )}
