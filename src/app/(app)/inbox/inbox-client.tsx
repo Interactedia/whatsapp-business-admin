@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search, Send, Paperclip, Check, CheckCheck, Clock, AlertCircle, MessageSquare, FileText, LayoutTemplate, Workflow, ArrowLeft, Bot, X,
-  MoreHorizontal, Mail, User, Star, ListFilter, Clock3, Lock,
+  Mail, User, Star, ListFilter, Clock3, Lock, ChevronDown,
 } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
 import { cn, formatInboxTimestamp } from "@/lib/utils";
@@ -118,8 +118,8 @@ function ConversationItem({
   return (
     <div
       className={cn(
-        "group relative flex w-full items-start gap-3 border-b px-3 py-3 text-left transition-colors hover:bg-muted/50",
-        isActive && "bg-muted",
+        "group relative flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-[var(--conv-hover)]",
+        isActive && "bg-[var(--conv-selected)] border-l-2 border-l-[var(--conv-active)]",
         isPending && "opacity-70",
       )}
       onClick={onClick}
@@ -128,45 +128,45 @@ function ConversationItem({
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(); }}
       aria-label={`Open conversation with ${displayName(c.contact)}`}
     >
-      {/* Avatar */}
-      <Avatar className="mt-0.5 h-10 w-10 shrink-0">
-        <AvatarFallback className="bg-muted text-xs font-medium">{initials(c.contact)}</AvatarFallback>
+      {/* Avatar - 36-40px, fondo suave, iniciales centradas */}
+      <Avatar className="mt-0.5 h-9 w-9 shrink-0">
+        <AvatarFallback className="bg-[var(--avatar-bg)] text-[11px] font-medium text-[var(--avatar-text)]">{initials(c.contact)}</AvatarFallback>
       </Avatar>
 
       {/* Main content */}
       <div className="min-w-0 flex-1">
         {/* Header row: name + time + unread */}
-        <div className="flex items-baseline justify-between gap-2">
+        <div className="flex items-center justify-between gap-2">
           <span
             className={cn(
-              "truncate text-sm",
-              c.unreadCount > 0 ? "font-semibold" : "font-medium",
+              "truncate text-[13px]",
+              c.unreadCount > 0 ? "font-semibold text-foreground" : "font-medium text-[var(--text-secondary)]",
             )}
           >
             {displayName(c.contact)}
           </span>
           <div className="flex items-center gap-1.5">
-            {c.unreadCount > 0 && (
-              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground">
-                {c.unreadCount > 99 ? "99+" : c.unreadCount}
+            {c.lastMessageAt && (
+              <span className="whitespace-nowrap text-[11px] text-[var(--text-muted)]">
+                {formatInboxTimestamp(c.lastMessageAt)}
               </span>
             )}
-            {c.lastMessageAt && (
-              <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                {formatInboxTimestamp(c.lastMessageAt)}
+            {c.unreadCount > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--unread-badge)] px-1.5 text-[11px] font-semibold text-white">
+                {c.unreadCount > 99 ? "99+" : c.unreadCount}
               </span>
             )}
           </div>
         </div>
 
         {/* Preview row */}
-        <p className={cn("mt-0.5 truncate text-xs", c.unreadCount > 0 ? "text-foreground" : "text-muted-foreground")}>
+        <p className={cn("mt-0.5 truncate text-[12px]", c.unreadCount > 0 ? "text-foreground font-normal" : "text-[var(--text-muted)]")}>
           {c.lastPreview || "—"}
         </p>
 
         {/* Tags row */}
         {hasTags && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          <div className="mt-1 flex flex-wrap items-center gap-1">
             {visibleTags.map((tag) => (
               <span
                 key={tag}
@@ -179,64 +179,63 @@ function ConversationItem({
               </span>
             ))}
             {extraTags > 0 && (
-              <span className="text-[10px] text-muted-foreground">+{extraTags}</span>
+              <span className="text-[10px] text-[var(--text-muted)]">+{extraTags}</span>
             )}
           </div>
         )}
       </div>
 
-      {/* Context menu */}
+      {/* Context menu - Scope C & D: ChevronDown refinado con menú contextual */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
             type="button"
             onClick={(e) => e.stopPropagation()}
-            className="absolute right-2 top-2 z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity hover:bg-muted-foreground/10 focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
-            aria-label="Conversation options"
+            className="absolute right-1.5 top-1/2 z-10 flex h-8 w-8 shrink-0 -translate-y-1/2 items-center justify-center rounded-md opacity-0 transition-all hover:bg-[var(--icon-hover)] focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+            aria-label="Opciones de conversación"
           >
-            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+            <ChevronDown className="h-4 w-4 text-[var(--text-muted)]" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" sideOffset={4} className="min-w-44" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuContent align="end" sideOffset={6} className="w-56 rounded-xl border-[var(--menu-border)] bg-[var(--menu-bg)] p-1 shadow-[var(--menu-shadow)]" onClick={(e) => e.stopPropagation()}>
           <DropdownMenuItem
             onClick={(e) => { e.stopPropagation(); onMarkUnread(); }}
             disabled={isPending}
+            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-foreground transition-colors hover:bg-[var(--menu-item-hover)] focus:bg-[var(--menu-item-hover)] data-[disabled]:opacity-50 cursor-pointer"
           >
-            <Mail className="mr-2 h-4 w-4" />
-            {c.unreadCount > 0 ? "Mark as read" : "Mark as unread"}
+            <Mail className="h-4 w-4 text-[var(--text-muted)]" />
+            {c.unreadCount > 0 ? "Marcar como leído" : "Marcar como no leído"}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={(e) => { e.stopPropagation(); onToggleStatus(); }}
             disabled={isPending}
+            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-foreground transition-colors hover:bg-[var(--menu-item-hover)] focus:bg-[var(--menu-item-hover)] data-[disabled]:opacity-50 cursor-pointer"
           >
-            <Clock3 className="mr-2 h-4 w-4" />
-            {c.status === "OPEN" ? "Close conversation" : "Reopen conversation"}
+            <Clock3 className="h-4 w-4 text-[var(--text-muted)]" />
+            {c.status === "OPEN" ? "Cerrar conversación" : "Reabrir conversación"}
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
+          <DropdownMenuSeparator className="my-1 bg-[var(--separator)]" />
           <DropdownMenuItem
             onClick={(e) => { e.stopPropagation(); onAssign(); }}
             disabled
-            className="text-muted-foreground"
+            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--text-disabled)] cursor-not-allowed"
+            title="Función próximamente disponible"
           >
-            <User className="mr-2 h-4 w-4" />
-            Assign agent
-            <span className="ml-auto text-[10px]">(Próximamente)</span>
+            <User className="h-4 w-4 text-[var(--text-disabled)]" />
+            Asignar agente
           </DropdownMenuItem>
-          <DropdownMenuItem disabled className="text-muted-foreground">
-            <Star className="mr-2 h-4 w-4" />
-            Add to favorites
-            <span className="ml-auto text-[10px]">(Próximamente)</span>
+          <DropdownMenuItem disabled className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--text-disabled)] cursor-not-allowed" title="Función próximamente disponible">
+            <Star className="h-4 w-4 text-[var(--text-disabled)]" />
+            Añadir a favoritos
           </DropdownMenuItem>
-          <DropdownMenuItem disabled className="text-muted-foreground">
-            <ListFilter className="mr-2 h-4 w-4" />
-            Add to list
-            <span className="ml-auto text-[10px]">(Próximamente)</span>
+          <DropdownMenuItem disabled className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--text-disabled)] cursor-not-allowed" title="Función próximamente disponible">
+            <ListFilter className="h-4 w-4 text-[var(--text-disabled)]" />
+            Añadir a lista
           </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem disabled className="text-muted-foreground">
-            <Lock className="mr-2 h-4 w-4" />
-            View contact
-            <span className="ml-auto text-[10px]">(Próximamente)</span>
+          <DropdownMenuSeparator className="my-1 bg-[var(--separator)]" />
+          <DropdownMenuItem disabled className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--text-disabled)] cursor-not-allowed" title="Función próximamente disponible">
+            <Lock className="h-4 w-4 text-[var(--text-disabled)]" />
+            Ver contacto
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -372,17 +371,17 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
 
   return (
     <div className="flex h-full min-w-0">
-      {/* Conversation list */}
-      <div className={cn("w-full shrink-0 flex-col border-r md:flex", activeId ? "hidden" : "flex", /* ~320px target width */ "md:w-80")}>
+      {/* Conversation list - Scope B: ~340px width */}
+      <div className={cn("w-full shrink-0 flex-col border-r md:flex", activeId ? "hidden" : "flex", /* ~340px target width */ "md:w-[340px]")}>
         <div className="border-b p-2">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-8" placeholder="Search chats…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <Input className="pl-8" placeholder="Buscar conversaciones…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-auto scroll-thin">
           {conversations.length === 0 && (
-            <div className="p-6 text-center text-xs text-muted-foreground">No conversations yet.</div>
+            <div className="p-6 text-center text-xs text-muted-foreground">Sin conversaciones aún.</div>
           )}
           {conversations.map((c) => (
             <ConversationItem
