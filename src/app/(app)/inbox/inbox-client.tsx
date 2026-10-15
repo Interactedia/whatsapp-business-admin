@@ -36,6 +36,7 @@ import { CopilotControls } from "@/components/inbox/copilot-controls";
 import { StatusFilter, type StatusFilterState } from "@/components/inbox/status-filter";
 import { AutomationIndicators } from "@/components/inbox/automation-indicators";
 import { QuickReplySelector } from "@/components/inbox/quick-reply-selector";
+import { WritingAssistantPanel, WritingAssistantButton, type WritingMode } from "@/components/inbox/writing-assistant-panel";
 import type { TemplateContent } from "@/lib/whatsapp/template-content";
 
 type Contact = { id: string; waId: string; name: string | null; profileName: string | null; tags: string[] };
@@ -591,6 +592,9 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [slashCommandQuery, setSlashCommandQuery] = useState("");
   const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
+  // WA-UI-018: Writing Assistant state
+  const [showWritingAssistant, setShowWritingAssistant] = useState(false);
+  const [writingMode, setWritingMode] = useState<WritingMode>("professional");
   const fileRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -790,6 +794,12 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
             >
               <MessageSquareText className="h-4 w-4" />
             </Button>
+            {/* WA-UI-018: Writing Assistant button */}
+            <WritingAssistantButton
+              disabled={!text.trim()}
+              active={showWritingAssistant}
+              onClick={() => setShowWritingAssistant(!showWritingAssistant)}
+            />
             <Input
               ref={messageInputRef}
               value={text}
@@ -888,6 +898,24 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
                 messageInputRef.current?.focus();
               }}
               initialQuery={slashCommandQuery}
+            />
+            {/* WA-UI-018: Writing Assistant Panel */}
+            <WritingAssistantPanel
+              open={showWritingAssistant}
+              originalText={text}
+              mode={writingMode}
+              onModeChange={(mode) => setWritingMode(mode)}
+              onClose={() => setShowWritingAssistant(false)}
+              onAccept={(suggestedText) => {
+                // Replace current text with the suggestion
+                setText(suggestedText);
+                // Keep focus on input
+                messageInputRef.current?.focus();
+              }}
+              onDiscard={() => {
+                // No-op: keep original text unchanged
+                // This ensures the draft is preserved as per WA-UI-018 Feature E
+              }}
             />
           </div>
         ) : (
