@@ -43,12 +43,5 @@ export default async function TenantInboxPage({
     return <TenantSelector memberships={memberships} resource="conversations" />;
   }
 
-  const allMemberships = await getMemberships(session.user.id);
-
-  return (
-    <TenantConversationsClient
-      tenant={{ id: membership.tenant.id, name: membership.tenant.name }}
-      memberships={allMemberships}
-    />
-  );
+  return <TenantConversationsClient tenantId={membership.tenant.id} />;
 }
