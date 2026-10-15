@@ -32,6 +32,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { TemplateMessage } from "@/components/whatsapp/template-message";
 import { TemplatePicker } from "@/components/whatsapp/template-picker";
+import { CopilotControls } from "@/components/inbox/copilot-controls";
 import type { TemplateContent } from "@/lib/whatsapp/template-content";
 
 type Contact = { id: string; waId: string; name: string | null; profileName: string | null; tags: string[] };
@@ -699,26 +700,33 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex min-h-12 shrink-0 items-center gap-2 border-b bg-card px-2 py-1 sm:px-3">
-        <Button variant="ghost" size="icon" className="md:hidden" onClick={onBack} aria-label="Back to conversations"><ArrowLeft className="h-5 w-5" /></Button>
-        <Avatar className="h-8 w-8">
-          <AvatarFallback>{initials(contact)}</AvatarFallback>
-        </Avatar>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{displayName(contact)}</div>
-          <div className="text-[11px] text-muted-foreground">+{contact.waId}</div>
+      <div className="flex min-h-12 shrink-0 flex-col border-b bg-card">
+        {/* Row 1: Primary controls */}
+        <div className="flex min-h-12 shrink-0 items-center gap-2 px-2 py-1 sm:px-3">
+          <Button variant="ghost" size="icon" className="md:hidden" onClick={onBack} aria-label="Back to conversations"><ArrowLeft className="h-5 w-5" /></Button>
+          <Avatar className="h-8 w-8">
+            <AvatarFallback>{initials(contact)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium">{displayName(contact)}</div>
+            <div className="text-[11px] text-muted-foreground">+{contact.waId}</div>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <Badge variant={windowOpen ? "success" : "warning"} className="hidden sm:inline-flex">{windowInfo?.label}</Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn("h-8 w-8", showAiAssistant && "bg-accent")}
+              onClick={onToggleAi}
+              aria-label={showAiAssistant ? "Cerrar asistente IA" : "Abrir asistente IA"}
+            >
+              <Bot className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Badge variant={windowOpen ? "success" : "warning"} className="hidden sm:inline-flex">{windowInfo?.label}</Badge>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("h-8 w-8", showAiAssistant && "bg-accent")}
-            onClick={onToggleAi}
-            aria-label={showAiAssistant ? "Cerrar asistente IA" : "Abrir asistente IA"}
-          >
-            <Bot className="h-4 w-4" />
-          </Button>
+        {/* Row 2: Copilot controls - WA-UI-015 */}
+        <div className="border-t border-border/50 px-3 py-2 sm:px-4">
+          <CopilotControls />
         </div>
       </div>
 
