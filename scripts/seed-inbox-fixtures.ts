@@ -29,6 +29,7 @@ const FIXTURE_PREFIX = "fixture-";
 
 // Números de teléfono ficticios (formato E.164 sin +)
 const FIXTURE_PHONES = [
+  // Primeras 10 conversaciones (existentes)
   "5491100000001", // María García
   "5491100000002", // Juan Pérez
   "5491100000003", // Ana López
@@ -39,6 +40,17 @@ const FIXTURE_PHONES = [
   "5491100000008", // Martín Sánchez
   "5491100000009", // Valentina Torres
   "5491100000010", // Alejandro Ramírez
+  // 10 conversaciones adicionales (WA-UI-014)
+  "5491100000011", // Pablo Morales - OPEN, sin asignar, 2 no leídos, necesita respuesta
+  "5491100000012", // Gabriela Ruiz - CLOSED, asignada a agent, 0 no leídos
+  "5491100000013", // Roberto Díaz - OPEN, asignada a admin, 5 no leídos, necesita respuesta
+  "5491100000014", // Carmen Jiménez - OPEN, sin asignar, 1 no leído
+  "5491100000015", // Fernando Vega - CLOSED, asignada a agent, 0 no leídos
+  "5491100000016", // Patricia Luna - OPEN, asignada a agent, 3 no leídos, necesita respuesta
+  "5491100000017", // Eduardo Castro - CLOSED, sin asignar, 0 no leídos
+  "5491100000018", // Isabel Navarro - OPEN, asignada a admin, 4 no leídos, necesita respuesta
+  "5491100000019", // Miguel Herrera - OPEN, sin asignar, 2 no leídos
+  "5491100000020", // Lucía Rubio - CLOSED, asignada a agent, 0 no leídos
 ];
 
 interface MessageFixture {
@@ -200,6 +212,146 @@ const CONVERSATION_FIXTURES: ConversationFixture[] = [
       { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Cables USB-C certificados", daysAgo: 2, hoursOffset: 12 },
       { direction: "OUT", type: "TEXT", status: "DELIVERED", text: "Interesante. Envíanos catálogo.", daysAgo: 2, hoursOffset: 14 },
       { direction: "IN", type: "TEXT", status: "SENT", text: "Claro, te lo envío hoy.", daysAgo: 1, hoursOffset: 9 },
+    ],
+  },
+  // ===== 10 conversaciones adicionales WA-UI-014 =====
+  {
+    phone: FIXTURE_PHONES[10],
+    contactName: "Pablo Morales",
+    status: "OPEN",
+    unreadCount: 2,
+    messages: [
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Hola, vi una publicación en Facebook", daysAgo: 0, hoursOffset: 11 },
+      { direction: "OUT", type: "TEXT", status: "READ", text: "¡Hola Pablo! ¿Qué producto te interesó?", daysAgo: 0, hoursOffset: 12 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Los auriculares inalámbricos, ¿tienen garantía?", daysAgo: 0, hoursOffset: 13 },
+    ],
+  },
+  {
+    phone: FIXTURE_PHONES[11],
+    contactName: "Gabriela Ruiz",
+    status: "CLOSED",
+    unreadCount: 0,
+    assignedUserEmail: "agent@default.com",
+    messages: [
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Buenas tardes, quiero cancelar mi pedido", daysAgo: 6, hoursOffset: 14 },
+      { direction: "OUT", type: "TEXT", status: "READ", text: "Buenas tardes Gabriela, ¿me das el número de pedido?", daysAgo: 6, hoursOffset: 15 },
+      { direction: "IN", type: "TEXT", status: "READ", text: "Sí, es el #98765", daysAgo: 6, hoursOffset: 15 },
+      { direction: "OUT", type: "TEXT", status: "DELIVERED", text: "Perfecto, canceling.", daysAgo: 6, hoursOffset: 16 },
+      { direction: "IN", type: "TEXT", status: "READ", text: "Gracias, ¿cuánto tarda el reembolso?", daysAgo: 5, hoursOffset: 9 },
+      { direction: "OUT", type: "TEXT", status: "DELIVERED", text: "5 a 10 días hábiles.", daysAgo: 5, hoursOffset: 10 },
+    ],
+  },
+  {
+    phone: FIXTURE_PHONES[12],
+    contactName: "Roberto Díaz",
+    status: "OPEN",
+    unreadCount: 5,
+    assignedUserEmail: "admin@default.com",
+    messages: [
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Necesito 100 unidades urgentes", daysAgo: 1, hoursOffset: 8 },
+      { direction: "OUT", type: "TEXT", status: "READ", text: "Hola Roberto, ¿de qué producto?", daysAgo: 1, hoursOffset: 9 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Baterías de litio 12V", daysAgo: 1, hoursOffset: 9 },
+      { direction: "OUT", type: "TEXT", status: "DELIVERED", text: "Tengo 50 en stock.", daysAgo: 1, hoursOffset: 10 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Necesito las 100, ¿pueden conseguir el resto?", daysAgo: 0, hoursOffset: 14 },
+      { direction: "OUT", type: "TEXT", status: "SENT", text: "Consulto y te confirmo.", daysAgo: 0, hoursOffset: 15 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "¿Hay novedades?", daysAgo: 0, hoursOffset: 17 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Necesito respuesta hoy", daysAgo: 0, hoursOffset: 18 },
+    ],
+  },
+  {
+    phone: FIXTURE_PHONES[13],
+    contactName: "Carmen Jiménez",
+    status: "OPEN",
+    unreadCount: 1,
+    messages: [
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Hola, ¿hace envíos a La Plata?", daysAgo: 0, hoursOffset: 16 },
+      { direction: "OUT", type: "TEXT", status: "READ", text: "¡Hola Carmen! Sí, llegamos a La Plata.", daysAgo: 0, hoursOffset: 17 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "¿Cuál es el costo de envío?", daysAgo: 0, hoursOffset: 18 },
+    ],
+  },
+  {
+    phone: FIXTURE_PHONES[14],
+    contactName: "Fernando Vega",
+    status: "CLOSED",
+    unreadCount: 0,
+    assignedUserEmail: "agent@default.com",
+    messages: [
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Hola, compré una tablet la semana pasada", daysAgo: 8, hoursOffset: 10 },
+      { direction: "OUT", type: "TEXT", status: "READ", text: "Hola Fernando, ¿tuviste algún problema?", daysAgo: 8, hoursOffset: 11 },
+      { direction: "IN", type: "TEXT", status: "READ", text: "Sí, no enciende", daysAgo: 8, hoursOffset: 12 },
+      { direction: "OUT", type: "TEXT", status: "DELIVERED", text: "Pásame tu email para enviarte la etiqueta.", daysAgo: 8, hoursOffset: 13 },
+      { direction: "IN", type: "TEXT", status: "READ", text: "fvega@mail.com", daysAgo: 7, hoursOffset: 9 },
+      { direction: "OUT", type: "TEXT", status: "DELIVERED", text: "Enviada. Recibimos y procesamos el cambio.", daysAgo: 5, hoursOffset: 14 },
+      { direction: "IN", type: "TEXT", status: "READ", text: "Ya recibí la nueva, gracias", daysAgo: 2, hoursOffset: 11 },
+      { direction: "OUT", type: "TEXT", status: "DELIVERED", text: "¡Excelente! Cualquier cosa nos contactás.", daysAgo: 2, hoursOffset: 12 },
+    ],
+  },
+  {
+    phone: FIXTURE_PHONES[15],
+    contactName: "Patricia Luna",
+    status: "OPEN",
+    unreadCount: 3,
+    assignedUserEmail: "agent@default.com",
+    messages: [
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Hola! Compré un套装 y me llegó roto", daysAgo: 0, hoursOffset: 10 },
+      { direction: "OUT", type: "TEXT", status: "READ", text: "Hola Patricia, lamento eso. ¿Puedes enviar foto?", daysAgo: 0, hoursOffset: 11 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "[image]", daysAgo: 0, hoursOffset: 12 },
+      { direction: "OUT", type: "TEXT", status: "SENT", text: "Vemos el daño. Gestionamos el cambio.", daysAgo: 0, hoursOffset: 13 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "¿Cuándo llega el nuevo?", daysAgo: 0, hoursOffset: 14 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "¿Me pueden llamar para coordinar?", daysAgo: 0, hoursOffset: 15 },
+    ],
+  },
+  {
+    phone: FIXTURE_PHONES[16],
+    contactName: "Eduardo Castro",
+    status: "CLOSED",
+    unreadCount: 0,
+    messages: [
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Buen día, ¿venden al por mayor?", daysAgo: 10, hoursOffset: 9 },
+      { direction: "OUT", type: "TEXT", status: "READ", text: "Buenos días Eduardo, sí. ¿Qué productos?", daysAgo: 10, hoursOffset: 10 },
+      { direction: "IN", type: "TEXT", status: "READ", text: "Herramientas eléctricas", daysAgo: 10, hoursOffset: 11 },
+      { direction: "OUT", type: "TEXT", status: "DELIVERED", text: "Te envío lista de precios.", daysAgo: 10, hoursOffset: 14 },
+    ],
+  },
+  {
+    phone: FIXTURE_PHONES[17],
+    contactName: "Isabel Navarro",
+    status: "OPEN",
+    unreadCount: 4,
+    assignedUserEmail: "admin@default.com",
+    messages: [
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Hola, necesito factura A", daysAgo: 0, hoursOffset: 8 },
+      { direction: "OUT", type: "TEXT", status: "READ", text: "Hola Isabel, ¿ya tenés los datos fiscales cargados?", daysAgo: 0, hoursOffset: 9 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Sí, los subí en la compra", daysAgo: 0, hoursOffset: 10 },
+      { direction: "OUT", type: "TEXT", status: "DELIVERED", text: "Perfecto, te la genero.", daysAgo: 0, hoursOffset: 11 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "¿La envías por mail?", daysAgo: 0, hoursOffset: 12 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "¿Está lista?", daysAgo: 0, hoursOffset: 16 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Urgente, la necesito hoy", daysAgo: 0, hoursOffset: 17 },
+    ],
+  },
+  {
+    phone: FIXTURE_PHONES[18],
+    contactName: "Miguel Herrera",
+    status: "OPEN",
+    unreadCount: 2,
+    messages: [
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Buenas noches, ¿están abiertos mañana?", daysAgo: 0, hoursOffset: 20 },
+      { direction: "OUT", type: "TEXT", status: "READ", text: "Buenas noches Miguel. Sí, de 9 a 18hs.", daysAgo: 0, hoursOffset: 21 },
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "¿Abren los domingos?", daysAgo: 0, hoursOffset: 21 },
+    ],
+  },
+  {
+    phone: FIXTURE_PHONES[19],
+    contactName: "Lucía Rubio",
+    status: "CLOSED",
+    unreadCount: 0,
+    assignedUserEmail: "agent@default.com",
+    messages: [
+      { direction: "IN", type: "TEXT", status: "RECEIVED", text: "Hola! Comprè hace 2 semanas", daysAgo: 14, hoursOffset: 11 },
+      { direction: "OUT", type: "TEXT", status: "READ", text: "Hola Lucía, ¿en qué te ayudamos?", daysAgo: 14, hoursOffset: 12 },
+      { direction: "IN", type: "TEXT", status: "READ", text: "Todo bien, solo quería agradecer", daysAgo: 14, hoursOffset: 13 },
+      { direction: "OUT", type: "TEXT", status: "DELIVERED", text: "¡Gracias a vos! Cualquier cosa estamos.", daysAgo: 14, hoursOffset: 14 },
+      { direction: "IN", type: "TEXT", status: "READ", text: "Genial, saludos!", daysAgo: 13, hoursOffset: 9 },
     ],
   },
 ];

@@ -43,5 +43,5 @@ export default async function TenantInboxPage({
     return <TenantSelector memberships={memberships} resource="conversations" />;
   }
 
-  return <TenantConversationsClient tenantId={membership.tenant.id} />;
+  return <TenantConversationsClient tenantId={membership.tenant.id} currentUserId={session.user.id} />;
 }

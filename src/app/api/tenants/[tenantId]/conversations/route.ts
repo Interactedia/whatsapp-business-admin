@@ -55,7 +55,7 @@ function toConversationRead(raw: unknown): ConversationRead | null {
   };
 }
 
-export const GET = handle(async (_req, { params }) => {
+export const GET = handle(async (req, { params }) => {
   const session = await auth();
   if (!session?.user) {
     return fail(401, "Unauthorized");
@@ -72,9 +72,13 @@ export const GET = handle(async (_req, { params }) => {
     throw err;
   }
 
+  // WA-UI-014: pass the client search through to the repository (already
+  // tenant-scoped); previously the ?search= query string was silently ignored.
+  const search = new URL(req.url).searchParams.get("search")?.trim().slice(0, 500) || undefined;
+
   let conversations;
   try {
-    conversations = await tenantMessagingRepository.listConversations(context, { take: 200 });
+    conversations = await tenantMessagingRepository.listConversations(context, { take: 200, ...(search ? { search } : {}) });
   } catch (err) {
     if (err instanceof TenantAuthorizationError) return fail(400, "Invalid request");
     throw err;

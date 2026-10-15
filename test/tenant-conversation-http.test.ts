@@ -472,6 +472,20 @@ describe("WA-01-05I tenant conversation list HTTP access", () => {
     expect(listConversationsSpy).toHaveBeenCalledWith(trustedContext, { take: 200 });
   });
 
+  it("WA-UI-014: passes ?search= through to listConversations within the trusted tenant context", async () => {
+    mockAuth({ user: { id: "user-1", role: "AGENT" } });
+    mockResolveTenantContext(trustedContext);
+    mockListConversations([]);
+
+    const response = await getConversationList(
+      new Request("https://example.test/api/tenants/tenant-1/conversations?search=juan"),
+      makeListParams("tenant-1"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(listConversationsSpy).toHaveBeenCalledWith(trustedContext, { take: 200, search: "juan" });
+  });
+
   it("legacy global conversation list GET is removed; POST migrated to tenant API", async () => {
     const routeModule = (await import("@/app/api/conversations/route")) as Record<string, unknown>;
     expect(routeModule.GET).toBeUndefined();

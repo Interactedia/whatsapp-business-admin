@@ -102,6 +102,27 @@ interface ConversationItemProps {
   isPending: boolean;
 }
 
+// WA-UI-014: Filter chip component for conversation filters.
+// Compact chips following Modern Enterprise design with teal active state.
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1",
+        "hover:bg-muted/80",
+        active
+          ? "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300"
+          : "bg-muted text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ConversationItem({
   conversation: c,
   isActive,
@@ -247,7 +268,17 @@ function ConversationItem({
   );
 }
 
-export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: string; basePath: string }) {
+export type ConversationFilter = "all" | "unread" | "pending" | "mine";
+
+export function InboxClient({
+  conversationsUrl,
+  basePath,
+  currentUserId,
+}: {
+  conversationsUrl: string;
+  basePath: string;
+  currentUserId?: string;
+}) {
   const router = useRouter();
   const params = useSearchParams();
   const qc = useQueryClient();
@@ -257,6 +288,7 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
   const tenantId = basePath.startsWith("/t/") ? basePath.split("/")[2] : "";
   const [search, setSearch] = useState("");
   const [showAiAssistant, setShowAiAssistant] = useState(false);
+  const [filter, setFilter] = useState<ConversationFilter>("all");
 
   // Close the AI Assistant panel on Escape (works for both the inline
   // desktop column and the tablet/mobile overlay drawer).
@@ -309,7 +341,47 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
     },
     refetchInterval: 30_000,
   });
-  const conversations = conversationsQuery.data ?? [];
+  // WA-UI-014: Apply client-side filters to conversations.
+  // - "all": show all conversations
+  // - "unread": conversations with unreadCount > 0
+  // - "pending": OPEN conversations where last inbound is within session window (needs human reply)
+  // - "mine": conversations assigned to current user
+  const filteredConversations = useMemo(() => {
+    const conversations = conversationsQuery.data ?? [];
+    let result = conversations;
+
+    // Apply filter
+    switch (filter) {
+      case "unread":
+        result = result.filter((c) => c.unreadCount > 0);
+        break;
+      case "pending":
+        // Only OPEN conversations that need human attention:
+        // - Has unread messages (customer is waiting)
+        // - Last inbound is within session window (still can reply)
+        result = result.filter((c) => c.status === "OPEN" && c.unreadCount > 0 && c.windowOpen);
+        break;
+      case "mine":
+        if (currentUserId) {
+          result = result.filter((c) => c.assignedUserId === currentUserId);
+        }
+        break;
+      // "all" - no filter
+    }
+
+    // Apply search (already handled by API, but keep for safety)
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (c) =>
+          (c.contact.name?.toLowerCase() ?? "").includes(q) ||
+          c.contact.waId.includes(q) ||
+          (c.lastPreview?.toLowerCase() ?? "").includes(q),
+      );
+    }
+
+    return result;
+  }, [conversationsQuery.data, filter, search, currentUserId]);
 
   // Realtime: refresh lists + the open thread on any event for this tenant.
   // WA-ERA4-05: route the event through the sync helpers to dedup
@@ -377,17 +449,35 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
     <div className="flex h-full min-w-0">
       {/* Conversation list - Scope B: ~340px width */}
       <div className={cn("w-full shrink-0 flex-col border-r md:flex md:w-[340px]", activeId ? "hidden" : "flex", "bg-[var(--conv-canvas)]")}>
-        <div className="border-b p-2">
+        {/* WA-UI-014: Search and filters */}
+        <div className="border-b p-2 space-y-2">
           <div className="relative">
             <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input className="pl-8" placeholder="Buscar conversaciones…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
+          {/* Filter chips */}
+          <div className="flex gap-1.5 overflow-x-auto scroll-thin pb-0.5">
+            <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+              Todos
+            </FilterChip>
+            <FilterChip active={filter === "unread"} onClick={() => setFilter("unread")}>
+              No leídos
+            </FilterChip>
+            <FilterChip active={filter === "pending"} onClick={() => setFilter("pending")}>
+              Por responder
+            </FilterChip>
+            <FilterChip active={filter === "mine"} onClick={() => setFilter("mine")}>
+              Mis conversaciones
+            </FilterChip>
+          </div>
         </div>
         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto scroll-thin p-2">
-          {conversations.length === 0 && (
-            <div className="p-6 text-center text-xs text-muted-foreground">Sin conversaciones aún.</div>
+          {filteredConversations.length === 0 && (
+            <div className="p-6 text-center text-xs text-muted-foreground">
+              {filter === "all" ? "Sin conversaciones aún." : "Sin resultados para este filtro."}
+            </div>
           )}
-          {conversations.map((c) => (
+          {filteredConversations.map((c) => (
             <ConversationItem
               key={c.id}
               conversation={c}
