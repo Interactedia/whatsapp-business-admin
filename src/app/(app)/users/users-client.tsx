@@ -108,50 +108,48 @@ export function UsersClient({
   return (
     <div className="flex h-full flex-col">
       {/* Page Header */}
-      <div className="border-b bg-card px-4 py-5 sm:px-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-              {tenantName ? `Users & Members — ${tenantName}` : "Users"}
-            </h1>
-            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-              {tenantId
-                ? "Administra los usuarios y asigna usuarios existentes como miembros de este tenant."
-                : "Administra quién puede acceder a este panel. Los agentes solo ven la bandeja de entrada y los contactos."}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {tenantId && currentRole === "SYSTEM_ADMIN" && (
-              <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="h-9 gap-2 rounded-lg px-3 text-sm font-medium shadow-sm">
-                    <UserPlus className="h-4 w-4" /> Add member to tenant
-                  </Button>
-                </DialogTrigger>
-                <AddTenantMemberDialog
-                  tenantId={tenantId}
-                  users={users.filter((u) => u.active && !memberUserIds.has(u.id))}
-                  onClose={() => setAddMemberOpen(false)}
-                  onAdded={() => {
-                    invalidate();
-                    setAddMemberOpen(false);
-                  }}
-                />
-              </Dialog>
-            )}
-            <Dialog open={open} onOpenChange={setOpen}>
+      <div className="flex flex-col gap-2 border-b bg-card px-3 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-4 sm:py-2.5">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Users
+          </h1>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            {tenantId
+              ? "Administra los usuarios y miembros de esta organización."
+              : "Administra quién puede acceder a este panel. Los agentes solo ven la bandeja de entrada y los contactos."}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {tenantId && currentRole === "SYSTEM_ADMIN" && (
+            <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
               <DialogTrigger asChild>
-                <Button className="h-9 gap-2 rounded-lg px-4 text-sm font-medium shadow-sm">
-                  <Plus className="h-4 w-4" /> New user
+                <Button variant="outline" className="h-9 gap-2 rounded-lg px-3 text-sm font-medium shadow-sm">
+                  <UserPlus className="h-4 w-4" /> Add member to tenant
                 </Button>
               </DialogTrigger>
-              <CreateUserDialog
-                onClose={() => setOpen(false)}
-                onCreated={invalidate}
-                canCreateSystemAdmin={canManageSystemAdmins}
+              <AddTenantMemberDialog
+                tenantId={tenantId}
+                users={users.filter((u) => u.active && !memberUserIds.has(u.id))}
+                onClose={() => setAddMemberOpen(false)}
+                onAdded={() => {
+                  invalidate();
+                  setAddMemberOpen(false);
+                }}
               />
             </Dialog>
-          </div>
+          )}
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="h-9 gap-2 rounded-lg px-4 text-sm font-medium shadow-sm">
+                <Plus className="h-4 w-4" /> New user
+              </Button>
+            </DialogTrigger>
+            <CreateUserDialog
+              onClose={() => setOpen(false)}
+              onCreated={invalidate}
+              canCreateSystemAdmin={canManageSystemAdmins}
+            />
+          </Dialog>
         </div>
       </div>
 
