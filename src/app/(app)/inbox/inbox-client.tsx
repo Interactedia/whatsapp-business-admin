@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Search, Send, Paperclip, Check, CheckCheck, Clock, AlertCircle, MessageSquare, FileText, LayoutTemplate, Workflow, ArrowLeft,
+  Search, Send, Paperclip, Check, CheckCheck, Clock, AlertCircle, MessageSquare, FileText, LayoutTemplate, Workflow, ArrowLeft, Bot, X,
 } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
 import { cn, formatInboxTimestamp } from "@/lib/utils";
@@ -73,6 +73,7 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
   // Derive tenantId from the explicit tenant-scoped basePath (/t/:tenantId/conversations).
   const tenantId = basePath.startsWith("/t/") ? basePath.split("/")[2] : "";
   const [search, setSearch] = useState("");
+  const [showAiAssistant, setShowAiAssistant] = useState(false);
 
   // WA-ERA4-05: per-tenant sync helpers. Reset on tenant switch so
   // seen ids and high-water marks from a previous tenant never leak.
@@ -214,22 +215,55 @@ export function InboxClient({ conversationsUrl, basePath }: { conversationsUrl: 
 
       {/* Thread */}
       <div className={cn("min-w-0 flex-1", activeId ? "block" : "hidden md:block")}>
-        {activeId ? <ThreadPane tenantId={tenantId} conversationId={activeId} onBack={() => router.push(basePath)} /> : <EmptyThread />}
+        {activeId ? <ThreadPane tenantId={tenantId} conversationId={activeId} onBack={() => router.push(basePath)} showAiAssistant={showAiAssistant} onToggleAi={() => setShowAiAssistant(!showAiAssistant)} /> : <EmptyThread onToggleAi={() => setShowAiAssistant(!showAiAssistant)} />}
+      </div>
+      {/* AI Assistant Panel */}
+      <div className={cn(
+        "hidden xl:flex w-80 shrink-0 flex-col border-l bg-background",
+        showAiAssistant ? "flex" : "hidden"
+      )}>
+        <div className="flex min-h-12 shrink-0 items-center justify-between border-b px-3 py-2">
+          <span className="text-sm font-medium">Asistente IA</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setShowAiAssistant(false)}
+            aria-label="Cerrar asistente IA"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex flex-1 flex-col items-center justify-center p-6 text-center">
+          <Bot className="mb-3 h-10 w-10 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">
+            Próximamente podrás consultar información<br />relacionada con esta conversación.
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
-function EmptyThread() {
+function EmptyThread({ onToggleAi }: { onToggleAi: () => void }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
+    <div className="relative flex h-full flex-col items-center justify-center text-muted-foreground">
       <MessageSquare className="mb-2 h-10 w-10 opacity-30" />
       <p className="text-sm">Select a conversation to start chatting.</p>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute bottom-4 right-4 h-10 w-10 rounded-full shadow-md"
+        onClick={onToggleAi}
+        aria-label="Abrir asistente IA"
+      >
+        <Bot className="h-5 w-5" />
+      </Button>
     </div>
   );
 }
 
-function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; conversationId: string; onBack: () => void }) {
+function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggleAi }: { tenantId: string; conversationId: string; onBack: () => void; showAiAssistant: boolean; onToggleAi: () => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -373,8 +407,17 @@ function ThreadPane({ tenantId, conversationId, onBack }: { tenantId: string; co
           <div className="truncate text-sm font-medium">{displayName(contact)}</div>
           <div className="text-[11px] text-muted-foreground">+{contact.waId}</div>
         </div>
-        <div className="ml-auto hidden sm:block">
-          <Badge variant={windowOpen ? "success" : "warning"}>{windowInfo?.label}</Badge>
+        <div className="ml-auto flex items-center gap-2">
+          <Badge variant={windowOpen ? "success" : "warning"} className="hidden sm:inline-flex">{windowInfo?.label}</Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("h-8 w-8", showAiAssistant && "bg-accent")}
+            onClick={onToggleAi}
+            aria-label={showAiAssistant ? "Cerrar asistente IA" : "Abrir asistente IA"}
+          >
+            <Bot className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
