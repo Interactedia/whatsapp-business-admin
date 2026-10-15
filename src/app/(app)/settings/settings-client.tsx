@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, CheckCircle2, XCircle, RefreshCw, Save, KeyRound, Plus, Trash2, Sparkles, ArrowRightLeft, Bell } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
@@ -527,26 +527,38 @@ function MetaConnectionTab({
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-[1fr_2fr_130px_auto]">
-            <Input
-              value={connector.name}
-              onChange={(e) => setConnector({ ...connector, name: e.target.value })}
-              placeholder="Nombre del conector"
-            />
-            <Input
-              value={connector.baseUrl}
-              onChange={(e) => setConnector({ ...connector, baseUrl: e.target.value })}
-              placeholder="https://api.ejemplo.com/flows/"
-            />
-            <select
-              value={connector.authType}
-              onChange={(e) => setConnector({ ...connector, authType: e.target.value })}
-              className="rounded-md border bg-background px-2 text-sm"
-            >
-              <option value="NONE">Sin auth</option>
-              <option value="BEARER">Bearer token</option>
-              <option value="BASIC">Basic auth</option>
-              <option value="HEADER">Header personalizado</option>
-            </select>
+            <Field label="Nombre" htmlFor="connector-name">
+              <Input
+                id="connector-name"
+                value={connector.name}
+                onChange={(e) => setConnector({ ...connector, name: e.target.value })}
+                placeholder="Nombre del conector"
+              />
+            </Field>
+            <Field label="URL base" htmlFor="connector-base-url">
+              <Input
+                id="connector-base-url"
+                value={connector.baseUrl}
+                onChange={(e) => setConnector({ ...connector, baseUrl: e.target.value })}
+                placeholder="https://api.ejemplo.com/flows/"
+              />
+            </Field>
+            <Field label="Autenticación" htmlFor="connector-auth-type">
+              <Select
+                value={connector.authType}
+                onValueChange={(v) => setConnector({ ...connector, authType: v })}
+              >
+                <SelectTrigger id="connector-auth-type" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">Sin auth</SelectItem>
+                  <SelectItem value="BEARER">Bearer token</SelectItem>
+                  <SelectItem value="BASIC">Basic auth</SelectItem>
+                  <SelectItem value="HEADER">Header personalizado</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
             <Button
               size="icon"
               onClick={() => addConnector.mutate()}
@@ -949,10 +961,10 @@ function AutomationPreviewTab({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <Label>{label}</Label>
+      <Label htmlFor={htmlFor}>{label}</Label>
       {children}
     </div>
   );
