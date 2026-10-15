@@ -210,7 +210,7 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* PageHeader estandarizado */}
       <PageHeader
         title="Configuración"
@@ -231,7 +231,7 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
       )}
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="flex min-h-0 flex-1 flex-col">
         <div className="shrink-0 border-b bg-card px-4 sm:px-6">
           <TabsList>
             <TabsTrigger value="meta">Conexión con Meta</TabsTrigger>
