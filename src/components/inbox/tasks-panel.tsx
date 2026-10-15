@@ -757,7 +757,7 @@ function AiAssistantPanelContent() {
       </div>
 
       {/* ─── CONTENT: scroll independiente ─── */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden">
         {/* Indicador simplificado de contexto */}
         <div className="shrink-0 border-b border-border/50 px-3 py-1.5">
           <span className="text-[10px] text-muted-foreground/60">
@@ -766,35 +766,33 @@ function AiAssistantPanelContent() {
         </div>
 
         {/* Bienvenida centrada verticalmente */}
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="flex flex-1 flex-col items-center justify-center px-4 py-6 text-center">
-            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-              <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
-            </div>
-            <h2 className="mb-1 text-sm font-medium">¿En qué puedo ayudarte?</h2>
-            <p className="mb-4 max-w-[220px] text-xs text-muted-foreground">
-              Consulta información de esta conversación o prepara una respuesta.
-            </p>
+        <div className="flex flex-1 flex-col items-center justify-center px-4 py-6 text-center">
+          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+            <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
+          </div>
+          <h2 className="mb-1 text-sm font-medium">¿En qué puedo ayudarte?</h2>
+          <p className="mb-4 max-w-[220px] text-xs text-muted-foreground">
+            Consulta información de esta conversación o prepara una respuesta.
+          </p>
 
-            {/* Acciones sugeridas compactas */}
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-              {suggestedActions.map((action) => (
-                <button
-                  key={action.label}
-                  type="button"
-                  onClick={() => handleSuggestedAction(action.insert)}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1",
-                    "text-[11px] text-muted-foreground",
-                    "transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground",
-                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  )}
-                >
-                  <Sparkles className="h-2.5 w-2.5 text-primary" aria-hidden="true" />
-                  {action.label}
-                </button>
-              ))}
-            </div>
+          {/* Acciones sugeridas compactas */}
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            {suggestedActions.map((action) => (
+              <button
+                key={action.label}
+                type="button"
+                onClick={() => handleSuggestedAction(action.insert)}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1",
+                  "text-[11px] text-muted-foreground",
+                  "transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground",
+                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                )}
+              >
+                <Sparkles className="h-2.5 w-2.5 text-primary" aria-hidden="true" />
+                {action.label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -849,7 +847,7 @@ function AiAssistantPanelContent() {
       )}
 
       {/* ─── COMPOSER: anclado al fondo con auto-grow ─── */}
-      <div className="shrink-0 border-t bg-card px-3 py-2">
+      <div className="flex shrink-0 flex-col border-t bg-card px-3 py-2">
         {/* Textarea con crecimiento automático */}
         <textarea
           ref={composerRef}
@@ -859,7 +857,7 @@ function AiAssistantPanelContent() {
           placeholder="Pregunta al asistente..."
           rows={2}
           className={cn(
-            "w-full resize-none overflow-y-auto rounded-md border border-border bg-background px-3 py-2 pr-16 text-xs",
+            "w-full flex-1 resize-none overflow-y-auto rounded-md border border-border bg-background px-3 py-2 pr-16 text-xs",
             "placeholder:text-muted-foreground",
             "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50 focus-visible:border-primary",
             "transition-colors"
@@ -935,8 +933,8 @@ export function AssistantPanel({ activeTab, onTabChange, onClose }: AssistantPan
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Tabs Header */}
-      <Tabs value={activeTab} onValueChange={(v) => onTabChange(v as AssistantTab)}>
-        <div className="flex items-center border-b">
+      <Tabs value={activeTab} onValueChange={(v) => onTabChange(v as AssistantTab)} className="flex h-full flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center border-b">
           <TabsList className="h-auto w-full justify-start rounded-none border-b-0 bg-transparent p-0">
             <TabsTrigger
               value="ai"
@@ -962,12 +960,12 @@ export function AssistantPanel({ activeTab, onTabChange, onClose }: AssistantPan
         </div>
 
         {/* AI Assistant Content */}
-        <TabsContent value="ai" className="m-0 flex-1 overflow-hidden">
+        <TabsContent value="ai" className="m-0 h-full overflow-hidden">
           <AiAssistantPanelContent />
         </TabsContent>
 
         {/* Tasks Content */}
-        <TabsContent value="tasks" className="m-0 flex-1 overflow-hidden">
+        <TabsContent value="tasks" className="m-0 h-full overflow-hidden">
           <TasksPanelContent onClose={onClose} />
         </TabsContent>
       </Tabs>
