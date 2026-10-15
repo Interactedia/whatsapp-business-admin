@@ -1,0 +1,65 @@
+- generic [active] [ref=f44e1]:
+  - generic [ref=f44e2]:
+    - complementary [ref=f44e3]:
+      - generic [ref=f44e8]:
+        - heading "WhatsApp Admin" [level=1] [ref=f44e9]
+        - paragraph [ref=f44e10]: Business Console
+      - navigation "Main navigation" [ref=f44e11]:
+        - generic [ref=f44e12]:
+          - paragraph [aria-hidden] [ref=f44e13]: Principal
+          - link "Dashboard" [ref=f44e15] [cursor=pointer]:
+            - /url: /t/demo
+        - generic [ref=f44e22]:
+          - paragraph [aria-hidden] [ref=f44e23]: Atención
+          - generic [ref=f44e24]:
+            - link "Inbox" [ref=f44e25] [cursor=pointer]:
+              - /url: /t/demo/conversations
+            - link "Contacts" [ref=f44e29] [cursor=pointer]:
+              - /url: /t/demo/contacts
+        - generic [ref=f44e37]:
+          - paragraph [aria-hidden] [ref=f44e38]: Campañas y automatización
+          - generic [ref=f44e39]:
+            - link "Templates" [ref=f44e40] [cursor=pointer]:
+              - /url: /t/demo/templates
+            - link "Flows" [ref=f44e46] [cursor=pointer]:
+              - /url: /t/demo/flows
+            - link "Submissions" [ref=f44e52] [cursor=pointer]:
+              - /url: /t/demo/submissions
+            - link "Broadcasts" [ref=f44e57] [cursor=pointer]:
+              - /url: /t/demo/broadcasts
+        - generic [ref=f44e62]:
+          - paragraph [aria-hidden] [ref=f44e63]: Administración
+          - generic [ref=f44e64]:
+            - link "Settings" [ref=f44e65] [cursor=pointer]:
+              - /url: /t/demo/settings
+            - link "Webhooks salientes" [ref=f44e70] [cursor=pointer]:
+              - /url: /t/demo/settings/webhooks
+            - link "API" [ref=f44e76] [cursor=pointer]:
+              - /url: /t/demo/developer
+            - link "Users" [ref=f44e82] [cursor=pointer]:
+              - /url: /t/demo/users
+      - generic [ref=f44e96]: Not connected
+    - generic [ref=f44e100]:
+      - banner [ref=f44e101]:
+        - button "Default Organization" [ref=f44e103]
+        - button "User menu" [ref=f44e109]:
+          - generic [ref=f44e110]: DO
+          - generic [ref=f44e112]:
+            - generic [ref=f44e113]: Default Org Admin
+            - generic [ref=f44e114]: ADMIN
+      - main [ref=f44e117]:
+        - generic [ref=f44e118]:
+          - generic [ref=f44e120]:
+            - heading "Contacts" [level=1] [ref=f44e121]
+            - paragraph [ref=f44e122]: Select a tenant to view contacts.
+          - generic [ref=f44e124]:
+            - paragraph [ref=f44e125]: "Choose a tenant to access contacts:"
+            - generic [ref=f44e127] [cursor=pointer]:
+              - generic [ref=f44e133]:
+                - paragraph [ref=f44e134]: Default Organization
+                - paragraph [ref=f44e135]: cmv337nob0001t25hbbyuq8tk
+              - button "Open" [ref=f44e136]
+  - region "Notifications (F8)":
+    - list
+  - button "Open Next.js Dev Tools" [ref=f44e142] [cursor=pointer]
+  - alert [ref=f44e146]

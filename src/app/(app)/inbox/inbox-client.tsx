@@ -519,7 +519,7 @@ export function InboxClient({
       </div>
       {/* Assistant Panel (AI + Tasks) — inline third column (desktop xl+). Below xl the
           overlay drawer below renders instead, so the chat is never squeezed. */}
-      <div className={cn("hidden w-80 shrink-0 flex-col border-l bg-background", showAiAssistant && "xl:flex")}>
+      <div className={cn("hidden h-full w-80 shrink-0 flex-col border-l bg-background", showAiAssistant && "xl:flex")}>
         <AssistantPanel activeTab={assistantTab} onTabChange={setAssistantTab} onClose={() => setShowAiAssistant(false)} />
       </div>
       {/* Assistant Panel — overlay drawer (below xl): accessible on tablet/mobile

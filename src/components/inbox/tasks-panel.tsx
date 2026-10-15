@@ -639,15 +639,15 @@ function getFileIcon(type: string) {
 }
 
 /**
- * AiAssistantPanelContent - WA-UI-020
+ * AiAssistantPanelContent - WA-UI-020 R2
  *
  * Rediseño visual del panel Asistente IA.
  * Distribución vertical compacta con:
- * - Cabecera compacta con indicador discreto
+ * - Cabecera simplificada
  * - Área de contenido con scroll independiente
- * - Bienvenida centrada simplificada
+ * - Bienvenida centrada vertical y horizontalmente
  * - Acciones sugeridas como botones compactos
- * - Composer anclado al fondo
+ * - Composer anclado al fondo con textarea auto-grow
  * - Adjuntos con miniaturas
  *
  * SAFETY: Sin backend, sin LLM, sin envío real.
@@ -666,6 +666,14 @@ function AiAssistantPanelContent() {
     { label: "Sugerir respuesta", insert: "¿Qué respuesta puedo dar?" },
     { label: "Identificar pendientes", insert: "¿Hay algún pendiente en esta conversación?" },
   ];
+
+  // Auto-grow textarea handler
+  const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessageText(e.target.value);
+    const textarea = e.target;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`; // Max ~5 lines
+  }, []);
 
   // Handle file selection
   const handleFileSelect = useCallback(
@@ -707,7 +715,14 @@ function AiAssistantPanelContent() {
   // Insert suggested action text into composer
   const handleSuggestedAction = useCallback((text: string) => {
     setMessageText((prev) => (prev ? `${prev}\n${text}` : text));
-    composerRef.current?.focus();
+    // Trigger auto-grow after state update
+    setTimeout(() => {
+      if (composerRef.current) {
+        composerRef.current.style.height = "auto";
+        composerRef.current.style.height = `${Math.min(composerRef.current.scrollHeight, 120)}px`;
+      }
+      composerRef.current?.focus();
+    }, 0);
   }, []);
 
   const handleSend = useCallback(() => {
@@ -724,66 +739,62 @@ function AiAssistantPanelContent() {
   );
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {/* ─── HEADER: compacto ─── */}
-      <div className="shrink-0 border-b bg-card/50 px-3 py-1.5">
+    <div className="flex h-full flex-col">
+      {/* ─── HEADER: simplificado ─── */}
+      <div className="shrink-0 border-b px-3 py-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-            <span className="text-xs font-medium">Asistente IA</span>
+            <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
+            <span className="text-sm font-medium">Asistente IA</span>
+            <span className="text-xs text-muted-foreground">· Chat interno</span>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Indicador discreto: Chat interno */}
-            <span className="flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-              <Lock className="h-2.5 w-2.5" aria-hidden="true" />
-              Chat interno
-            </span>
-            {/* Estado: Vista previa */}
-            <span className="flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">
-              <AlertTriangle className="h-2.5 w-2.5" aria-hidden="true" />
-              Vista previa
-            </span>
-          </div>
+          {/* Aviso importante: contexto no conectado */}
+          <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:bg-amber-900/20 dark:text-amber-400">
+            <AlertTriangle className="h-2.5 w-2.5" aria-hidden="true" />
+            Vista previa
+          </span>
         </div>
       </div>
 
       {/* ─── CONTENT: scroll independiente ─── */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Indicador simplificado de contexto */}
         <div className="shrink-0 border-b border-border/50 px-3 py-1.5">
           <span className="text-[10px] text-muted-foreground/60">
-            Contexto aún no conectado
+            Contexto no conectado · Vista previa
           </span>
         </div>
 
-        {/* Bienvenida centrada */}
-        <div className="flex flex-1 flex-col items-center justify-center px-4 py-6 text-center">
-          <div className="mb-1 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-            <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
-          </div>
-          <h2 className="mb-1 text-sm font-medium">¿En qué puedo ayudarte?</h2>
-          <p className="mb-4 max-w-[200px] text-[11px] text-muted-foreground">
-            Consulta información de esta conversación o prepara una respuesta.
-          </p>
+        {/* Bienvenida centrada verticalmente */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex flex-1 flex-col items-center justify-center px-4 py-6 text-center">
+            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+              <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
+            </div>
+            <h2 className="mb-1 text-sm font-medium">¿En qué puedo ayudarte?</h2>
+            <p className="mb-4 max-w-[220px] text-xs text-muted-foreground">
+              Consulta información de esta conversación o prepara una respuesta.
+            </p>
 
-          {/* Acciones sugeridas como botones compactos */}
-          <div className="flex flex-wrap items-center justify-center gap-1.5">
-            {suggestedActions.map((action) => (
-              <button
-                key={action.label}
-                type="button"
-                onClick={() => handleSuggestedAction(action.insert)}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1",
-                  "text-[11px] text-muted-foreground",
-                  "transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground",
-                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                )}
-              >
-                <Sparkles className="h-2.5 w-2.5 text-primary" aria-hidden="true" />
-                {action.label}
-              </button>
-            ))}
+            {/* Acciones sugeridas compactas */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {suggestedActions.map((action) => (
+                <button
+                  key={action.label}
+                  type="button"
+                  onClick={() => handleSuggestedAction(action.insert)}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1",
+                    "text-[11px] text-muted-foreground",
+                    "transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground",
+                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  )}
+                >
+                  <Sparkles className="h-2.5 w-2.5 text-primary" aria-hidden="true" />
+                  {action.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -837,21 +848,23 @@ function AiAssistantPanelContent() {
         </div>
       )}
 
-      {/* ─── COMPOSER: anclado al fondo ─── */}
+      {/* ─── COMPOSER: anclado al fondo con auto-grow ─── */}
       <div className="shrink-0 border-t bg-card px-3 py-2">
-        {/* Textarea */}
+        {/* Textarea con crecimiento automático */}
         <textarea
           ref={composerRef}
           value={messageText}
-          onChange={(e) => setMessageText(e.target.value)}
+          onChange={handleTextChange}
           onKeyDown={handleComposerKeyDown}
           placeholder="Pregunta al asistente..."
           rows={2}
           className={cn(
-            "w-full resize-none rounded-md border bg-background px-3 py-2 pr-16 text-xs",
+            "w-full resize-none overflow-y-auto rounded-md border border-border bg-background px-3 py-2 pr-16 text-xs",
             "placeholder:text-muted-foreground",
-            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/50 focus-visible:border-primary",
+            "transition-colors"
           )}
+          style={{ minHeight: "64px", maxHeight: "120px" }}
           aria-label="Mensaje para el asistente IA"
         />
 
