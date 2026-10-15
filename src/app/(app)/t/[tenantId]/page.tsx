@@ -96,8 +96,7 @@ export default async function TenantDashboardPage({
     <div className="flex h-full flex-col">
       <PageHeader
         title="Dashboard"
-        description="Resumen de actividad del tenant."
-        size="large"
+        description={`Resumen de actividad de ${tenant.name}.`}
       />
       <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
         <div className="space-y-4 p-4">

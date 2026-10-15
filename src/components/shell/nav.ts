@@ -15,6 +15,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+/**
+ * Visual sidebar sections for the tenant workspace (WA-UI-009).
+ * These are static headers — not collapsible menus — and never change
+ * routes or visibility rules.
+ */
+export type NavGroup = "Principal" | "Atención" | "Campañas y automatización" | "Administración";
+
 export type NavItem = {
   /** Path without tenantId. Resolved to `/t/:tenantId/<key>` when a tenant is active. */
   key: string;
@@ -30,6 +37,8 @@ export type NavItem = {
   tenantScoped?: boolean;
   /** True when the item is the dashboard and is never tenant-scoped. */
   global?: boolean;
+  /** Visual group header (tenant workspace only; system-admin items stay ungrouped). */
+  group?: NavGroup;
 };
 
 /**
@@ -39,17 +48,17 @@ export type NavItem = {
  */
 export const NAV_ITEMS: NavItem[] = [
   // Tenant workspace (hidden from SYSTEM_ADMIN)
-  { key: "/", label: "Dashboard", icon: LayoutDashboard, tenantScoped: true },
-  { key: "conversations", label: "Inbox", icon: MessageSquare, tenantScoped: true },
-  { key: "contacts", label: "Contacts", icon: Users, tenantScoped: true },
-  { key: "templates", label: "Templates", icon: LayoutTemplate, adminOnly: true, tenantScoped: true },
-  { key: "flows", label: "Flows", icon: Workflow, adminOnly: true, tenantScoped: true },
-  { key: "submissions", label: "Submissions", icon: ListChecks, tenantScoped: true },
-  { key: "broadcasts", label: "Broadcasts", icon: Megaphone, adminOnly: true, tenantScoped: true },
-  { key: "settings", label: "Settings", icon: Settings, adminOnly: true, tenantScoped: true },
-  { key: "settings/webhooks", label: "Webhooks salientes", icon: Webhook, adminOnly: true, tenantScoped: true },
-  { key: "developer", label: "API", icon: Code2, adminOnly: true, tenantScoped: true },
-  { key: "users", label: "Users", icon: UserCog, adminOnly: true, tenantScoped: true },
+  { key: "/", label: "Dashboard", icon: LayoutDashboard, tenantScoped: true, group: "Principal" },
+  { key: "conversations", label: "Inbox", icon: MessageSquare, tenantScoped: true, group: "Atención" },
+  { key: "contacts", label: "Contacts", icon: Users, tenantScoped: true, group: "Atención" },
+  { key: "templates", label: "Templates", icon: LayoutTemplate, adminOnly: true, tenantScoped: true, group: "Campañas y automatización" },
+  { key: "flows", label: "Flows", icon: Workflow, adminOnly: true, tenantScoped: true, group: "Campañas y automatización" },
+  { key: "submissions", label: "Submissions", icon: ListChecks, tenantScoped: true, group: "Campañas y automatización" },
+  { key: "broadcasts", label: "Broadcasts", icon: Megaphone, adminOnly: true, tenantScoped: true, group: "Campañas y automatización" },
+  { key: "settings", label: "Settings", icon: Settings, adminOnly: true, tenantScoped: true, group: "Administración" },
+  { key: "settings/webhooks", label: "Webhooks salientes", icon: Webhook, adminOnly: true, tenantScoped: true, group: "Administración" },
+  { key: "developer", label: "API", icon: Code2, adminOnly: true, tenantScoped: true, group: "Administración" },
+  { key: "users", label: "Users", icon: UserCog, adminOnly: true, tenantScoped: true, group: "Administración" },
   // System administration (SYSTEM_ADMIN only — no operational menus)
   { key: "/admin", label: "Dashboard", icon: LayoutDashboard, systemAdminOnly: true, global: true },
   { key: "/admin/queue-observability", label: "Queues", icon: ListChecks, systemAdminOnly: true, global: true },
@@ -115,4 +124,27 @@ export function visibleNavItems(role: "SYSTEM_ADMIN" | "ADMIN" | "AGENT"): NavIt
     if (i.adminOnly) return role === "ADMIN";
     return true;
   });
+}
+
+/** A visual sidebar section: a static header plus its visible items. */
+export type NavSection = { group: NavGroup | null; items: NavItem[] };
+
+/**
+ * Group visible nav items into sections for sidebar rendering (WA-UI-009).
+ * Pure presentation: preserves item order, routes and role visibility from
+ * `visibleNavItems`. Items without a `group` (system-admin section) render
+ * as a single ungrouped section.
+ */
+export function groupNavItems(items: NavItem[]): NavSection[] {
+  const sections: NavSection[] = [];
+  for (const item of items) {
+    const group = item.group ?? null;
+    const last = sections[sections.length - 1];
+    if (last && last.group === group) {
+      last.items.push(item);
+    } else {
+      sections.push({ group, items: [item] });
+    }
+  }
+  return sections;
 }

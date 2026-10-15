@@ -6,8 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { MessageCircle, LogOut, ChevronDown, Menu, X, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isNavActive, navHref, visibleNavItems } from "@/components/shell/nav";
-import { Badge } from "@/components/ui/badge";
+import { groupNavItems, isNavActive, navHref, visibleNavItems } from "@/components/shell/nav";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +34,7 @@ export function AppShell({ user, memberships, activeTenantId, wabaConnected, pho
   // SYSTEM_ADMIN is a pure system administrator: only Dashboard/Tenants/Users
   // in the administration section — never the operational tenant workspace.
   const items = visibleNavItems(user.role);
+  const sections = groupNavItems(items);
   const isSystemAdmin = user.role === "SYSTEM_ADMIN";
   const initials = user.name
     .split(" ")
@@ -57,37 +57,49 @@ export function AppShell({ user, memberships, activeTenantId, wabaConnected, pho
 
   const navigation = (
     <>
-      <nav className="flex-1 overflow-y-auto px-3 py-4 scroll-thin">
-        <div className="space-y-1">
-          {items.map((item) => {
-            const href = navHref(item, activeTenantId);
-            const active = isNavActive(item, pathname, activeTenantId);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.label}
-                href={href}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  active
-                    ? "bg-primary/10 text-primary shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                )}
+      <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-3 py-4 scroll-thin">
+        {sections.map((section, sectionIndex) => (
+          <div key={section.group ?? "general"} className={cn(sectionIndex > 0 && "mt-5")}>
+            {section.group && (
+              <p
+                aria-hidden="true"
+                className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400"
               >
-                <Icon className={cn(
-                  "h-[18px] w-[18px] shrink-0 transition-colors",
-                  active ? "text-primary" : "text-slate-500 group-hover:text-slate-700"
-                )} />
-                <span>{item.label}</span>
-                {active && (
-                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
-                )}
-              </Link>
-            );
-          })}
-        </div>
+                {section.group}
+              </p>
+            )}
+            <div className="space-y-1">
+              {section.items.map((item) => {
+                const href = navHref(item, activeTenantId);
+                const active = isNavActive(item, pathname, activeTenantId);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.label}
+                    href={href}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      active
+                        ? "bg-primary/10 text-primary shadow-sm"
+                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                    )}
+                  >
+                    <Icon className={cn(
+                      "h-[18px] w-[18px] shrink-0 transition-colors",
+                      active ? "text-primary" : "text-slate-500 group-hover:text-slate-700"
+                    )} />
+                    <span>{item.label}</span>
+                    {active && (
+                      <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {/* Sidebar Footer */}
@@ -198,11 +210,6 @@ export function AppShell({ user, memberships, activeTenantId, wabaConnected, pho
               <>
                 <OrganizationSelector memberships={memberships} activeTenantId={activeTenantId} />
                 <span className="text-sm font-semibold text-slate-600 lg:hidden">WA Admin</span>
-                {!wabaConnected && (
-                  <Badge variant="warning" className="hidden gap-1 sm:inline-flex">
-                    Connect your WhatsApp account in Settings
-                  </Badge>
-                )}
               </>
             )}
           </div>
