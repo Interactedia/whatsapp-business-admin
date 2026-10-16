@@ -19,7 +19,7 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
-
+import { useI18n } from "@/components/i18n/language-provider";
 type Template = {
   id: string;
   name: string;
@@ -42,6 +42,7 @@ const STATUS_VARIANT: Record<Template["status"], BadgeProps["variant"]> = {
 };
 
 export function TemplatesClient() {
+  const tr = useI18n();
   const qc = useQueryClient();
   const pathname = usePathname();
   const { toast } = useToast();
@@ -67,42 +68,42 @@ export function TemplatesClient() {
       }),
     onSuccess: (r) => {
       invalidate();
-      toast({ title: `Synced ${r.synced} templates from Meta` });
+      toast({ title: tr.t("templates.syncSuccess").replace("{count}", String(r.synced)) });
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Sync failed", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: tr.t("templates.syncError"), description: e.message }),
   });
 
   const submit = useMutation({
     mutationFn: (id: string) => apiFetch(`/api/templates/${id}/submit`, { method: "POST" }),
     onSuccess: () => {
       invalidate();
-      toast({ title: "Submitted for approval" });
+      toast({ title: tr.t("templates.submitSuccess") });
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Submit failed", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: tr.t("templates.submitError"), description: e.message }),
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => apiFetch(`/api/templates/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       invalidate();
-      toast({ title: "Template deleted" });
+      toast({ title: tr.t("templates.deleteSuccess") });
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Delete failed", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: tr.t("templates.deleteError"), description: e.message }),
   });
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="Templates"
-        description="Create, preview and submit WhatsApp message templates for Meta approval."
+        title={tr.t("templates.title")}
+        description={tr.t("templates.description")}
         actions={
           <>
             <Button variant="outline" size="sm" onClick={() => sync.mutate()} disabled={sync.isPending}>
-              <RefreshCw className={`h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} /> Sync
+              <RefreshCw className={`h-4 w-4 ${sync.isPending ? "animate-spin" : ""}`} /> {tr.t("templates.sync")}
             </Button>
             <Button size="sm" asChild>
               <Link href="/templates/new">
-                <Plus className="h-4 w-4" /> New template
+                <Plus className="h-4 w-4" /> {tr.t("templates.new")}
               </Link>
             </Button>
           </>
@@ -114,24 +115,24 @@ export function TemplatesClient() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className="w-24">Language</TableHead>
-                <TableHead className="w-28">Category</TableHead>
-                <TableHead className="w-28">Status</TableHead>
-                <TableHead className="w-40">Updated</TableHead>
-                <TableHead className="w-36 text-right">Actions</TableHead>
+                <TableHead>{tr.t("templates.colName")}</TableHead>
+                <TableHead className="w-24">{tr.t("templates.colLanguage")}</TableHead>
+                <TableHead className="w-28">{tr.t("templates.colCategory")}</TableHead>
+                <TableHead className="w-28">{tr.t("templates.colStatus")}</TableHead>
+                <TableHead className="w-40">{tr.t("templates.colUpdated")}</TableHead>
+                <TableHead className="w-36 text-right">{tr.t("templates.colActions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">Loading…</TableCell>
+                  <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">{tr.t("templates.loading")}</TableCell>
                 </TableRow>
               )}
               {!isLoading && templates.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                    No templates yet. Click <span className="font-medium">New template</span> to create one.
+                    {tr.t("templates.emptyTitle")}. {tr.t("templates.emptyDescription")}
                   </TableCell>
                 </TableRow>
               )}
@@ -139,43 +140,43 @@ export function TemplatesClient() {
                 const editable = t.status === "LOCAL" || t.status === "REJECTED";
                 return (
                   <TableRow key={t.id}>
-                    <TableCell data-label="Name" className="font-medium">
+                    <TableCell data-label={tr.t("templates.colName")} className="font-medium">
                       <div>{t.name}</div>
                       {t.rejectionReason && (
                         <div className="text-[11px] text-destructive">{t.rejectionReason}</div>
                       )}
                     </TableCell>
-                    <TableCell data-label="Language" className="text-xs text-muted-foreground">{t.language}</TableCell>
-                    <TableCell data-label="Category">
+                    <TableCell data-label={tr.t("templates.colLanguage")} className="text-xs text-muted-foreground">{t.language}</TableCell>
+                    <TableCell data-label={tr.t("templates.colCategory")}>
                       <Badge variant="outline">{t.category}</Badge>
                     </TableCell>
-                    <TableCell data-label="Status">
-                      <Badge variant={STATUS_VARIANT[t.status]}>{t.status}</Badge>
+                    <TableCell data-label={tr.t("templates.colStatus")}>
+                      <Badge variant={STATUS_VARIANT[t.status]}>{tr.t(`status.${t.status}`)}</Badge>
                     </TableCell>
-                    <TableCell data-label="Updated" className="text-xs text-muted-foreground">{formatDateTime(t.updatedAt)}</TableCell>
-                    <TableCell data-label="Actions" className="text-right">
+                    <TableCell data-label={tr.t("templates.colUpdated")} className="text-xs text-muted-foreground">{formatDateTime(t.updatedAt)}</TableCell>
+                    <TableCell data-label={tr.t("templates.colActions")} className="text-right">
                       <div className="flex justify-end gap-0.5">
-                        <Button variant="ghost" size="icon" title="Preview" onClick={() => setPreview(t)}>
+                        <Button variant="ghost" size="icon" title={tr.t("templates.preview")} onClick={() => setPreview(t)}>
                           <Eye className="h-4 w-4" />
                         </Button>
                         {editable && (
-                          <Button variant="ghost" size="icon" title="Edit" asChild>
+                          <Button variant="ghost" size="icon" title={tr.t("templates.edit")} asChild>
                             <Link href={`/templates/${t.id}/edit`}>
                               <Pencil className="h-4 w-4" />
                             </Link>
                           </Button>
                         )}
                         {t.status === "LOCAL" && (
-                          <Button variant="ghost" size="icon" title="Submit for approval" onClick={() => submit.mutate(t.id)}>
+                          <Button variant="ghost" size="icon" title={tr.t("templates.submit")} onClick={() => submit.mutate(t.id)}>
                             <Send className="h-4 w-4 text-primary" />
                           </Button>
                         )}
                         <Button
                           variant="ghost"
                           size="icon"
-                          title="Delete"
+                          title={tr.t("templates.delete")}
                           onClick={() => {
-                            if (confirm(`Delete template "${t.name}"?`)) remove.mutate(t.id);
+                            if (confirm(tr.t("templates.confirmDelete").replace("{name}", t.name))) remove.mutate(t.id);
                           }}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
