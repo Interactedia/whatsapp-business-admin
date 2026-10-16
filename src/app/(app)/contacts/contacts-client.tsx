@@ -116,7 +116,7 @@ export function ContactsClient({
         actions={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white">
+              <Button size="sm">
                 <Plus className="h-4 w-4" /> Nuevo contacto
               </Button>
             </DialogTrigger>
@@ -206,7 +206,7 @@ export function ContactsClient({
                 return (
                   <TableRow key={c.id} className="group">
                     {/* Columna: Contacto con avatar */}
-                    <TableCell className="pl-4">
+                    <TableCell className="pl-4" data-label="Contacto">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="text-xs">{initials(c)}</AvatarFallback>
@@ -215,17 +215,15 @@ export function ContactsClient({
                           <p className="truncate font-medium text-sm text-foreground">
                             {c.name || c.profileName || <span className="text-muted-foreground">Desconocido</span>}
                           </p>
-                          {/* Teléfono visible en mobile */}
-                          <p className="mt-0.5 font-mono text-xs text-muted-foreground sm:hidden">+{c.waId}</p>
                         </div>
                       </div>
                     </TableCell>
                     {/* Columna: Teléfono (hidden on mobile) */}
-                    <TableCell className="hidden sm:table-cell">
+                    <TableCell className="hidden sm:table-cell" data-label="Teléfono">
                       <span className="font-mono text-xs text-muted-foreground">+{c.waId}</span>
                     </TableCell>
                     {/* Columna: Etiquetas (hidden on small tablets) */}
-                    <TableCell className="hidden md:table-cell">
+                    <TableCell className="hidden md:table-cell" data-label="Etiquetas">
                       <div className="flex flex-wrap gap-1">
                         {visibleTags.map((tag) => (
                           <span
@@ -246,7 +244,7 @@ export function ContactsClient({
                       </div>
                     </TableCell>
                     {/* Columna: Acciones */}
-                    <TableCell className="pr-4">
+                    <TableCell className="pr-4" data-label="Acciones">
                       {/* Scope D: Acciones con tooltips accesibles */}
                       <div className="flex justify-end gap-1">
                         <Button
@@ -332,8 +330,9 @@ function ContactDialog({ contact, onClose, onSaved, baseUrl, allTags }: { contac
       </DialogHeader>
       <div className="space-y-3">
         <div className="space-y-1">
-          <Label>Número de WhatsApp (solo dígitos, sin +)</Label>
+          <Label htmlFor="contact-wa-id">Número de WhatsApp (solo dígitos, sin +)</Label>
           <Input
+            id="contact-wa-id"
             value={form.waId}
             onChange={(e) => setForm({ ...form, waId: e.target.value.replace(/\D/g, "") })}
             placeholder="51912345678"
@@ -341,12 +340,13 @@ function ContactDialog({ contact, onClose, onSaved, baseUrl, allTags }: { contac
           />
         </div>
         <div className="space-y-1">
-          <Label>Nombre</Label>
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          <Label htmlFor="contact-name">Nombre</Label>
+          <Input id="contact-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div className="space-y-1">
-          <Label>Etiquetas</Label>
+          <Label htmlFor="contact-tags">Etiquetas</Label>
           <SmartTagsCombobox
+            id="contact-tags"
             value={form.tags}
             onChange={(tags) => setForm({ ...form, tags })}
             suggestions={allTags}
@@ -354,8 +354,8 @@ function ContactDialog({ contact, onClose, onSaved, baseUrl, allTags }: { contac
           />
         </div>
         <div className="space-y-1">
-          <Label>Notas</Label>
-          <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          <Label htmlFor="contact-notes">Notas</Label>
+          <Textarea id="contact-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </div>
       </div>
       <DialogFooter>

@@ -10,6 +10,8 @@ interface SmartTagsComboboxProps {
   suggestions?: string[];
   placeholder?: string;
   className?: string;
+  /** Optional id for the inner input, to associate a <Label htmlFor>. */
+  id?: string;
 }
 
 /** Normalize tag for comparison: trim + lowercase */
@@ -29,6 +31,7 @@ export function SmartTagsCombobox({
   suggestions = [],
   placeholder = "Agregar etiqueta...",
   className,
+  id,
 }: SmartTagsComboboxProps) {
   const [input, setInput] = useState("");
   const [open, setOpen] = useState(false);
@@ -144,6 +147,7 @@ export function SmartTagsCombobox({
         ))}
         <input
           ref={inputRef}
+          id={id}
           type="text"
           value={input}
           onChange={(e) => {
