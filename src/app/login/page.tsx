@@ -76,7 +76,7 @@ function LoginForm() {
       const sessionRes = await fetch("/api/auth/session");
       const session = (await sessionRes.json()) as { user?: { email?: string } } | null;
       if (!session?.user?.email) {
-        setError(t("login.errorInvalid", "Correo electrónico o contraseña incorrectos。"));
+        setError(t("login.errorInvalid", "Correo electrónico o contraseña incorrectos."));
         setLoading(false);
         return;
       }
@@ -91,7 +91,7 @@ function LoginForm() {
       router.push(params.get("callbackUrl") || "/");
       router.refresh();
     } catch {
-      setError(t("login.errorGeneric", "Error al iniciar sesión. Verifica tus credenciales。"));
+      setError(t("login.errorGeneric", "Error al iniciar sesión. Verifica tus credenciales."));
       setLoading(false);
     }
   }
@@ -126,7 +126,7 @@ function LoginForm() {
             <p className="text-base leading-relaxed text-muted-foreground">
               {t(
                 "login.brandDescription",
-                "Administra mensajes, plantillas y contactos de WhatsApp desde un único panel de control profesional y seguro。",
+                "Administra mensajes, plantillas y contactos de WhatsApp desde un único panel de control profesional y seguro.",
               )}
             </p>
           </div>
@@ -179,7 +179,7 @@ function LoginForm() {
             <p className="text-sm text-muted-foreground">
               {t(
                 "login.description",
-                "Ingresa tus credenciales para acceder al panel de control。",
+                "Ingresa tus credenciales para acceder al panel de control.",
               )}
             </p>
           </div>
