@@ -385,4 +385,86 @@ export const en: Record<MessageKey, string> = {
   "broadcasts.success": "Broadcast started",
   "broadcasts.successRecipients": "{count} recipients queued.",
   "broadcasts.error": "Could not start",
+
+  // Users — page header
+  "users.title": "Users",
+  "users.descriptionTenant": "Manage users and members of this organization.",
+  "users.descriptionGlobal": "Manage who can access this panel. Agents only see the inbox and contacts.",
+
+  // Users — table headers
+  "users.table.user": "User",
+  "users.table.tenantAccess": "Tenant access",
+  "users.table.role": "Role",
+  "users.table.status": "Status",
+  "users.table.created": "Created",
+  "users.table.actions": "Actions",
+
+  // Users — badges and labels
+  "users.you": "You",
+  "users.member": "Member",
+  "users.notMember": "Not member",
+  "users.active": "Active",
+  "users.disabled": "Disabled",
+
+  // Users — role options
+  "users.role.agent": "Agent",
+  "users.role.agentDesc": "Inbox and contacts only",
+  "users.role.admin": "Admin",
+  "users.role.adminDesc": "Full access",
+  "users.role.systemAdmin": "System Admin",
+  "users.role.systemAdminDesc": "Tenant administration",
+
+  // Users — actions and titles
+  "users.action.resetPassword": "Reset password",
+  "users.action.delete": "Delete",
+  "users.action.activate": "Activate",
+  "users.action.deactivate": "Deactivate",
+  "users.action.addMember": "Add member to tenant",
+  "users.action.newUser": "New user",
+
+  // Users — create dialog
+  "users.create.title": "New user",
+  "users.create.description": "They sign in with this email and password.",
+  "users.create.labelName": "Name",
+  "users.create.labelEmail": "Email",
+  "users.create.labelPassword": "Password",
+  "users.create.placeholderPassword": "At least 8 characters",
+  "users.create.labelRole": "Role",
+  "users.create.success": "User created",
+  "users.create.error": "Could not create",
+
+  // Users — delete dialog
+  "users.delete.title": "Delete user",
+  "users.delete.description": "Delete",
+  "users.delete.undoWarning": "This action cannot be undone.",
+  "users.delete.confirm": "Delete",
+  "users.delete.success": "User deleted",
+
+  // Users — reset password dialog
+  "users.reset.title": "Reset password",
+  "users.reset.description": "Set a new password for",
+  "users.reset.labelPassword": "New password",
+  "users.reset.placeholderPassword": "At least 8 characters",
+  "users.reset.action": "Update password",
+  "users.reset.success": "Password updated",
+  "users.reset.error": "Could not reset",
+
+  // Users — add member dialog
+  "users.addMember.title": "Add member to tenant",
+  "users.addMember.description": "Assign an existing user to this tenant so they can access its inbox, contacts, and resources.",
+  "users.addMember.labelSelect": "Select user",
+  "users.addMember.placeholderSelect": "Choose an active user...",
+  "users.addMember.noUsers": "All active users are already assigned to this tenant.",
+  "users.addMember.action": "Add member",
+  "users.addMember.adding": "Adding...",
+  "users.addMember.success": "User assigned as tenant member",
+  "users.addMember.error": "Could not assign",
+
+  // Users — general errors
+  "users.error.update": "Update failed",
+  "users.error.delete": "Delete failed",
+  "users.error.general": "Failed",
+
+  // Users — loading
+  "users.loading": "Loading…",
 };

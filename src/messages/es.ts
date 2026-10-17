@@ -384,6 +384,88 @@ export const es = {
   "broadcasts.success": "Campaña iniciada",
   "broadcasts.successRecipients": "{count} destinatarios en cola.",
   "broadcasts.error": "No se pudo iniciar",
+
+  // Users — page header
+  "users.title": "Usuarios",
+  "users.descriptionTenant": "Administra los usuarios y miembros de esta organización.",
+  "users.descriptionGlobal": "Administra quién puede acceder a este panel. Los agentes solo ven la bandeja de entrada y los contactos.",
+
+  // Users — table headers
+  "users.table.user": "Usuario",
+  "users.table.tenantAccess": "Acceso al tenant",
+  "users.table.role": "Rol",
+  "users.table.status": "Estado",
+  "users.table.created": "Creado",
+  "users.table.actions": "Acciones",
+
+  // Users — badges and labels
+  "users.you": "Tú",
+  "users.member": "Miembro",
+  "users.notMember": "No miembro",
+  "users.active": "Activo",
+  "users.disabled": "Inactivo",
+
+  // Users — role options
+  "users.role.agent": "Agente",
+  "users.role.agentDesc": "Inbox y contactos únicamente",
+  "users.role.admin": "Administrador",
+  "users.role.adminDesc": "Acceso completo",
+  "users.role.systemAdmin": "Administrador del sistema",
+  "users.role.systemAdminDesc": "Administración del tenant",
+
+  // Users — actions and titles
+  "users.action.resetPassword": "Restablecer contraseña",
+  "users.action.delete": "Eliminar",
+  "users.action.activate": "Activar",
+  "users.action.deactivate": "Desactivar",
+  "users.action.addMember": "Agregar miembro al tenant",
+  "users.action.newUser": "Nuevo usuario",
+
+  // Users — create dialog
+  "users.create.title": "Nuevo usuario",
+  "users.create.description": "Inician sesión con este correo electrónico y contraseña.",
+  "users.create.labelName": "Nombre",
+  "users.create.labelEmail": "Correo electrónico",
+  "users.create.labelPassword": "Contraseña",
+  "users.create.placeholderPassword": "Al menos 8 caracteres",
+  "users.create.labelRole": "Rol",
+  "users.create.success": "Usuario creado",
+  "users.create.error": "No se pudo crear",
+
+  // Users — delete dialog
+  "users.delete.title": "Eliminar usuario",
+  "users.delete.description": "¿Eliminar a",
+  "users.delete.undoWarning": "Esta acción no se puede deshacer.",
+  "users.delete.confirm": "Eliminar",
+  "users.delete.success": "Usuario eliminado",
+
+  // Users — reset password dialog
+  "users.reset.title": "Restablecer contraseña",
+  "users.reset.description": "Establece una nueva contraseña para",
+  "users.reset.labelPassword": "Nueva contraseña",
+  "users.reset.placeholderPassword": "Al menos 8 caracteres",
+  "users.reset.action": "Actualizar contraseña",
+  "users.reset.success": "Contraseña actualizada",
+  "users.reset.error": "Error al restablecer",
+
+  // Users — add member dialog
+  "users.addMember.title": "Agregar miembro al tenant",
+  "users.addMember.description": "Asigna un usuario existente a este tenant para que pueda acceder a su inbox, contactos y recursos.",
+  "users.addMember.labelSelect": "Seleccionar usuario",
+  "users.addMember.placeholderSelect": "Elige un usuario activo...",
+  "users.addMember.noUsers": "Todos los usuarios activos ya están asignados a este tenant.",
+  "users.addMember.action": "Agregar",
+  "users.addMember.adding": "Agregando...",
+  "users.addMember.success": "Usuario agregado como miembro del tenant",
+  "users.addMember.error": "Error al agregar",
+
+  // Users — general errors
+  "users.error.update": "Error al actualizar",
+  "users.error.delete": "Error al eliminar",
+  "users.error.general": "Error",
+
+  // Users — loading
+  "users.loading": "Cargando…",
 } as const;
 
 export type MessageKey = keyof typeof es;

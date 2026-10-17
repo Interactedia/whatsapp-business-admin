@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
+import { useI18n } from "@/components/i18n/language-provider";
 
 type User = {
   id: string;
@@ -57,6 +58,7 @@ export function UsersClient({
   tenantId?: string;
   tenantName?: string;
 }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -93,16 +95,16 @@ export function UsersClient({
     mutationFn: (v: { id: string; body: Partial<User> }) =>
       apiFetch(`/api/users/${v.id}`, { method: "PATCH", body: JSON.stringify(v.body) }),
     onSuccess: invalidate,
-    onError: (e: Error) => toast({ variant: "destructive", title: "Update failed", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("users.error.update"), description: e.message }),
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => apiFetch(`/api/users/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       invalidate();
-      toast({ title: "User deleted" });
+      toast({ title: t("users.delete.success") });
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Delete failed", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("users.error.delete"), description: e.message }),
   });
 
   return (
@@ -111,12 +113,12 @@ export function UsersClient({
       <div className="flex flex-col gap-2 border-b bg-card px-4 py-5 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-6 sm:py-5">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Users
+            {t("users.title")}
           </h1>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
             {tenantId
-              ? "Administra los usuarios y miembros de esta organización."
-              : "Administra quién puede acceder a este panel. Los agentes solo ven la bandeja de entrada y los contactos."}
+              ? t("users.descriptionTenant")
+              : t("users.descriptionGlobal")}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -124,7 +126,7 @@ export function UsersClient({
             <Dialog open={addMemberOpen} onOpenChange={setAddMemberOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="h-9 gap-2 rounded-lg px-3 text-sm font-medium shadow-sm">
-                  <UserPlus className="h-4 w-4" /> Add member to tenant
+                  <UserPlus className="h-4 w-4" /> {t("users.action.addMember")}
                 </Button>
               </DialogTrigger>
               <AddTenantMemberDialog
@@ -141,7 +143,7 @@ export function UsersClient({
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button className="h-9 gap-2 rounded-lg px-4 text-sm font-medium shadow-sm">
-                <Plus className="h-4 w-4" /> New user
+                <Plus className="h-4 w-4" /> {t("users.action.newUser")}
               </Button>
             </DialogTrigger>
             <CreateUserDialog
@@ -158,19 +160,19 @@ export function UsersClient({
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-4">Usuario</TableHead>
-                {tenantId && <TableHead className="w-36">Acceso al tenant</TableHead>}
-                <TableHead className="w-40">Rol</TableHead>
-                <TableHead className="w-28">Estado</TableHead>
-                <TableHead className="w-40">Creado</TableHead>
-                <TableHead className="w-28 pr-4 text-right">Acciones</TableHead>
+                <TableHead className="pl-4">{t("users.table.user")}</TableHead>
+                {tenantId && <TableHead className="w-36">{t("users.table.tenantAccess")}</TableHead>}
+                <TableHead className="w-40">{t("users.table.role")}</TableHead>
+                <TableHead className="w-28">{t("users.table.status")}</TableHead>
+                <TableHead className="w-40">{t("users.table.created")}</TableHead>
+                <TableHead className="w-28 pr-4 text-right">{t("users.table.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading && (
                 <TableRow>
                   <TableCell colSpan={tenantId ? 6 : 5} className="py-8 text-center text-muted-foreground">
-                    Loading…
+                    {t("users.loading")}
                   </TableCell>
                 </TableRow>
               )}
@@ -185,7 +187,7 @@ export function UsersClient({
                   .join("");
                 return (
                   <TableRow key={u.id}>
-                    <TableCell data-label="Usuario">
+                    <TableCell data-label={t("users.table.user")}>
                       <div className="flex min-w-0 items-center gap-3">
                         <Avatar className="h-9 w-9 shrink-0">
                           <AvatarFallback>{initials}</AvatarFallback>
@@ -200,7 +202,7 @@ export function UsersClient({
                                 variant="outline"
                                 className="shrink-0 rounded px-1.5 py-0 text-[10px] font-medium text-muted-foreground"
                               >
-                                Tú
+                                {t("users.you")}
                               </Badge>
                             )}
                           </div>
@@ -211,58 +213,58 @@ export function UsersClient({
                       </div>
                     </TableCell>
                     {tenantId && (
-                      <TableCell data-label="Acceso al tenant">
+                      <TableCell data-label={t("users.table.tenantAccess")}>
                         {isMember ? (
                           <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300">
-                            <Check className="h-3 w-3 mr-1 inline" /> Member
+                            <Check className="h-3 w-3 mr-1 inline" /> {t("users.member")}
                           </Badge>
                         ) : (
-                          <span className="text-xs text-muted-foreground">Not member</span>
+                          <span className="text-xs text-muted-foreground">{t("users.notMember")}</span>
                         )}
                       </TableCell>
                     )}
-                    <TableCell data-label="Rol">
+                    <TableCell data-label={t("users.table.role")}>
                       <Select
                         value={u.role}
                         onValueChange={(role) => patch.mutate({ id: u.id, body: { role: role as User["role"] } })}
                         disabled={self || (!canManageSystemAdmins && u.role === "SYSTEM_ADMIN")}
                       >
-                        <SelectTrigger className="h-8 w-36 rounded-md" aria-label={`Rol de ${u.name}`}>
+                        <SelectTrigger className="h-8 w-36 rounded-md" aria-label={`${t("users.table.role")}: ${u.name}`}>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="AGENT">Agent</SelectItem>
-                          <SelectItem value="ADMIN">Admin</SelectItem>
+                          <SelectItem value="AGENT">{t("users.role.agent")}</SelectItem>
+                          <SelectItem value="ADMIN">{t("users.role.admin")}</SelectItem>
                           {canManageSystemAdmins && (
-                            <SelectItem value="SYSTEM_ADMIN">System Admin</SelectItem>
+                            <SelectItem value="SYSTEM_ADMIN">{t("users.role.systemAdmin")}</SelectItem>
                           )}
                         </SelectContent>
                       </Select>
                     </TableCell>
-                    <TableCell data-label="Estado">
+                    <TableCell data-label={t("users.table.status")}>
                       <button
                         type="button"
                         disabled={self || (!canManageSystemAdmins && u.role === "SYSTEM_ADMIN")}
                         onClick={() => patch.mutate({ id: u.id, body: { active: !u.active } })}
-                        aria-label={u.active ? `Desactivar a ${u.name}` : `Activar a ${u.name}`}
-                        title={u.active ? "Desactivar" : "Activar"}
+                        aria-label={u.active ? `${t("users.action.deactivate")} ${u.name}` : `${t("users.action.activate")} ${u.name}`}
+                        title={u.active ? t("users.action.deactivate") : t("users.action.activate")}
                         className="rounded-md p-0.5 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Badge variant={u.active ? "success" : "secondary"}>
-                          {u.active ? "Active" : "Disabled"}
+                          {u.active ? t("users.active") : t("users.disabled")}
                         </Badge>
                       </button>
                     </TableCell>
-                    <TableCell data-label="Creado" className="text-xs tabular-nums text-muted-foreground">
+                    <TableCell data-label={t("users.table.created")} className="text-xs tabular-nums text-muted-foreground">
                       {formatDateTime(u.createdAt)}
                     </TableCell>
-                    <TableCell data-label="Acciones" className="text-right">
+                    <TableCell data-label={t("users.table.actions")} className="text-right">
                       <div className="flex justify-end gap-1.5">
                         <Button
                           variant="ghost"
                           size="icon"
-                          title="Reset password"
-                          aria-label={`Reset password for ${u.name}`}
+                          title={t("users.action.resetPassword")}
+                          aria-label={`${t("users.action.resetPassword")} ${u.name}`}
                           className="rounded-md text-muted-foreground hover:text-foreground"
                           disabled={!canManageSystemAdmins && u.role === "SYSTEM_ADMIN"}
                           onClick={() => setResetFor(u)}
@@ -272,8 +274,8 @@ export function UsersClient({
                         <Button
                           variant="ghost"
                           size="icon"
-                          title="Delete"
-                          aria-label={`Delete ${u.name}`}
+                          title={t("users.action.delete")}
+                          aria-label={`${t("users.action.delete")} ${u.name}`}
                           className="rounded-md hover:bg-destructive/10 hover:text-destructive"
                           disabled={self || (!canManageSystemAdmins && u.role === "SYSTEM_ADMIN")}
                           onClick={() => setDeleteFor(u)}
@@ -303,15 +305,16 @@ export function UsersClient({
         {deleteFor && (
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Delete user</DialogTitle>
+              <DialogTitle>{t("users.delete.title")}</DialogTitle>
               <DialogDescription>
-                ¿Eliminar a <span className="font-medium text-foreground">{deleteFor.name}</span> (
-                {deleteFor.email})? Esta acción no se puede deshacer.
+                {t("users.delete.description")}{" "}
+                <span className="font-medium text-foreground">{deleteFor.name}</span>
+                {" ("}{deleteFor.email})? {t("users.delete.undoWarning")}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button variant="outline" size="sm" onClick={() => setDeleteFor(null)}>
-                Cancel
+                {t("broadcasts.cancel")}
               </Button>
               <Button
                 variant="destructive"
@@ -321,7 +324,7 @@ export function UsersClient({
                   remove.mutate(deleteFor.id, { onSettled: () => setDeleteFor(null) });
                 }}
               >
-                Delete
+                {t("users.delete.confirm")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -340,54 +343,55 @@ function CreateUserDialog({
   onCreated: () => void;
   canCreateSystemAdmin: boolean;
 }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "AGENT" as User["role"] });
 
   const create = useMutation({
     mutationFn: () => apiFetch("/api/users", { method: "POST", body: JSON.stringify(form) }),
     onSuccess: () => {
-      toast({ title: "User created" });
+      toast({ title: t("users.create.success") });
       onCreated();
       onClose();
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Create failed", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("users.create.error"), description: e.message }),
   });
 
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>New user</DialogTitle>
-        <DialogDescription>They sign in with this email and password.</DialogDescription>
+        <DialogTitle>{t("users.create.title")}</DialogTitle>
+        <DialogDescription>{t("users.create.description")}</DialogDescription>
       </DialogHeader>
       <div className="space-y-3">
         <div className="space-y-1">
-          <Label>Name</Label>
+          <Label>{t("users.create.labelName")}</Label>
           <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div className="space-y-1">
-          <Label>Email</Label>
+          <Label>{t("users.create.labelEmail")}</Label>
           <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
         </div>
         <div className="space-y-1">
-          <Label>Password</Label>
+          <Label>{t("users.create.labelPassword")}</Label>
           <Input
             type="text"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="At least 8 characters"
+            placeholder={t("users.create.placeholderPassword")}
           />
         </div>
         <div className="space-y-1">
-          <Label>Role</Label>
+          <Label>{t("users.create.labelRole")}</Label>
           <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v as User["role"] })}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="AGENT">Agent — inbox &amp; contacts only</SelectItem>
-              <SelectItem value="ADMIN">Admin — full access</SelectItem>
+              <SelectItem value="AGENT">{t("users.role.agent")} — {t("users.role.agentDesc")}</SelectItem>
+              <SelectItem value="ADMIN">{t("users.role.admin")} — {t("users.role.adminDesc")}</SelectItem>
               {canCreateSystemAdmin && (
-                <SelectItem value="SYSTEM_ADMIN">System Admin — tenant administration</SelectItem>
+                <SelectItem value="SYSTEM_ADMIN">{t("users.role.systemAdmin")} — {t("users.role.systemAdminDesc")}</SelectItem>
               )}
             </SelectContent>
           </Select>
@@ -395,10 +399,10 @@ function CreateUserDialog({
       </div>
       <DialogFooter>
         <Button variant="outline" size="sm" onClick={onClose}>
-          Cancel
+          {t("broadcasts.cancel")}
         </Button>
         <Button size="sm" onClick={() => create.mutate()} disabled={create.isPending}>
-          Create
+          {t("users.create.title")}
         </Button>
       </DialogFooter>
     </DialogContent>
@@ -406,34 +410,37 @@ function CreateUserDialog({
 }
 
 function ResetPasswordDialog({ user, onDone }: { user: User; onDone: () => void }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [password, setPassword] = useState("");
   const reset = useMutation({
     mutationFn: () =>
       apiFetch(`/api/users/${user.id}`, { method: "PATCH", body: JSON.stringify({ password }) }),
     onSuccess: () => {
-      toast({ title: "Password updated" });
+      toast({ title: t("users.reset.success") });
       onDone();
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Failed", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("users.reset.error"), description: e.message }),
   });
 
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>Reset password</DialogTitle>
-        <DialogDescription>Set a new password for {user.name}.</DialogDescription>
+        <DialogTitle>{t("users.reset.title")}</DialogTitle>
+        <DialogDescription>
+          {t("users.reset.description")}{" "}<span className="font-medium text-foreground">{user.name}</span>.
+        </DialogDescription>
       </DialogHeader>
       <div className="space-y-1">
-        <Label>New password</Label>
-        <Input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" />
+        <Label>{t("users.reset.labelPassword")}</Label>
+        <Input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t("users.reset.placeholderPassword")} />
       </div>
       <DialogFooter>
         <Button variant="outline" size="sm" onClick={onDone}>
-          Cancel
+          {t("broadcasts.cancel")}
         </Button>
         <Button size="sm" disabled={password.length < 8 || reset.isPending} onClick={() => reset.mutate()}>
-          Update password
+          {t("users.reset.action")}
         </Button>
       </DialogFooter>
     </DialogContent>
@@ -451,6 +458,7 @@ function AddTenantMemberDialog({
   onClose: () => void;
   onAdded: () => void;
 }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [selectedUserId, setSelectedUserId] = useState("");
 
@@ -461,33 +469,33 @@ function AddTenantMemberDialog({
         body: JSON.stringify({ userId: selectedUserId }),
       }),
     onSuccess: () => {
-      toast({ title: "User assigned as tenant member" });
+      toast({ title: t("users.addMember.success") });
       onAdded();
     },
     onError: (e: Error) => {
-      toast({ variant: "destructive", title: "Assignment failed", description: e.message });
+      toast({ variant: "destructive", title: t("users.addMember.error"), description: e.message });
     },
   });
 
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>Add member to tenant</DialogTitle>
+        <DialogTitle>{t("users.addMember.title")}</DialogTitle>
         <DialogDescription>
-          Assign an existing user to this tenant so they can access its inbox, contacts, and resources.
+          {t("users.addMember.description")}
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-4 py-2">
         {users.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            All active users are already assigned to this tenant.
+            {t("users.addMember.noUsers")}
           </p>
         ) : (
           <div className="space-y-2">
-            <Label htmlFor="member-user-select">Select user</Label>
+            <Label htmlFor="member-user-select">{t("users.addMember.labelSelect")}</Label>
             <Select value={selectedUserId} onValueChange={setSelectedUserId}>
               <SelectTrigger id="member-user-select">
-                <SelectValue placeholder="Choose an active user..." />
+                <SelectValue placeholder={t("users.addMember.placeholderSelect")} />
               </SelectTrigger>
               <SelectContent>
                 {users.map((u) => (
@@ -502,14 +510,14 @@ function AddTenantMemberDialog({
       </div>
       <DialogFooter>
         <Button variant="outline" size="sm" onClick={onClose}>
-          Cancel
+          {t("broadcasts.cancel")}
         </Button>
         <Button
           size="sm"
           disabled={!selectedUserId || add.isPending || users.length === 0}
           onClick={() => add.mutate()}
         >
-          {add.isPending ? "Adding..." : "Add member"}
+          {add.isPending ? t("users.addMember.adding") : t("users.addMember.action")}
         </Button>
       </DialogFooter>
     </DialogContent>
