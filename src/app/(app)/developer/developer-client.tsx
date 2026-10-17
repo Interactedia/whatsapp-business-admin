@@ -13,20 +13,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
+import { useI18n } from "@/components/i18n/language-provider";
 import { ApiDocs } from "./api-docs";
 
 type TenantOption = { id: string; name: string };
 type ApiKey = { id: string; name: string; keyPrefix: string; lastUsedAt: string | null; createdAt: string; tenantId: string | null };
 
 export function DeveloperClient({ baseUrl, tenants }: { baseUrl: string; tenants: TenantOption[] }) {
+  const { t } = useI18n();
   return (
     <div className="flex h-full flex-col">
-      <PageHeader title="API" description="Programmatic access to send messages, templates and broadcasts." />
+      <PageHeader title={t("developer.title")} description={t("developer.description")} />
       <div className="min-h-0 flex-1 overflow-auto p-3 scroll-thin sm:p-4">
         <Tabs defaultValue="keys">
           <TabsList>
-            <TabsTrigger value="keys">API Keys</TabsTrigger>
-            <TabsTrigger value="docs">Documentation</TabsTrigger>
+            <TabsTrigger value="keys">{t("developer.tabKeys")}</TabsTrigger>
+            <TabsTrigger value="docs">{t("developer.tabDocs")}</TabsTrigger>
           </TabsList>
           <TabsContent value="keys">
             <ApiKeys tenants={tenants} />
@@ -41,6 +43,7 @@ export function DeveloperClient({ baseUrl, tenants }: { baseUrl: string; tenants
 }
 
 function ApiKeys({ tenants }: { tenants: TenantOption[] }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -56,22 +59,21 @@ function ApiKeys({ tenants }: { tenants: TenantOption[] }) {
     mutationFn: (id: string) => apiFetch(`/api/apikeys/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       invalidate();
-      toast({ title: "API key revoked" });
+      toast({ title: t("developer.revoke.success") });
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Revoke failed", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("developer.revoke.error"), description: e.message }),
   });
 
   return (
     <div className="max-w-3xl space-y-3">
       <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-muted-foreground">
-          Use these keys to authenticate requests to <code className="rounded-sm bg-muted px-1">/api/v1</code>.
-          Keep them secret — treat a key like a password.
+          {t("developer.keys.info")}
         </p>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm">
-              <Plus className="h-4 w-4" /> New key
+              <Plus className="h-4 w-4" /> {t("developer.createKey")}
             </Button>
           </DialogTrigger>
           <CreateKeyDialog
@@ -90,42 +92,42 @@ function ApiKeys({ tenants }: { tenants: TenantOption[] }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead className="w-56">Key</TableHead>
-              <TableHead className="w-40">Last used</TableHead>
-              <TableHead className="w-40">Created</TableHead>
-              <TableHead className="w-16 text-right">Revoke</TableHead>
+              <TableHead>{t("developer.colName")}</TableHead>
+              <TableHead className="w-56">{t("developer.colPrefix")}</TableHead>
+              <TableHead className="w-40">{t("developer.colLastUsed")}</TableHead>
+              <TableHead className="w-40">{t("developer.colCreated")}</TableHead>
+              <TableHead className="w-16 text-right">{t("developer.colActions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">Loading…</TableCell>
+                <TableCell colSpan={5} className="py-6 text-center text-muted-foreground">{t("developer.loading")}</TableCell>
               </TableRow>
             )}
             {!isLoading && keys.length === 0 && (
               <TableRow>
                 <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                   <KeyRound className="mx-auto mb-1 h-6 w-6 opacity-40" />
-                  No API keys yet.
+                  {t("developer.emptyTitle")}
                 </TableCell>
               </TableRow>
             )}
             {keys.map((k) => (
               <TableRow key={k.id}>
-                <TableCell data-label="Name" className="font-medium">{k.name}</TableCell>
-                <TableCell data-label="Key" className="break-all font-mono text-xs text-muted-foreground">{k.keyPrefix}</TableCell>
-                <TableCell data-label="Last used" className="text-xs text-muted-foreground">
-                  {k.lastUsedAt ? formatDateTime(k.lastUsedAt) : "never"}
+                <TableCell data-label={t("developer.colName")} className="font-medium">{k.name}</TableCell>
+                <TableCell data-label={t("developer.colPrefix")} className="break-all font-mono text-xs text-muted-foreground">{k.keyPrefix}</TableCell>
+                <TableCell data-label={t("developer.colLastUsed")} className="text-xs text-muted-foreground">
+                  {k.lastUsedAt ? formatDateTime(k.lastUsedAt) : t("developer.neverUsed")}
                 </TableCell>
-                <TableCell data-label="Created" className="text-xs text-muted-foreground">{formatDateTime(k.createdAt)}</TableCell>
-                <TableCell data-label="Revoke" className="text-right">
+                <TableCell data-label={t("developer.colCreated")} className="text-xs text-muted-foreground">{formatDateTime(k.createdAt)}</TableCell>
+                <TableCell data-label={t("developer.colActions")} className="text-right">
                   <Button
                     variant="ghost"
                     size="icon"
-                    title="Revoke"
+                    title={t("developer.revoke.action")}
                     onClick={() => {
-                      if (confirm(`Revoke "${k.name}"? Any integration using it will stop working.`)) revoke.mutate(k.id);
+                      if (confirm(t("developer.revoke.confirm").replace("{name}", `"${k.name}"?`))) revoke.mutate(k.id);
                     }}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
@@ -153,26 +155,27 @@ function CreateKeyDialog({
   onClose: () => void;
   onCreated: (v: { name: string; key: string }) => void;
 }) {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [tenantId, setTenantId] = useState(tenants[0]?.id ?? "");
   const create = useMutation({
     mutationFn: () => apiFetch<{ name: string; key: string }>("/api/apikeys", { method: "POST", body: JSON.stringify({ name, tenantId }) }),
     onSuccess: (r) => onCreated({ name: r.name, key: r.key }),
-    onError: (e: Error) => toast({ variant: "destructive", title: "Could not create key", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("developer.create.error"), description: e.message }),
   });
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>New API key</DialogTitle>
-        <DialogDescription>Give it a name so you can recognise it later.</DialogDescription>
+        <DialogTitle>{t("developer.createDialog.title")}</DialogTitle>
+        <DialogDescription>{t("developer.createDialog.hint")}</DialogDescription>
       </DialogHeader>
       <div className="space-y-1">
-        <Label>Name</Label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Production server" />
+        <Label>{t("developer.createDialog.nameLabel")}</Label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("developer.createDialog.namePlaceholder")} />
       </div>
       <div className="space-y-1">
-        <Label>Tenant</Label>
+        <Label>{t("developer.createDialog.tenantLabel")}</Label>
         <select
           className="h-9 w-full rounded-md border bg-background px-3 text-sm"
           value={tenantId}
@@ -185,24 +188,27 @@ function CreateKeyDialog({
         </select>
       </div>
       <DialogFooter>
-        <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-        <Button size="sm" disabled={!name.trim() || !tenantId || create.isPending} onClick={() => create.mutate()}>Create key</Button>
+        <Button variant="outline" size="sm" onClick={onClose}>{t("developer.createDialog.cancel")}</Button>
+        <Button size="sm" disabled={!name.trim() || !tenantId || create.isPending} onClick={() => create.mutate()}>
+          {create.isPending ? t("developer.createDialog.creating") : t("developer.createDialog.create")}
+        </Button>
       </DialogFooter>
     </DialogContent>
   );
 }
 
 function RevealKeyDialog({ name, apiKey, onClose }: { name: string; apiKey: string; onClose: () => void }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>API key created</DialogTitle>
-        <DialogDescription>“{name}”</DialogDescription>
+        <DialogTitle>{t("developer.revealDialog.title")}</DialogTitle>
+        <DialogDescription>&ldquo;{name}&rdquo;</DialogDescription>
       </DialogHeader>
       <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-800 dark:text-amber-300">
         <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-        Copy this key now — it won’t be shown again. Store it somewhere secure.
+        {t("developer.revealDialog.warning")}
       </div>
       <div className="flex items-center gap-2">
         <code className="flex-1 overflow-x-auto rounded-md bg-muted px-2 py-1.5 font-mono text-xs">{apiKey}</code>
@@ -212,14 +218,13 @@ function RevealKeyDialog({ name, apiKey, onClose }: { name: string; apiKey: stri
           onClick={() => {
             navigator.clipboard.writeText(apiKey);
             setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
           }}
         >
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         </Button>
       </div>
       <DialogFooter>
-        <Button size="sm" onClick={onClose}>Done</Button>
+        <Button size="sm" onClick={onClose}>{t("developer.revealDialog.done")}</Button>
       </DialogFooter>
     </DialogContent>
   );

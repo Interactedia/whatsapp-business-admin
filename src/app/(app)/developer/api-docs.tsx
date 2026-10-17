@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { useI18n } from "@/components/i18n/language-provider";
 
 type Method = "GET" | "POST";
 
@@ -21,6 +22,7 @@ const METHOD_VARIANT: Record<Method, BadgeProps["variant"]> = {
 };
 
 function CodeBlock({ code }: { code: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   return (
     <div className="group relative">
@@ -35,7 +37,7 @@ function CodeBlock({ code }: { code: string }) {
           setTimeout(() => setCopied(false), 1500);
         }}
         className="absolute right-2 top-2 rounded-md bg-white/10 p-1.5 text-zinc-200 opacity-0 transition-opacity hover:bg-white/20 group-hover:opacity-100"
-        title="Copy"
+        title={t("apiDocs.copy")}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
@@ -44,6 +46,7 @@ function CodeBlock({ code }: { code: string }) {
 }
 
 function EndpointCard({ ep }: { ep: Endpoint }) {
+  const { t } = useI18n();
   return (
     <div className="rounded-lg border">
       <div className="flex items-center gap-2 border-b bg-muted/30 px-3 py-2">
@@ -55,12 +58,12 @@ function EndpointCard({ ep }: { ep: Endpoint }) {
         <p className="text-xs text-muted-foreground">{ep.description}</p>
         {ep.request && (
           <div className="space-y-1">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Request</div>
+            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t("apiDocs.request")}</div>
             <CodeBlock code={ep.request} />
           </div>
         )}
         <div className="space-y-1">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Response</div>
+          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{t("apiDocs.response")}</div>
           <CodeBlock code={ep.response} />
         </div>
       </div>
@@ -351,88 +354,68 @@ export function ApiDocs({ baseUrl }: { baseUrl: string }) {
     },
   ];
 
+  const { t } = useI18n();
+
   return (
     <div className="max-w-3xl space-y-6">
       {/* Overview */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Base URL</h2>
+        <h2 className="text-sm font-semibold">{t("apiDocs.baseUrl")}</h2>
         <CodeBlock code={`${baseUrl}/api/v1`} />
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Authentication</h2>
+        <h2 className="text-sm font-semibold">{t("apiDocs.authentication")}</h2>
         <p className="text-xs text-muted-foreground">
-          Every request must include your API key. Preferred: the{" "}
-          <code className="rounded-sm bg-muted px-1">X-API-Key</code> header. Also accepted:{" "}
-          <code className="rounded-sm bg-muted px-1">Authorization: Bearer &lt;key&gt;</code>, a{" "}
-          <code className="rounded-sm bg-muted px-1">?apikey=</code> query parameter, or an{" "}
-          <code className="rounded-sm bg-muted px-1">apikey</code> field in the JSON body. Create keys in
-          the <strong>API Keys</strong> tab.
+          {t("apiDocs.auth.text")}
         </p>
         <CodeBlock code={`X-API-Key: ${KEY}`} />
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Key rules</h2>
+        <h2 className="text-sm font-semibold">{t("apiDocs.keyRules")}</h2>
         <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-          <li>
-            <strong>Phone numbers:</strong> full international format, digits only — no{" "}
-            <code className="rounded-sm bg-muted px-1">+</code>, spaces or dashes. e.g.{" "}
-            <code className="rounded-sm bg-muted px-1">919812345678</code>.
-          </li>
-          <li>
-            <strong>24-hour window:</strong> plain <strong>text and media</strong> can only be sent
-            within 24 h of the customer’s last message. Outside that window you must send an{" "}
-            <strong>approved template</strong> (templates have no time limit).
-          </li>
-          <li>
-            <strong>Media by link:</strong> the URL must be publicly reachable — Meta downloads it.
-            Alternatively pass a Meta media <code className="rounded-sm bg-muted px-1">id</code>. Captions
-            apply to image/video/document; documents take a <code className="rounded-sm bg-muted px-1">filename</code>.
-          </li>
+          <li dangerouslySetInnerHTML={{ __html: t("apiDocs.keyRules.phones") }} />
+          <li>{t("apiDocs.keyRules.window")}</li>
+          <li dangerouslySetInnerHTML={{ __html: t("apiDocs.keyRules.media") }} />
         </ul>
       </section>
 
       {/* Read endpoints */}
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold">Account &amp; templates</h2>
+        <h2 className="text-sm font-semibold">{t("apiDocs.accountTemplates")}</h2>
         {readEndpoints.map((ep, i) => <EndpointCard key={i} ep={ep} />)}
       </section>
 
       {/* Text & media */}
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold">Send text &amp; media</h2>
+        <h2 className="text-sm font-semibold">{t("apiDocs.sendTextMedia")}</h2>
         {textMedia.map((ep, i) => <EndpointCard key={i} ep={ep} />)}
       </section>
 
       {/* Templates */}
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold">Send templates</h2>
-        <p className="text-xs text-muted-foreground">
-          One endpoint, many shapes. Mix and match <code className="rounded-sm bg-muted px-1">header_text</code>,{" "}
-          <code className="rounded-sm bg-muted px-1">header_media</code>,{" "}
-          <code className="rounded-sm bg-muted px-1">body_variables</code> and{" "}
-          <code className="rounded-sm bg-muted px-1">buttons</code> to match your template’s structure.
-        </p>
+        <h2 className="text-sm font-semibold">{t("apiDocs.sendTemplates")}</h2>
+        <p className="text-xs text-muted-foreground">{t("apiDocs.templates.note")}</p>
         {templates.map((ep, i) => <EndpointCard key={i} ep={ep} />)}
       </section>
 
       {/* Broadcast */}
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold">Broadcast</h2>
+        <h2 className="text-sm font-semibold">{t("apiDocs.broadcast")}</h2>
         <EndpointCard ep={broadcast} />
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold">WhatsApp Flows</h2>
-        <p className="text-xs text-muted-foreground">Direct Flow launches follow the 24-hour rule. To initiate one later, use an approved template containing a Flow button through the existing messages endpoint.</p>
+        <h2 className="text-sm font-semibold">{t("apiDocs.flows")}</h2>
+        <p className="text-xs text-muted-foreground">{t("apiDocs.flows.note")}</p>
         {flows.map((ep, i) => <EndpointCard key={i} ep={ep} />)}
       </section>
 
       {/* Errors */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Errors</h2>
-        <p className="text-xs text-muted-foreground">Errors return a non-2xx status with a consistent body:</p>
+        <h2 className="text-sm font-semibold">{t("apiDocs.errors")}</h2>
+        <p className="text-xs text-muted-foreground">{t("apiDocs.errors.note")}</p>
         <CodeBlock code={`{
   "status": "error",
   "message": "Invalid or missing API key"
