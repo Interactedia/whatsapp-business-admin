@@ -7,6 +7,45 @@ import { MessageCircle, AlertCircle, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useI18n } from "@/components/i18n/language-provider";
+import { cn } from "@/lib/utils";
+
+function LocaleSwitch() {
+  const { locale, setLocale } = useI18n();
+  return (
+    <div className="absolute right-4 top-4 flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => setLocale("es")}
+        className={cn(
+          "px-2 py-1 text-xs rounded transition-colors",
+          locale === "es"
+            ? "bg-primary text-primary-foreground font-medium"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+        aria-label="Cambiar a español"
+        title="Español"
+      >
+        ES
+      </button>
+      <span className="text-muted-foreground/50" aria-hidden>/</span>
+      <button
+        type="button"
+        onClick={() => setLocale("en")}
+        className={cn(
+          "px-2 py-1 text-xs rounded transition-colors",
+          locale === "en"
+            ? "bg-primary text-primary-foreground font-medium"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+        aria-label="Switch to English"
+        title="English"
+      >
+        EN
+      </button>
+    </div>
+  );
+}
 
 export default function LoginPage() {
   return (
@@ -19,6 +58,7 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +76,7 @@ function LoginForm() {
       const sessionRes = await fetch("/api/auth/session");
       const session = (await sessionRes.json()) as { user?: { email?: string } } | null;
       if (!session?.user?.email) {
-        setError("Correo electrónico o contraseña incorrectos.");
+        setError(t("login.errorInvalid", "Correo electrónico o contraseña incorrectos。"));
         setLoading(false);
         return;
       }
@@ -51,13 +91,15 @@ function LoginForm() {
       router.push(params.get("callbackUrl") || "/");
       router.refresh();
     } catch {
-      setError("Error al iniciar sesión. Verifica tus credenciales.");
+      setError(t("login.errorGeneric", "Error al iniciar sesión. Verifica tus credenciales。"));
       setLoading(false);
     }
   }
 
   return (
-    <div className="flex min-h-dvh">
+    <div className="relative flex min-h-dvh">
+      <LocaleSwitch />
+
       {/* Left panel - Branding (hidden on mobile) */}
       <div className="hidden lg:flex lg:w-1/2 lg:flex-col lg:justify-center lg:bg-gradient-to-br lg:from-primary/5 lg:via-background lg:to-primary/10 lg:px-12 xl:px-16">
         <div className="space-y-6">
@@ -68,10 +110,10 @@ function LoginForm() {
             </div>
             <div>
               <h1 className="text-xl font-semibold tracking-tight text-foreground">
-                WhatsApp Business Admin
+                {t("login.brandTitle", "WhatsApp Business Admin")}
               </h1>
               <p className="text-sm text-muted-foreground">
-                Panel de control empresarial
+                {t("login.brandSubtitle", "Panel de control empresarial")}
               </p>
             </div>
           </div>
@@ -79,10 +121,13 @@ function LoginForm() {
           {/* Tagline */}
           <div className="space-y-4">
             <p className="text-3xl font-semibold leading-tight tracking-tight text-foreground xl:text-4xl">
-              Gestiona tus conversaciones de negocio con confianza
+              {t("login.brandTagline", "Gestiona tus conversaciones de negocio con confianza")}
             </p>
             <p className="text-base leading-relaxed text-muted-foreground">
-              Administra mensajes, plantillas y contactos de WhatsApp desde un único panel de control profesional y seguro.
+              {t(
+                "login.brandDescription",
+                "Administra mensajes, plantillas y contactos de WhatsApp desde un único panel de control profesional y seguro。",
+              )}
             </p>
           </div>
 
@@ -93,7 +138,7 @@ function LoginForm() {
                 <Shield className="h-4 w-4 text-primary" />
               </div>
               <span className="text-sm text-muted-foreground">
-                Conexión segura con la API oficial de Meta
+                {t("login.brandSecureConnection", "Conexión segura con la API oficial de Meta")}
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -101,7 +146,7 @@ function LoginForm() {
                 <Zap className="h-4 w-4 text-primary" />
               </div>
               <span className="text-sm text-muted-foreground">
-                Mensajes en tiempo real y reconciled state
+                {t("login.brandRealtimeMessages", "Mensajes en tiempo real y reconciled state")}
               </span>
             </div>
           </div>
@@ -117,9 +162,11 @@ function LoginForm() {
           </div>
           <div>
             <h1 className="text-base font-semibold text-foreground">
-              WhatsApp Business Admin
+              {t("login.mobileTitle", "WhatsApp Business Admin")}
             </h1>
-            <p className="text-xs text-muted-foreground">Panel de control</p>
+            <p className="text-xs text-muted-foreground">
+              {t("login.mobileSubtitle", "Panel de control")}
+            </p>
           </div>
         </div>
 
@@ -127,10 +174,13 @@ function LoginForm() {
           {/* Form header */}
           <div className="space-y-1.5">
             <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-              Iniciar sesión
+              {t("login.title", "Iniciar sesión")}
             </h2>
             <p className="text-sm text-muted-foreground">
-              Ingresa tus credenciales para acceder al panel de control.
+              {t(
+                "login.description",
+                "Ingresa tus credenciales para acceder al panel de control。",
+              )}
             </p>
           </div>
 
@@ -138,7 +188,7 @@ function LoginForm() {
           <form onSubmit={onSubmit} className="space-y-5">
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-sm font-medium text-foreground">
-                Correo electrónico
+                {t("login.emailLabel", "Correo electrónico")}
               </Label>
               <Input
                 id="email"
@@ -146,7 +196,7 @@ function LoginForm() {
                 autoComplete="username"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@empresa.com"
+                placeholder={t("login.emailPlaceholder", "tu@empresa.com")}
                 required
                 disabled={loading}
                 className="h-11"
@@ -155,7 +205,7 @@ function LoginForm() {
 
             <div className="space-y-1.5">
               <Label htmlFor="password" className="text-sm font-medium text-foreground">
-                Contraseña
+                {t("login.passwordLabel", "Contraseña")}
               </Label>
               <Input
                 id="password"
@@ -163,7 +213,7 @@ function LoginForm() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder={t("login.passwordPlaceholder", "••••••••")}
                 required
                 disabled={loading}
                 className="h-11"
@@ -185,17 +235,17 @@ function LoginForm() {
               {loading ? (
                 <span className="flex items-center gap-2">
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  Iniciando sesión…
+                  {t("login.submitting", "Iniciando sesión…")}
                 </span>
               ) : (
-                "Iniciar sesión"
+                t("login.submit", "Iniciar sesión")
               )}
             </Button>
           </form>
 
           {/* Footer */}
           <p className="text-center text-xs text-muted-foreground">
-            Acceso restringido a usuarios autorizados
+            {t("login.footer", "Acceso restringido a usuarios autorizados")}
           </p>
         </div>
       </div>

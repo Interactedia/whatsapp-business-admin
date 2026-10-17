@@ -916,6 +916,27 @@ export const en: Record<MessageKey, string> = {
   "queueObservability.disclaimerText":
     "BullMQ completion and outbox publication are not Meta delivery evidence. ",
   "queueObservability.disclaimerEmphasis":
-    "UNCERTAIN means the external Meta outcome is unknown and must not be treated as FAILED or automatically retryable.",
+    "UNCERTAIN means the external Meta outcome is unknown and must not be treated as FAILED or automatically retryable。",
+
+  // ── Login ────────────────────────────────────────────────────────────────────
+  "login.title": "Sign in",
+  "login.description": "Enter your credentials to access the control panel。",
+  "login.emailLabel": "Email address",
+  "login.emailPlaceholder": "your@company.com",
+  "login.passwordLabel": "Password",
+  "login.passwordPlaceholder": "••••••••",
+  "login.submit": "Sign in",
+  "login.submitting": "Signing in…",
+  "login.footer": "Restricted to authorized users only",
+  "login.errorInvalid": "Incorrect email or password。",
+  "login.errorGeneric": "Failed to sign in. Please check your credentials。",
+  "login.brandTitle": "WhatsApp Business Admin",
+  "login.brandSubtitle": "Business control panel",
+  "login.brandTagline": "Manage your business conversations with confidence",
+  "login.brandDescription": "Manage WhatsApp messages, templates, and contacts from a single professional and secure control panel。",
+  "login.brandSecureConnection": "Secure connection with Meta's official API",
+  "login.brandRealtimeMessages": "Real-time messages and reconciled state",
+  "login.mobileTitle": "WhatsApp Business Admin",
+  "login.mobileSubtitle": "Control panel",
 
 };
