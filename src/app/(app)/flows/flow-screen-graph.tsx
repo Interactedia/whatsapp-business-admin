@@ -22,24 +22,27 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/i18n/language-provider";
 import type { FlowScreen } from "@/lib/whatsapp/flow-types";
 
 type ScreenNodeData = { title: string; screenId: string; terminal?: boolean; active: boolean };
 type RoutingEdgeData = { onDelete: () => void };
 
 function ScreenNode({ data }: { data: ScreenNodeData }) {
+  const { t } = useI18n();
   return <div className={cn("min-w-[150px] rounded-md border bg-card px-3 py-2 text-xs shadow-xs", data.active && "border-primary ring-1 ring-primary/30")}>
     <Handle type="target" position={Position.Left} className="h-2! w-2! border-none! bg-primary!" />
     <div className="truncate font-medium">{data.title}</div>
     <div className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
       <span className="truncate">{data.screenId}</span>
-      {data.terminal && <span className="shrink-0 rounded-sm bg-emerald-100 px-1 text-emerald-700">terminal</span>}
+      {data.terminal && <span className="shrink-0 rounded-sm bg-emerald-100 px-1 text-emerald-700">{t("builder.terminalMark")}</span>}
     </div>
     <Handle type="source" position={Position.Right} className="h-2! w-2! border-none! bg-primary!" />
   </div>;
 }
 
 function RoutingEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, data }: EdgeProps) {
+  const { t } = useI18n();
   const [edgePath, labelX, labelY] = getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
   const onDelete = (data as RoutingEdgeData | undefined)?.onDelete;
   return <>
@@ -47,7 +50,7 @@ function RoutingEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
     <EdgeLabelRenderer>
       <button
         type="button"
-        title="Remove this route"
+        title={t("graph.removeRoute")}
         onClick={(event) => { event.stopPropagation(); onDelete?.(); }}
         style={{ position: "absolute", transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: "all" }}
         className="flex h-4 w-4 items-center justify-center rounded-full border bg-background text-[10px] leading-none text-destructive shadow-xs hover:bg-destructive hover:text-white"
@@ -93,6 +96,7 @@ export function FlowScreenGraph({ screens, routingModel, currentScreenId, onSele
   onSelectScreen: (id: string) => void;
   onChangeRouting: (next: Record<string, string[]>) => void;
 }) {
+  const { t } = useI18n();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<ScreenNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
@@ -145,7 +149,7 @@ export function FlowScreenGraph({ screens, routingModel, currentScreenId, onSele
   const onNodeClick = useCallback((_event: unknown, node: Node) => onSelectScreen(node.id), [onSelectScreen]);
 
   if (screens.length < 2) {
-    return <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">Add another screen to define routing visually.</div>;
+    return <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">{t("graph.addAnotherScreen")}</div>;
   }
 
   return <div className="h-64 overflow-hidden rounded-md border bg-muted/10">
