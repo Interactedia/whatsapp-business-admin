@@ -823,6 +823,64 @@ export const es = {
   "admin.recentActivity.unverified": "unverified",
   "admin.recentActivity.unresolved": "Sin resolver",
 
+  // ── Tenants Admin ─────────────────────────────────────────────────────────
+  "tenants.admin.title": "Administración de tenants",
+  "tenants.admin.description":
+    "Gestión centralizada de organizaciones y tenants para administradores del sistema.",
+  "tenants.admin.newTenant": "Nuevo tenant",
+  "tenants.admin.table.organization": "Organización",
+  "tenants.admin.table.members": "Miembros",
+  "tenants.admin.badge.member_one": "miembro",
+  "tenants.admin.badge.member_other": "miembros",
+  "tenants.admin.table.created": "Creado",
+  "tenants.admin.table.actions": "Acciones",
+  "tenants.admin.loading": "Cargando tenants...",
+  "tenants.admin.empty":
+    'No se encontraron tenants. Haz clic en "Nuevo tenant" para crear uno.',
+  "tenants.admin.memberDetail": "Detalle de miembro",
+  // Create tenant dialog
+  "tenants.create.title": "Crear nuevo tenant",
+  "tenants.create.description":
+    "Las organizaciones proporcionan aislamiento estricto de assets, contactos y conversaciones de WhatsApp.",
+  "tenants.create.label": "Nombre del tenant",
+  "tenants.create.placeholder": "p. ej. Acme Corporation",
+  "tenants.create.cancel": "Cancelar",
+  "tenants.create.submitting": "Creando...",
+  "tenants.create.submit": "Crear tenant",
+  "tenants.create.success": "Tenant creado exitosamente",
+  "tenants.create.error": "Error al crear tenant",
+  // Members dialog
+  "tenants.members.title": "Detalle de miembros",
+  "tenants.members.tenantId": "ID del tenant:",
+  "tenants.members.activeCount": "Miembros activos",
+  "tenants.members.activeCount_one": "Miembro activo",
+  "tenants.members.addMember": "Agregar miembro",
+  "tenants.members.selectLabel": "Seleccionar usuario existente para asignar como miembro del tenant",
+  "tenants.members.selectPlaceholder": "Elige un usuario...",
+  "tenants.members.confirm": "Confirmar",
+  "tenants.members.confirming": "Agregando...",
+  "tenants.members.cancel": "Cancelar",
+  "tenants.members.loading": "Cargando miembros...",
+  "tenants.members.empty": "Aún no hay miembros asignados a este tenant.",
+  "tenants.members.table.user": "Usuario",
+  "tenants.members.table.email": "Correo",
+  "tenants.members.table.role": "Rol",
+  "tenants.members.table.added": "Agregado",
+  "tenants.members.table.actions": "Acciones",
+  "tenants.members.remove": "Quitar",
+  "tenants.members.close": "Cerrar",
+  "tenants.members.addSuccess": "Usuario agregado al tenant",
+  "tenants.members.addError": "Error al agregar miembro",
+  "tenants.members.removeSuccess": "Miembro eliminado de la organización",
+  "tenants.members.removeError": "Error al eliminar miembro",
+  // Remove member confirmation
+  "tenants.remove.title": "¿Quitar miembro de la organización?",
+  "tenants.remove.description":
+    "Este usuario perderá acceso a esta organización. Su cuenta y sus accesos a otras organizaciones no serán eliminados.",
+  "tenants.remove.cancel": "Cancelar",
+  "tenants.remove.confirming": "Quitando...",
+  "tenants.remove.confirm": "Quitar acceso",
+
 } as const;
 
 export type MessageKey = keyof typeof es;
