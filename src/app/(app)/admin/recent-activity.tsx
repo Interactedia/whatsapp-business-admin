@@ -8,6 +8,7 @@ import { formatInboxTimestamp } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { useI18n } from "@/components/i18n/language-provider";
 
 /**
  * Recent Activity section for the SYSTEM_ADMIN dashboard.
@@ -80,24 +81,29 @@ function EmptyState({ text }: { text: string }) {
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useI18n();
   return (
     <div role="alert" className="flex flex-col items-center gap-2 px-4 py-10 text-center">
       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
         <AlertTriangle className="h-5 w-5 text-destructive" />
       </div>
-      <p className="text-sm font-medium text-foreground">Error al consultar</p>
+      <p className="text-sm font-medium text-foreground">{t("admin.recentActivity.error", "Error al consultar")}</p>
       <p className="max-w-xs text-xs text-muted-foreground">{message}</p>
       <Button variant="outline" size="sm" onClick={onRetry}>
-        Reintentar
+        {t("admin.recentActivity.retry", "Reintentar")}
       </Button>
     </div>
   );
 }
 
 function StaleBanner({ message }: { message: string }) {
+  const { t } = useI18n();
   return (
     <div role="status" className="border-b bg-destructive/5 px-4 py-2 text-xs text-destructive">
-      Sin actualizar: {message}. Mostrando últimos datos válidos.
+      {t("admin.recentActivity.staleBanner", "Sin actualizar: {message}. Mostrando últimos datos válidos.").replace(
+        "{message}",
+        message,
+      )}
     </div>
   );
 }
@@ -132,6 +138,8 @@ function Panel({
 }
 
 export function RecentActivitySection() {
+  const { t } = useI18n();
+
   const apiQuery = useQuery({
     queryKey: ["admin-recent-activity", "api"],
     queryFn: () => apiFetch<Feed<ApiItem>>("/api/logs?type=api&pageSize=5&page=1"),
@@ -157,21 +165,27 @@ export function RecentActivitySection() {
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="recent-activity-title" className="text-base font-semibold text-foreground">
-            Actividad reciente
+            {t("admin.recentActivity.title", "Actividad reciente")}
           </h2>
           <p className="text-sm text-muted-foreground">
-            Últimas llamadas API y eventos de Webhooks registrados en la plataforma.
+            {t(
+              "admin.recentActivity.description",
+              "Últimas llamadas API y eventos de Webhooks registrados en la plataforma.",
+            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
           {lastUpdated > 0 && (
             <span className="text-xs tabular-nums text-muted-foreground">
-              Actualizado {formatInboxTimestamp(lastUpdated)}
+              {t("admin.recentActivity.lastUpdated", "Actualizado {time}").replace(
+                "{time}",
+                formatInboxTimestamp(lastUpdated),
+              )}
             </span>
           )}
           <Button variant="outline" size="sm" onClick={refresh} disabled={refetching}>
             {refetching ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-            Actualizar
+            {t("admin.recentActivity.refresh", "Actualizar")}
           </Button>
         </div>
       </div>
@@ -179,18 +193,18 @@ export function RecentActivitySection() {
       <div className="grid gap-4 md:grid-cols-2">
         {/* API calls panel */}
         <Panel
-          title="Últimas llamadas API"
+          title={t("admin.recentActivity.api.title", "Últimas llamadas API")}
           href="/logs?tab=api"
-          linkLabel="Ver todos los logs →"
+          linkLabel={t("admin.recentActivity.api.link", "Ver todos los logs →")}
           staleError={apiQuery.data ? apiError : null}
         >
           {apiQuery.isLoading ? (
-            <div aria-busy="true" aria-label="Cargando llamadas API">
+            <div aria-busy="true" aria-label={t("admin.recentActivity.api.loading", "Cargando llamadas API")}>
               <SkeletonRows />
             </div>
           ) : apiQuery.data ? (
             apiQuery.data.items.length === 0 ? (
-              <EmptyState text="Sin llamadas API registradas." />
+              <EmptyState text={t("admin.recentActivity.api.empty", "Sin llamadas API registradas.")} />
             ) : (
               <ul className="divide-y">
                 {apiQuery.data.items.map((log) => (
@@ -222,24 +236,24 @@ export function RecentActivitySection() {
               </ul>
             )
           ) : (
-            <ErrorState message={apiError ?? "Error desconocido"} onRetry={() => void apiQuery.refetch()} />
+            <ErrorState message={apiError ?? t("admin.recentActivity.error", "Error al consultar")} onRetry={() => void apiQuery.refetch()} />
           )}
         </Panel>
 
         {/* Webhooks panel — same source and semantics as the /logs Webhooks tab */}
         <Panel
-          title="Últimos Webhooks"
+          title={t("admin.recentActivity.webhook.title", "Últimos Webhooks")}
           href="/logs?tab=webhook"
-          linkLabel="Ver todos los webhooks →"
+          linkLabel={t("admin.recentActivity.webhook.link", "Ver todos los webhooks →")}
           staleError={webhookQuery.data ? webhookError : null}
         >
           {webhookQuery.isLoading ? (
-            <div aria-busy="true" aria-label="Cargando webhooks">
+            <div aria-busy="true" aria-label={t("admin.recentActivity.webhook.loading", "Cargando webhooks")}>
               <SkeletonRows />
             </div>
           ) : webhookQuery.data ? (
             webhookQuery.data.items.length === 0 ? (
-              <EmptyState text="Sin webhooks registrados." />
+              <EmptyState text={t("admin.recentActivity.webhook.empty", "Sin webhooks registrados.")} />
             ) : (
               <ul className="divide-y">
                 {webhookQuery.data.items.map((ev) => (
@@ -253,14 +267,16 @@ export function RecentActivitySection() {
                       </span>
                       {!ev.signatureValid && (
                         <Badge variant="warning" className="shrink-0 font-normal">
-                          unverified
+                          {t("admin.recentActivity.unverified", "unverified")}
                         </Badge>
                       )}
                       <Badge
                         variant={ev.processedOk ? "success" : "destructive"}
                         className="shrink-0 font-normal"
                       >
-                        {ev.processedOk ? "ok" : "error"}
+                        {ev.processedOk
+                          ? t("admin.recentActivity.status.ok", "ok")
+                          : t("admin.recentActivity.status.error", "error")}
                       </Badge>
                     </div>
                     {hasTenant(ev) && (
@@ -273,7 +289,7 @@ export function RecentActivitySection() {
               </ul>
             )
           ) : (
-            <ErrorState message={webhookError ?? "Error desconocido"} onRetry={() => void webhookQuery.refetch()} />
+            <ErrorState message={webhookError ?? t("admin.recentActivity.error", "Error al consultar")} onRetry={() => void webhookQuery.refetch()} />
           )}
         </Panel>
       </div>

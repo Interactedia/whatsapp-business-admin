@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
+import { useI18n } from "@/components/i18n/language-provider";
 
 type Tenant = {
   id: string;
@@ -58,6 +59,7 @@ type User = {
 };
 
 export function AdminTenantsClient() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
@@ -72,13 +74,16 @@ export function AdminTenantsClient() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="Tenant Administration"
-        description="Centralized organization and tenant management for system administrators."
+        title={t("admin.tenants.title", "Tenant Administration")}
+        description={t(
+          "admin.tenants.description",
+          "Centralized organization and tenant management for system administrators.",
+        )}
         actions={
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
               <Button size="sm">
-                <Plus className="h-4 w-4 mr-1" /> New tenant
+                <Plus className="h-4 w-4 mr-1" /> {t("admin.tenants.newTenant", "New tenant")}
               </Button>
             </DialogTrigger>
             <CreateTenantDialog
@@ -97,29 +102,29 @@ export function AdminTenantsClient() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-4">Organization</TableHead>
-                <TableHead>Members</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right pr-4">Actions</TableHead>
+                <TableHead className="pl-4">{t("admin.tenants.table.organization", "Organization")}</TableHead>
+                <TableHead>{t("admin.tenants.table.members", "Members")}</TableHead>
+                <TableHead>{t("admin.tenants.table.created", "Created")}</TableHead>
+                <TableHead className="text-right pr-4">{t("admin.tenants.table.actions", "Actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                    Loading tenants...
+                    {t("admin.tenants.loading", "Loading tenants...")}
                   </TableCell>
                 </TableRow>
               ) : tenants.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                    No tenants found. Click &quot;New tenant&quot; to create one.
+                    {t("admin.tenants.empty", 'No tenants found. Click "New tenant" to create one.')}
                   </TableCell>
                 </TableRow>
               ) : (
-                tenants.map((t) => (
+                tenants.map((tenant) => (
                   <TableRow
-                    key={t.id}
+                    key={tenant.id}
                     className="group hover:bg-accent/50"
                   >
                     <TableCell className="pl-4 py-3">
@@ -128,25 +133,28 @@ export function AdminTenantsClient() {
                           <Building2 className="h-4 w-4 text-primary" />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{t.name}</p>
-                          <p className="text-xs font-mono text-muted-foreground truncate">{t.id}</p>
+                          <p className="text-sm font-medium text-foreground truncate">{tenant.name}</p>
+                          <p className="text-xs font-mono text-muted-foreground truncate">{tenant.id}</p>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="py-3">
                       <Badge variant="secondary" className="font-normal">
-                        {t._count?.tenantMemberships ?? 0} member{t._count?.tenantMemberships !== 1 ? "s" : ""}
+                        {tenant._count?.tenantMemberships ?? 0}{" "}
+                        {(tenant._count?.tenantMemberships ?? 0) === 1
+                          ? t("admin.tenants.member_one", "member")
+                          : t("admin.tenants.member_other", "members")}
                       </Badge>
                     </TableCell>
-                    <TableCell className="py-3 text-sm text-muted-foreground">{formatDateTime(t.createdAt)}</TableCell>
+                    <TableCell className="py-3 text-sm text-muted-foreground">{formatDateTime(tenant.createdAt)}</TableCell>
                     <TableCell className="py-3 pr-4 text-right">
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => setSelectedTenant(t)}
+                        onClick={() => setSelectedTenant(tenant)}
                         className="hover:bg-accent"
                       >
-                        Member detail
+                        {t("admin.tenants.memberDetail", "Member detail")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -171,6 +179,7 @@ export function AdminTenantsClient() {
 }
 
 function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const { toast } = useToast();
 
@@ -178,20 +187,27 @@ function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCre
     mutationFn: (body: { name: string }) =>
       apiFetch<Tenant>("/api/tenants", { method: "POST", body: JSON.stringify(body) }),
     onSuccess: () => {
-      toast({ title: "Tenant created successfully" });
+      toast({ title: t("admin.tenants.create.success", "Tenant created successfully") });
       onCreated();
     },
     onError: (err: Error) => {
-      toast({ variant: "destructive", title: "Failed to create tenant", description: err.message });
+      toast({
+        variant: "destructive",
+        title: t("admin.tenants.create.error", "Failed to create tenant"),
+        description: err.message,
+      });
     },
   });
 
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>Create new tenant</DialogTitle>
+        <DialogTitle>{t("admin.tenants.createTitle", "Create new tenant")}</DialogTitle>
         <DialogDescription>
-          Organizations provide strict tenant isolation for WhatsApp assets, contacts, and conversations.
+          {t(
+            "admin.tenants.createDescription",
+            "Organizations provide strict tenant isolation for WhatsApp assets, contacts, and conversations.",
+          )}
         </DialogDescription>
       </DialogHeader>
       <form
@@ -203,10 +219,10 @@ function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCre
         className="space-y-4"
       >
         <div className="space-y-2">
-          <Label htmlFor="tenant-name">Tenant name</Label>
+          <Label htmlFor="tenant-name">{t("admin.tenants.create.nameLabel", "Tenant name")}</Label>
           <Input
             id="tenant-name"
-            placeholder="e.g. Acme Corporation"
+            placeholder={t("admin.tenants.create.namePlaceholder", "e.g. Acme Corporation")}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -214,10 +230,12 @@ function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCre
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
+            {t("admin.tenants.create.cancel", "Cancel")}
           </Button>
           <Button type="submit" disabled={create.isPending || !name.trim()}>
-            {create.isPending ? "Creating..." : "Create tenant"}
+            {create.isPending
+              ? t("admin.tenants.create.creating", "Creating...")
+              : t("admin.tenants.create.submit", "Create tenant")}
           </Button>
         </DialogFooter>
       </form>
@@ -226,6 +244,7 @@ function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCre
 }
 
 function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () => void }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
@@ -254,13 +273,17 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
         body: JSON.stringify({ userId }),
       }),
     onSuccess: () => {
-      toast({ title: "User added to tenant" });
+      toast({ title: t("admin.tenants.addMember.success", "User added to tenant") });
       setSelectedUserId("");
       setAddOpen(false);
       invalidateMembers();
     },
     onError: (err: Error) => {
-      toast({ variant: "destructive", title: "Failed to add member", description: err.message });
+      toast({
+        variant: "destructive",
+        title: t("admin.tenants.addMember.error", "Failed to add member"),
+        description: err.message,
+      });
     },
   });
 
@@ -271,12 +294,16 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
         { method: "DELETE" },
       ),
     onSuccess: () => {
-      toast({ title: "Member removed from organization" });
+      toast({ title: t("admin.tenants.members.removeSuccess", "Member removed from organization") });
       setRemoveFor(null);
       invalidateMembers();
     },
     onError: (err: Error) => {
-      toast({ variant: "destructive", title: "Failed to remove member", description: err.message });
+      toast({
+        variant: "destructive",
+        title: t("admin.tenants.members.removeError", "Failed to remove member"),
+        description: err.message,
+      });
       setRemoveFor(null);
     },
   });
@@ -289,27 +316,40 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Member detail — {tenant.name}</DialogTitle>
+          <DialogTitle>
+            {t("admin.tenants.members.title", "Member detail — {tenant}").replace("{tenant}", tenant.name)}
+          </DialogTitle>
           <DialogDescription>
-            Tenant ID: <span className="font-mono text-xs">{tenant.id}</span>
+            {t("admin.tenants.members.tenantId", "Tenant ID:")}{" "}
+            <span className="font-mono text-xs">{tenant.id}</span>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold">Active Members ({members.length})</h4>
+            <h4 className="text-sm font-semibold">
+              {t("admin.tenants.members.active", "Active Members ({count})").replace(
+                "{count}",
+                String(members.length),
+              )}
+            </h4>
             <Button size="sm" onClick={() => setAddOpen(true)} disabled={availableUsers.length === 0}>
-              <UserPlus className="h-4 w-4 mr-1" /> Add member
+              <UserPlus className="h-4 w-4 mr-1" /> {t("admin.tenants.addMemberTitle", "Add member")}
             </Button>
           </div>
 
           {addOpen && (
             <div className="rounded-md border p-3 bg-muted/30 space-y-3">
-              <Label htmlFor="select-user">Select existing user to assign as tenant member</Label>
+              <Label htmlFor="select-user">
+                {t(
+                  "admin.tenants.members.selectLabel",
+                  "Select existing user to assign as tenant member",
+                )}
+              </Label>
               <div className="flex items-center gap-2">
                 <Select value={selectedUserId} onValueChange={setSelectedUserId}>
                   <SelectTrigger id="select-user" className="flex-1">
-                    <SelectValue placeholder="Choose a user..." />
+                    <SelectValue placeholder={t("admin.tenants.members.selectPlaceholder", "Choose a user...")} />
                   </SelectTrigger>
                   <SelectContent>
                     {availableUsers.map((u) => (
@@ -324,10 +364,12 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
                   disabled={!selectedUserId || addMember.isPending}
                   onClick={() => addMember.mutate(selectedUserId)}
                 >
-                  {addMember.isPending ? "Adding..." : "Confirm"}
+                  {addMember.isPending
+                    ? t("admin.tenants.addMember.adding", "Adding...")
+                    : t("admin.tenants.members.confirm", "Confirm")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setAddOpen(false)}>
-                  Cancel
+                  {t("admin.tenants.addMember.cancel", "Cancel")}
                 </Button>
               </div>
             </div>
@@ -337,24 +379,26 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Added</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("admin.tenants.members.table.user", "User")}</TableHead>
+                  <TableHead>{t("admin.tenants.members.table.email", "Email")}</TableHead>
+                  <TableHead>{t("admin.tenants.members.table.role", "Role")}</TableHead>
+                  <TableHead>{t("admin.tenants.members.table.added", "Added")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("admin.tenants.members.table.actions", "Actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loadingMembers ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
-                      Loading members...
+                      {t("admin.tenants.members.loading", "Loading members...")}
                     </TableCell>
                   </TableRow>
                 ) : members.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-muted-foreground py-4">
-                      No members assigned to this tenant yet.
+                      {t("admin.tenants.members.empty", "No members assigned to this tenant yet.")}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -376,7 +420,8 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
                           disabled={removeMember.isPending}
                           onClick={() => setRemoveFor(m)}
                         >
-                          <UserMinus className="h-3.5 w-3.5 mr-1" /> Quitar
+                          <UserMinus className="h-3.5 w-3.5 mr-1" />{" "}
+                          {t("admin.tenants.members.remove", "Quitar")}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -389,7 +434,7 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
-            Close
+            {t("admin.tenants.members.close", "Close")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -398,10 +443,12 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
         {removeFor && (
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>¿Quitar miembro de la organización?</DialogTitle>
+              <DialogTitle>{t("admin.tenants.members.removeTitle", "¿Quitar miembro de la organización?")}</DialogTitle>
               <DialogDescription>
-                Este usuario perderá acceso a esta organización. Su cuenta y sus accesos a otras
-                organizaciones no serán eliminados.
+                {t(
+                  "admin.tenants.members.removeDesc",
+                  "Este usuario perderá acceso a esta organización. Su cuenta y sus accesos a otras organizaciones no serán eliminados.",
+                )}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -411,7 +458,7 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
                 disabled={removeMember.isPending}
                 onClick={() => setRemoveFor(null)}
               >
-                Cancelar
+                {t("admin.tenants.create.cancel", "Cancelar")}
               </Button>
               <Button
                 variant="destructive"
@@ -419,7 +466,9 @@ function TenantMembersDialog({ tenant, onClose }: { tenant: Tenant; onClose: () 
                 disabled={removeMember.isPending}
                 onClick={() => removeMember.mutate(removeFor.userId)}
               >
-                {removeMember.isPending ? "Quitando..." : "Quitar acceso"}
+                {removeMember.isPending
+                  ? t("admin.tenants.removePending", "Quitando...")
+                  : t("admin.tenants.removeAccess", "Quitar acceso")}
               </Button>
             </DialogFooter>
           </DialogContent>
