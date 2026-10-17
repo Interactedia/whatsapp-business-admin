@@ -974,6 +974,146 @@ export const es = {
   "login.mobileTitle": "WhatsApp Business Admin",
   "login.mobileSubtitle": "Panel de control",
 
+  // ── Settings ────────────────────────────────────────────────────────────────
+  // Page header
+  "settings.title": "Configuración",
+  "settings.description": "Administra las conexiones y el funcionamiento de tu organización.",
+
+  // Tabs
+  "settings.tab.meta": "Conexión Meta",
+  "settings.tab.automation": "Vista previa de automatización",
+
+  // Tab change warning
+  "settings.tab.unsavedChanges": "Tienes cambios sin guardar en Conexión con Meta. ¿Deseas cambiar de pestaña sin guardar?",
+
+  // Toasts
+  "settings.toast.saved": "Configuración guardada",
+  "settings.toast.saveError": "Error al guardar",
+  "settings.toast.testSuccess": "Conexión exitosa",
+  "settings.toast.testError": "Prueba fallida",
+  "settings.toast.keyRotated": "Clave rotada",
+  "settings.toast.keyRotateError": "Error de clave",
+  "settings.toast.connectorAdded": "Conector agregado",
+  "settings.toast.connectorError": "Error de conector",
+  "settings.toast.deleted": "Eliminado",
+  "settings.toast.deleteError": "Error al eliminar",
+
+  // Meta Configuration Card
+  "settings.meta.title": "Configuración de Meta",
+  "settings.meta.description": "Credenciales de tu app de WhatsApp Business.",
+  "settings.meta.wabaId": "Business Account ID",
+  "settings.meta.phoneNumberId": "Phone Number ID",
+  "settings.meta.phoneNumber": "Número de teléfono",
+  "settings.meta.configured": "configurado",
+  "settings.meta.placeholder.wabaId": "123456789",
+  "settings.meta.placeholder.phoneNumberId": "987654321",
+
+  // Connection indicator
+  "settings.connectionIndicator.title": "Estado de conexión",
+  "settings.connectionIndicator.connected": "Conectado",
+  "settings.connectionIndicator.disconnected": "Desconectado",
+  "settings.connectionIndicator.lastTest": "Última prueba",
+  "settings.connectionIndicator.success": "Conexión exitosa",
+  "settings.connectionIndicator.noTest": "No se ha realizado una prueba de conexión",
+
+  // Access Token Card
+  "settings.accessToken.title": "Access Token",
+  "settings.accessToken.description": "Token de acceso permanente de la app de Meta.",
+  "settings.accessToken.placeholder.empty": "EAxxxx...",
+  "settings.accessToken.placeholder.keep": "•••••••• (dejar en blanco para mantener)",
+
+  // Webhook Configuration Card
+  "settings.webhook.title": "Configuración de Webhook",
+  "settings.webhook.description": "Configura el webhook para recibir eventos de WhatsApp.",
+  "settings.webhook.callbackUrl": "Webhook Callback URL",
+  "settings.webhook.callbackPlaceholder": "https://tu-dominio.com/api/webhooks/whatsapp",
+  "settings.webhook.verifyToken": "Verify Token",
+  "settings.webhook.verifyTokenPlaceholder": "Token de verificación para webhook",
+
+  // App Secret Card
+  "settings.appSecret.title": "App Secret",
+  "settings.appSecret.description": "Secret de tu aplicación de Meta para verificar webhooks.",
+  "settings.appSecret.placeholder.empty": "App Secret",
+  "settings.appSecret.placeholder.keep": "•••••••• (dejar en blanco para mantener)",
+
+  // Flow Encryption Card
+  "settings.flowEncryption.title": "Cifrado de WhatsApp Flow",
+  "settings.flowEncryption.description": "Los Flow dinámicos requieren una clave RSA registrada. Rotar mantiene la clave anterior disponible por 24 horas.",
+  "settings.flowEncryption.registered": "Registrada",
+  "settings.flowEncryption.notConfigured": "No hay clave de cifrado Flow configurada.",
+  "settings.flowEncryption.rotate": "Rotar clave",
+  "settings.flowEncryption.configure": "Configurar clave",
+  "settings.flowEncryption.confirmRotate": "¿Rotar la clave de cifrado Flow registrada?",
+  "settings.flowEncryption.confirmConfigure": "¿Generar y registrar una clave de cifrado Flow?",
+
+  // Flow Connectors Card
+  "settings.flowConnectors.title": "Conectores de Flow Dinámico",
+  "settings.flowConnectors.description": "Destinos HTTPS aprobados que las pantallas dinámicas pueden llamar.",
+  "settings.flowConnectors.name": "Nombre",
+  "settings.flowConnectors.namePlaceholder": "Nombre del conector",
+  "settings.flowConnectors.baseUrl": "URL base",
+  "settings.flowConnectors.baseUrlPlaceholder": "https://api.ejemplo.com/flows/",
+  "settings.flowConnectors.auth": "Autenticación",
+  "settings.flowConnectors.authNone": "Sin auth",
+  "settings.flowConnectors.authBearer": "Bearer token",
+  "settings.flowConnectors.authBasic": "Basic auth",
+  "settings.flowConnectors.authHeader": "Header personalizado",
+  "settings.flowConnectors.tokenPlaceholder": "Bearer token (cifrado en reposo)",
+  "settings.flowConnectors.usernamePlaceholder": "Usuario",
+  "settings.flowConnectors.passwordPlaceholder": "Contraseña",
+  "settings.flowConnectors.headerNamePlaceholder": "Nombre del header",
+  "settings.flowConnectors.headerValuePlaceholder": "Valor del header",
+  "settings.flowConnectors.deleteConfirm": "¿Eliminar conector \"{name}\"?",
+  "settings.flowConnectors.empty": "No hay conectores configurados.",
+
+  // Action buttons
+  "settings.button.save": "Guardar configuración",
+  "settings.button.testConnection": "Probar conexión",
+  "settings.button.testing": "Probando…",
+
+  // ── Automation Preview ───────────────────────────────────────────────────────
+  "settings.automationPreview.bannerTitle": "Vista previa — Sin configuración activa",
+  "settings.automationPreview.bannerDescription": "Esta pestaña muestra una previsualización de las opciones de automatización. La configuración real estará disponible cuando se habilite el contrato de Copilot.",
+
+  // Copilot card
+  "settings.automation.copilot.title": "Copilot",
+  "settings.automation.copilot.description": "Permite que la inteligencia artificial atienda conversaciones cuando esté autorizada.",
+  "settings.automation.copilot.enable": "Habilitar atención mediante IA",
+  "settings.automation.copilot.enableHint": "Disponible cuando se habilite Copilot.",
+
+  // Handoff card
+  "settings.automation.handoff.title": "Atención y transferencia",
+  "settings.automation.handoff.description": "Configura cómo se gestionará la transición entre atención automática y humana.",
+  "settings.automation.handoff.policy": "Política de transferencia",
+  "settings.automation.handoff.humanTransfer": "Transferencia humana",
+  "settings.automation.handoff.humanTransferDesc": "Cuando un operador responde, la conversación pasa a atención humana.",
+  "settings.automation.handoff.copilotReactivate": "Reactivación de Copilot",
+  "settings.automation.handoff.copilotReactivateDesc": "La reactivación de Copilot requiere intervención autorizada del operador.",
+  "settings.automation.handoff.policyHint": "Estas políticas se activarán cuando Copilot esté habilitado.",
+
+  // Follow-up card
+  "settings.automation.followup.title": "Seguimiento automático",
+  "settings.automation.followup.description": "Configura recordatorios cuando el cliente deja de responder.",
+  "settings.automation.followup.enable": "Habilitar seguimiento",
+  "settings.automation.followup.enableHint": "Envía recordatorios al cliente después de un período de inactividad.",
+  "settings.automation.followup.timing": "Temporización de recordatorios",
+  "settings.automation.followup.firstReminder": "Primer recordatorio",
+  "settings.automation.followup.unit": "Unidad",
+  "settings.automation.followup.unitMinutes": "Minutos",
+  "settings.automation.followup.unitHours": "Horas",
+  "settings.automation.followup.maxReminders": "Máximo de recordatorios",
+  "settings.automation.followup.allowedHours": "Horario permitido",
+  "settings.automation.followup.from": "Desde",
+  "settings.automation.followup.to": "Hasta",
+  "settings.automation.followup.timezone": "Zona horaria",
+  "settings.automation.followup.messageType": "Tipo de mensaje",
+  "settings.automation.followup.messageTypePredefined": "Mensaje predefinido",
+  "settings.automation.followup.messageTypeAI": "Generado por IA",
+  "settings.automation.followup.cancellationConditions": "Condiciones de cancelación",
+  "settings.automation.followup.cancelOnReply": "Cancelar al recibir respuesta del cliente",
+  "settings.automation.followup.cancelOnClose": "Cancelar al cerrar conversación",
+  "settings.automation.followup.disclaimer": "Los valores mostrados son ilustrativos. La configuración real estará disponible cuando se implemente el backend de seguimiento.",
+
   // ── Inbox ────────────────────────────────────────────────────────────────────
   // Conversation list
   "inbox.markAsRead": "Marcar como leído",

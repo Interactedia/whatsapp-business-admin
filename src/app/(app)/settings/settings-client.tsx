@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, CheckCircle2, XCircle, RefreshCw, Save, KeyRound, Plus, Trash2, Sparkles, ArrowRightLeft, Bell } from "lucide-react";
 import { apiFetch } from "@/lib/fetcher";
+import { useI18n } from "@/components/i18n/language-provider";
 import { PageHeader } from "@/components/shell/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +59,7 @@ type AutomationPreview = {
 export function SettingsClient({ tenantId }: { tenantId: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<string>("meta");
   const [metaFormEdited, setMetaFormEdited] = useState(false);
 
@@ -148,7 +150,7 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
       qc.invalidateQueries({ queryKey: ["settings", tenantId] });
       setMetaFormEdited(false);
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Error al guardar", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("settings.toast.saveError"), description: e.message }),
   });
 
   const test = useMutation({
@@ -163,7 +165,7 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
         toast({ title: "Conectado", description: r.verifiedName });
       }
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Prueba fallida", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("settings.toast.testError"), description: e.message }),
   });
 
   const rotateFlowKey = useMutation({
@@ -172,7 +174,7 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
       toast({ title: "Clave Rotada" });
       qc.invalidateQueries({ queryKey: ["flow-key", tenantId] });
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Error de clave", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("settings.toast.keyRotateError"), description: e.message }),
   });
 
   const addConnector = useMutation({
@@ -182,23 +184,23 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
         body: JSON.stringify(connector),
       }),
     onSuccess: () => {
-      toast({ title: "Conector agregado" });
+      toast({ title: t("settings.toast.connectorAdded") });
       setConnector({ name: "", baseUrl: "", authType: "NONE", token: "", username: "", password: "", headerName: "", headerValue: "" });
       qc.invalidateQueries({ queryKey: ["flow-connectors"] });
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Error de conector", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("settings.toast.connectorError"), description: e.message }),
   });
 
   const removeConnector = useMutation({
     mutationFn: (id: string) => apiFetch(`/api/flow-connectors/${id}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["flow-connectors"] }),
-    onError: (e: Error) => toast({ variant: "destructive", title: "Error al eliminar", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("settings.toast.deleteError"), description: e.message }),
   });
 
   const handleTabChange = (value: string) => {
     if (metaFormEdited && value !== "meta") {
       const confirmed = window.confirm(
-        "Tienes cambios sin guardar en Conexión con Meta. ¿Deseas cambiar de pestaña sin guardar?"
+        t("settings.tab.unsavedChanges")
       );
       if (!confirmed) return;
     }
@@ -213,8 +215,8 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
     <div className="flex min-h-0 flex-1 flex-col">
       {/* PageHeader estandarizado */}
       <PageHeader
-        title="Configuración"
-        description="Administra las conexiones y el funcionamiento de tu organización."
+        title={t("settings.title")}
+        description={t("settings.description")}
       />
 
       {/* Conexión Meta indicator */}
@@ -223,7 +225,7 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
           <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400">
             <CheckCircle2 className="h-4 w-4" />
             <span>
-              Conectado como{" "}
+              {t("settings.connectionIndicator.connected")}{" "}
               <span className="font-medium">{data.businessName || data.phoneNumberDisplay}</span>
             </span>
           </div>
@@ -234,8 +236,8 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
       <Tabs value={activeTab} onValueChange={handleTabChange} className="flex min-h-0 flex-1 flex-col">
         <div className="shrink-0 border-b bg-card px-4 sm:px-6">
           <TabsList>
-            <TabsTrigger value="meta">Conexión con Meta</TabsTrigger>
-            <TabsTrigger value="automation">Automatización</TabsTrigger>
+            <TabsTrigger value="meta">{t("settings.tab.meta")}</TabsTrigger>
+            <TabsTrigger value="automation">{t("settings.tab.automation")}</TabsTrigger>
           </TabsList>
         </div>
 
@@ -256,12 +258,13 @@ export function SettingsClient({ tenantId }: { tenantId: string }) {
             addConnector={addConnector}
             removeConnector={removeConnector}
             isLoading={isLoading}
+            t={t}
           />
         </TabsContent>
 
         {/* TAB: Automatización */}
         <TabsContent value="automation" className="min-h-0 flex-1 overflow-auto">
-          <AutomationPreviewTab automation={automation} setAutomation={setAutomation} />
+          <AutomationPreviewTab automation={automation} setAutomation={setAutomation} t={t} />
         </TabsContent>
       </Tabs>
     </div>
@@ -284,6 +287,7 @@ function MetaConnectionTab({
   addConnector,
   removeConnector,
   isLoading,
+  t,
 }: {
   form: {
     wabaId: string;
@@ -321,13 +325,14 @@ function MetaConnectionTab({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   removeConnector: { mutate: (id: string) => void; isPending: boolean };
   isLoading: boolean;
+  t: (key: string, fallback?: string) => string;
 }) {
   const copy = (text: string) => navigator.clipboard.writeText(text);
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="text-muted-foreground">Cargando configuración...</div>
+        <div className="text-muted-foreground">{t("settings.loading", "Cargando configuración...")}</div>
       </div>
     );
   }
@@ -337,9 +342,9 @@ function MetaConnectionTab({
       {/* Credenciales de WhatsApp Business */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Credenciales de WhatsApp Business</CardTitle>
+          <CardTitle className="text-sm">{t("settings.meta.title")}</CardTitle>
           <CardDescription>
-            Configura tu cuenta de WhatsApp Business para enviar y recibir mensajes.
+            {t("settings.meta.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -383,9 +388,9 @@ function MetaConnectionTab({
         <CardHeader>
           <CardTitle className="text-sm">Access Token</CardTitle>
           <CardDescription>
-            Token de acceso permanente de la app de Meta.
+            {t("settings.accessToken.description")}
             {data?.accessTokenSet && (
-              <span className="ml-1 text-emerald-600"> (configurado)</span>
+              <span className="ml-1 text-emerald-600"> ({t("settings.meta.configured")})</span>
             )}
           </CardDescription>
         </CardHeader>
@@ -396,7 +401,7 @@ function MetaConnectionTab({
                 type="password"
                 value={form.accessToken}
                 onChange={(e) => setForm({ ...form, accessToken: e.target.value })}
-                placeholder={data?.accessTokenSet ? "•••••••• (dejar en blanco para mantener)" : "EAxxxx..."}
+                placeholder={data?.accessTokenSet ? t("settings.accessToken.placeholder.keep") : t("settings.accessToken.placeholder.empty")}
                 className="pr-10"
               />
               {data?.accessTokenSet && (
@@ -417,9 +422,9 @@ function MetaConnectionTab({
       {/* Webhook Configuration */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Configuración de Webhook</CardTitle>
+          <CardTitle className="text-sm">{t("settings.webhook.title")}</CardTitle>
           <CardDescription>
-            Configura el webhook para recibir eventos de WhatsApp.
+            {t("settings.webhook.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -428,7 +433,7 @@ function MetaConnectionTab({
               <Input
                 value={data?.callbackUrl ?? ""}
                 readOnly
-                placeholder="https://tu-dominio.com/api/webhooks/whatsapp"
+                placeholder={t("settings.webhook.callbackPlaceholder")}
                 className="pr-10"
               />
               <Button
@@ -445,7 +450,7 @@ function MetaConnectionTab({
             <Input
               value={form.webhookVerifyToken}
               onChange={(e) => setForm({ ...form, webhookVerifyToken: e.target.value })}
-              placeholder="Token de verificación para webhook"
+              placeholder={t("settings.webhook.verifyTokenPlaceholder")}
             />
           </Field>
         </CardContent>
@@ -456,9 +461,9 @@ function MetaConnectionTab({
         <CardHeader>
           <CardTitle className="text-sm">App Secret</CardTitle>
           <CardDescription>
-            Secret de tu aplicación de Meta para verificar webhooks.
+            {t("settings.appSecret.description")}
             {data?.appSecretSet && (
-              <span className="ml-1 text-emerald-600"> (configurado)</span>
+              <span className="ml-1 text-emerald-600"> ({t("settings.meta.configured")})</span>
             )}
           </CardDescription>
         </CardHeader>
@@ -468,7 +473,7 @@ function MetaConnectionTab({
               type="password"
               value={form.appSecret}
               onChange={(e) => setForm({ ...form, appSecret: e.target.value })}
-              placeholder={data?.appSecretSet ? "•••••••• (dejar en blanco para mantener)" : "App Secret"}
+              placeholder={data?.appSecretSet ? t("settings.appSecret.placeholder.keep") : t("settings.appSecret.placeholder.empty")}
             />
           </Field>
         </CardContent>
@@ -477,9 +482,9 @@ function MetaConnectionTab({
       {/* WhatsApp Flow Encryption */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Cifrado de WhatsApp Flow</CardTitle>
+          <CardTitle className="text-sm">{t("settings.flowEncryption.title")}</CardTitle>
           <CardDescription>
-            Los Flow dinámicos requieren una clave RSA registrada. Rotar mantiene la clave anterior disponible por 24 horas.
+            {t("settings.flowEncryption.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -488,7 +493,7 @@ function MetaConnectionTab({
               <>
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                  Registrada
+                  {t("settings.flowEncryption.registered")}
                 </div>
                 <code className="block break-all text-[10px] text-muted-foreground sm:truncate">
                   SHA-256 {flowKey.fingerprint}
@@ -496,7 +501,7 @@ function MetaConnectionTab({
               </>
             ) : (
               <div className="text-sm text-muted-foreground">
-                No hay clave de cifrado Flow configurada.
+                {t("settings.flowEncryption.notConfigured")}
               </div>
             )}
           </div>
@@ -505,14 +510,14 @@ function MetaConnectionTab({
             onClick={() =>
               confirm(
                 flowKey?.configured
-                  ? "¿Rotar la clave de cifrado Flow registrada?"
-                  : "¿Generar y registrar una clave de cifrado Flow?"
+                  ? t("settings.flowEncryption.confirmRotate")
+                  : t("settings.flowEncryption.confirmConfigure")
               ) && rotateFlowKey.mutate()
             }
             disabled={rotateFlowKey.isPending}
           >
             <KeyRound className="h-4 w-4" />
-            {flowKey?.configured ? "Rotar clave" : "Configurar clave"}
+            {flowKey?.configured ? t("settings.flowEncryption.rotate") : t("settings.flowEncryption.configure")}
           </Button>
         </CardContent>
       </Card>
@@ -520,30 +525,30 @@ function MetaConnectionTab({
       {/* Dynamic Flow Connectors */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Conectores de Flow Dinámico</CardTitle>
+          <CardTitle className="text-sm">{t("settings.flowConnectors.title")}</CardTitle>
           <CardDescription>
-            Destinos HTTPS aprobados que las pantallas dinámicas pueden llamar.
+            {t("settings.flowConnectors.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-[1fr_2fr_130px_auto]">
-            <Field label="Nombre" htmlFor="connector-name">
+            <Field label={t("settings.flowConnectors.name")} htmlFor="connector-name">
               <Input
                 id="connector-name"
                 value={connector.name}
                 onChange={(e) => setConnector({ ...connector, name: e.target.value })}
-                placeholder="Nombre del conector"
+                placeholder={t("settings.flowConnectors.namePlaceholder")}
               />
             </Field>
-            <Field label="URL base" htmlFor="connector-base-url">
+            <Field label={t("settings.flowConnectors.baseUrl")} htmlFor="connector-base-url">
               <Input
                 id="connector-base-url"
                 value={connector.baseUrl}
                 onChange={(e) => setConnector({ ...connector, baseUrl: e.target.value })}
-                placeholder="https://api.ejemplo.com/flows/"
+                placeholder={t("settings.flowConnectors.baseUrlPlaceholder")}
               />
             </Field>
-            <Field label="Autenticación" htmlFor="connector-auth-type">
+            <Field label={t("settings.flowConnectors.auth")} htmlFor="connector-auth-type">
               <Select
                 value={connector.authType}
                 onValueChange={(v) => setConnector({ ...connector, authType: v })}
@@ -552,10 +557,10 @@ function MetaConnectionTab({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="NONE">Sin auth</SelectItem>
-                  <SelectItem value="BEARER">Bearer token</SelectItem>
-                  <SelectItem value="BASIC">Basic auth</SelectItem>
-                  <SelectItem value="HEADER">Header personalizado</SelectItem>
+                  <SelectItem value="NONE">{t("settings.flowConnectors.authNone")}</SelectItem>
+                  <SelectItem value="BEARER">{t("settings.flowConnectors.authBearer")}</SelectItem>
+                  <SelectItem value="BASIC">{t("settings.flowConnectors.authBasic")}</SelectItem>
+                  <SelectItem value="HEADER">{t("settings.flowConnectors.authHeader")}</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -573,7 +578,7 @@ function MetaConnectionTab({
               type="password"
               value={connector.token}
               onChange={(e) => setConnector({ ...connector, token: e.target.value })}
-              placeholder="Bearer token (cifrado en reposo)"
+              placeholder={t("settings.flowConnectors.tokenPlaceholder")}
             />
           )}
           {connector.authType === "BASIC" && (
@@ -581,13 +586,13 @@ function MetaConnectionTab({
               <Input
                 value={connector.username}
                 onChange={(e) => setConnector({ ...connector, username: e.target.value })}
-                placeholder="Usuario"
+                placeholder={t("settings.flowConnectors.usernamePlaceholder")}
               />
               <Input
                 type="password"
                 value={connector.password}
                 onChange={(e) => setConnector({ ...connector, password: e.target.value })}
-                placeholder="Contraseña"
+                placeholder={t("settings.flowConnectors.passwordPlaceholder")}
               />
             </div>
           )}
@@ -596,13 +601,13 @@ function MetaConnectionTab({
               <Input
                 value={connector.headerName}
                 onChange={(e) => setConnector({ ...connector, headerName: e.target.value })}
-                placeholder="Nombre del header"
+                placeholder={t("settings.flowConnectors.headerNamePlaceholder")}
               />
               <Input
                 type="password"
                 value={connector.headerValue}
                 onChange={(e) => setConnector({ ...connector, headerValue: e.target.value })}
-                placeholder="Valor del header"
+                placeholder={t("settings.flowConnectors.headerValuePlaceholder")}
               />
             </div>
           )}
@@ -623,7 +628,7 @@ function MetaConnectionTab({
                   variant="ghost"
                   size="icon"
                   onClick={() =>
-                    confirm(`¿Eliminar conector "${item.name}"?`) &&
+                    confirm(t("settings.flowConnectors.deleteConfirm", `¿Eliminar conector "${item.name}"?`).replace("{name}", item.name)) &&
                     removeConnector.mutate(item.id)
                   }
                 >
@@ -633,7 +638,7 @@ function MetaConnectionTab({
             ))}
             {!connectors.length && (
               <p className="text-xs text-muted-foreground">
-                No hay conectores configurados.
+                {t("settings.flowConnectors.empty")}
               </p>
             )}
           </div>
@@ -643,10 +648,10 @@ function MetaConnectionTab({
       {/* Save & Test */}
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={() => save.mutate()} disabled={save.isPending}>
-          <Save className="h-4 w-4" /> Guardar configuración
+          <Save className="h-4 w-4" /> {t("settings.button.save")}
         </Button>
         <Button variant="outline" onClick={() => test.mutate()} disabled={test.isPending}>
-          <RefreshCw className={`h-4 w-4 ${test.isPending ? "animate-spin" : ""}`} /> Probar conexión
+          <RefreshCw className={`h-4 w-4 ${test.isPending ? "animate-spin" : ""}`} /> {test.isPending ? t("settings.button.testing") : t("settings.button.testConnection")}
         </Button>
         {testResult && (
           <span
@@ -659,7 +664,7 @@ function MetaConnectionTab({
             ) : (
               <XCircle className="h-4 w-4" />
             )}
-            {testResult.success ? "Conexión exitosa" : testResult.message}
+            {testResult.success ? t("settings.toast.testSuccess") : testResult.message}
           </span>
         )}
       </div>
@@ -671,9 +676,11 @@ function MetaConnectionTab({
 function AutomationPreviewTab({
   automation,
   setAutomation,
+  t,
 }: {
   automation: AutomationPreview;
   setAutomation: (a: AutomationPreview) => void;
+  t: (key: string, fallback?: string) => string;
 }) {
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -685,11 +692,10 @@ function AutomationPreviewTab({
           </div>
           <div>
             <h3 className="font-medium text-amber-800 dark:text-amber-200">
-              Vista previa — Sin configuración activa
+              {t("settings.automationPreview.bannerTitle")}
             </h3>
             <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-              Esta pestaña muestra una previsualización de las opciones de automatización.
-              La configuración real estará disponible cuando se habilite el contrato de Copilot.
+              {t("settings.automationPreview.bannerDescription")}
             </p>
           </div>
         </div>
@@ -700,20 +706,20 @@ function AutomationPreviewTab({
         <CardHeader>
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400" />
-            <CardTitle className="text-sm">Copilot</CardTitle>
+            <CardTitle className="text-sm">{t("settings.automation.copilot.title")}</CardTitle>
           </div>
           <CardDescription>
-            Permite que la inteligencia artificial atienda conversaciones cuando esté autorizada.
+            {t("settings.automation.copilot.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between rounded-lg border p-4">
             <div className="space-y-0.5">
               <Label htmlFor="copilot-enabled" className="cursor-pointer">
-                Habilitar atención mediante IA
+                {t("settings.automation.copilot.enable")}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Disponible cuando se habilite Copilot.
+                {t("settings.automation.copilot.enableHint")}
               </p>
             </div>
             <Switch
@@ -733,15 +739,15 @@ function AutomationPreviewTab({
         <CardHeader>
           <div className="flex items-center gap-2">
             <ArrowRightLeft className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-            <CardTitle className="text-sm">Atención y transferencia</CardTitle>
+            <CardTitle className="text-sm">{t("settings.automation.handoff.title")}</CardTitle>
           </div>
           <CardDescription>
-            Configura cómo se gestionará la transición entre atención automática y humana.
+            {t("settings.automation.handoff.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-lg border p-4 opacity-60">
-            <div className="mb-3 text-sm font-medium">Política de transferencia</div>
+            <div className="mb-3 text-sm font-medium">{t("settings.automation.handoff.policy")}</div>
             <div className="space-y-3">
               <label className="flex cursor-not-allowed items-start gap-3 rounded-md border p-3 text-sm opacity-50">
                 <input
@@ -751,9 +757,9 @@ function AutomationPreviewTab({
                   disabled
                 />
                 <div>
-                  <span className="font-medium">Transferencia humana</span>
+                  <span className="font-medium">{t("settings.automation.handoff.humanTransfer")}</span>
                   <p className="text-xs text-muted-foreground">
-                    Cuando un operador responde, la conversación pasa a atención humana.
+                    {t("settings.automation.handoff.humanTransferDesc")}
                   </p>
                 </div>
               </label>
@@ -765,16 +771,16 @@ function AutomationPreviewTab({
                   disabled
                 />
                 <div>
-                  <span className="font-medium">Reactivación de Copilot</span>
+                  <span className="font-medium">{t("settings.automation.handoff.copilotReactivate")}</span>
                   <p className="text-xs text-muted-foreground">
-                    La reactivación de Copilot requiere intervención autorizada del operador.
+                    {t("settings.automation.handoff.copilotReactivateDesc")}
                   </p>
                 </div>
               </label>
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Estas políticas se activarán cuando Copilot esté habilitado.
+            {t("settings.automation.handoff.policyHint")}
           </p>
         </CardContent>
       </Card>
@@ -784,10 +790,10 @@ function AutomationPreviewTab({
         <CardHeader>
           <div className="flex items-center gap-2">
             <Bell className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            <CardTitle className="text-sm">Seguimiento automático</CardTitle>
+            <CardTitle className="text-sm">{t("settings.automation.followup.title")}</CardTitle>
           </div>
           <CardDescription>
-            Configura recordatorios cuando el cliente deja de responder.
+            {t("settings.automation.followup.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -795,10 +801,10 @@ function AutomationPreviewTab({
           <div className="flex items-center justify-between rounded-lg border p-4">
             <div className="space-y-0.5">
               <Label htmlFor="followup-enabled" className="cursor-not-allowed">
-                Habilitar seguimiento
+                {t("settings.automation.followup.enable")}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Envía recordatorios al cliente después de un período de inactividad.
+                {t("settings.automation.followup.enableHint")}
               </p>
             </div>
             <Switch
@@ -813,10 +819,10 @@ function AutomationPreviewTab({
 
           {/* Follow-up timing */}
           <div className="rounded-lg border p-4 opacity-60">
-            <div className="mb-3 text-sm font-medium">Temporización de recordatorios</div>
+            <div className="mb-3 text-sm font-medium">{t("settings.automation.followup.timing")}</div>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-1">
-                <Label className="text-xs">Primer recordatorio</Label>
+                <Label className="text-xs">{t("settings.automation.followup.firstReminder")}</Label>
                 <Input
                   type="number"
                   value={automation.followUpFirstReminder}
@@ -828,7 +834,7 @@ function AutomationPreviewTab({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Unidad</Label>
+                <Label className="text-xs">{t("settings.automation.followup.unit")}</Label>
                 <Select
                   value={automation.followUpUnit}
                   onValueChange={(v) => setAutomation({ ...automation, followUpUnit: v })}
@@ -838,13 +844,13 @@ function AutomationPreviewTab({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="minutes">Minutos</SelectItem>
-                    <SelectItem value="hours">Horas</SelectItem>
+                    <SelectItem value="minutes">{t("settings.automation.followup.unitMinutes")}</SelectItem>
+                    <SelectItem value="hours">{t("settings.automation.followup.unitHours")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Máximo de recordatorios</Label>
+                <Label className="text-xs">{t("settings.automation.followup.maxReminders")}</Label>
                 <Input
                   type="number"
                   value={automation.followUpMaxReminders}
@@ -860,10 +866,10 @@ function AutomationPreviewTab({
 
           {/* Allowed hours */}
           <div className="rounded-lg border p-4 opacity-60">
-            <div className="mb-3 text-sm font-medium">Horario permitido</div>
+            <div className="mb-3 text-sm font-medium">{t("settings.automation.followup.allowedHours")}</div>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-1">
-                <Label className="text-xs">Desde</Label>
+                <Label className="text-xs">{t("settings.automation.followup.from")}</Label>
                 <Input
                   type="time"
                   value={automation.followUpTimeFrom}
@@ -875,7 +881,7 @@ function AutomationPreviewTab({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Hasta</Label>
+                <Label className="text-xs">{t("settings.automation.followup.to")}</Label>
                 <Input
                   type="time"
                   value={automation.followUpTimeTo}
@@ -887,7 +893,7 @@ function AutomationPreviewTab({
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Zona horaria</Label>
+                <Label className="text-xs">{t("settings.automation.followup.timezone")}</Label>
                 <Select
                   value={automation.followUpTimezone}
                   onValueChange={(v) => setAutomation({ ...automation, followUpTimezone: v })}
@@ -910,22 +916,22 @@ function AutomationPreviewTab({
 
           {/* Message type */}
           <div className="rounded-lg border p-4 opacity-60">
-            <div className="mb-3 text-sm font-medium">Tipo de mensaje</div>
+            <div className="mb-3 text-sm font-medium">{t("settings.automation.followup.messageType")}</div>
             <div className="flex gap-2">
               <label className="flex cursor-not-allowed items-center gap-2 rounded-md border px-3 py-2 text-sm">
                 <input type="radio" name="msgType" value="template" checked={automation.followUpMessageType === "template"} onChange={() => setAutomation({ ...automation, followUpMessageType: "template" })} disabled />
-                Mensaje predefinido
+                {t("settings.automation.followup.messageTypePredefined")}
               </label>
               <label className="flex cursor-not-allowed items-center gap-2 rounded-md border px-3 py-2 text-sm">
                 <input type="radio" name="msgType" value="ai" checked={automation.followUpMessageType === "ai"} onChange={() => setAutomation({ ...automation, followUpMessageType: "ai" })} disabled />
-                Generado por IA
+                {t("settings.automation.followup.messageTypeAI")}
               </label>
             </div>
           </div>
 
           {/* Cancellation conditions */}
           <div className="rounded-lg border p-4 opacity-60">
-            <div className="mb-3 text-sm font-medium">Condiciones de cancelación</div>
+            <div className="mb-3 text-sm font-medium">{t("settings.automation.followup.cancellationConditions")}</div>
             <div className="space-y-2">
               <label className="flex cursor-not-allowed items-center gap-2 text-sm">
                 <input
@@ -936,7 +942,7 @@ function AutomationPreviewTab({
                   }
                   disabled
                 />
-                Cancelar al recibir respuesta del cliente
+                {t("settings.automation.followup.cancelOnReply")}
               </label>
               <label className="flex cursor-not-allowed items-center gap-2 text-sm">
                 <input
@@ -947,13 +953,13 @@ function AutomationPreviewTab({
                   }
                   disabled
                 />
-                Cancelar al cerrar conversación
+                {t("settings.automation.followup.cancelOnClose")}
               </label>
             </div>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Los valores mostrados son ilustrativos. La configuración real estará disponible cuando se implemente el backend de seguimiento.
+            {t("settings.automation.followup.disclaimer")}
           </p>
         </CardContent>
       </Card>

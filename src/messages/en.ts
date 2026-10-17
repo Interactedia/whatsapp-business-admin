@@ -975,6 +975,146 @@ export const en: Record<MessageKey, string> = {
   "login.mobileTitle": "WhatsApp Business Admin",
   "login.mobileSubtitle": "Control panel",
 
+  // ── Settings ────────────────────────────────────────────────────────────────
+  // Page header
+  "settings.title": "Settings",
+  "settings.description": "Manage your organization's connections and operation.",
+
+  // Tabs
+  "settings.tab.meta": "Meta Connection",
+  "settings.tab.automation": "Automation preview",
+
+  // Tab change warning
+  "settings.tab.unsavedChanges": "You have unsaved changes in Meta Connection. Do you want to switch tabs without saving?",
+
+  // Toasts
+  "settings.toast.saved": "Configuration saved",
+  "settings.toast.saveError": "Could not save",
+  "settings.toast.testSuccess": "Connection successful",
+  "settings.toast.testError": "Connection test failed",
+  "settings.toast.keyRotated": "Key rotated",
+  "settings.toast.keyRotateError": "Could not rotate key",
+  "settings.toast.connectorAdded": "Connector added",
+  "settings.toast.connectorError": "Could not add connector",
+  "settings.toast.deleted": "Deleted",
+  "settings.toast.deleteError": "Could not delete",
+
+  // Meta Configuration Card
+  "settings.meta.title": "Meta Configuration",
+  "settings.meta.description": "Your WhatsApp Business app credentials.",
+  "settings.meta.wabaId": "Business Account ID",
+  "settings.meta.phoneNumberId": "Phone Number ID",
+  "settings.meta.phoneNumber": "Phone number",
+  "settings.meta.configured": "configured",
+  "settings.meta.placeholder.wabaId": "123456789",
+  "settings.meta.placeholder.phoneNumberId": "987654321",
+
+  // Connection indicator
+  "settings.connectionIndicator.title": "Connection status",
+  "settings.connectionIndicator.connected": "Connected",
+  "settings.connectionIndicator.disconnected": "Disconnected",
+  "settings.connectionIndicator.lastTest": "Last test",
+  "settings.connectionIndicator.success": "Connection successful",
+  "settings.connectionIndicator.noTest": "No connection test performed yet",
+
+  // Access Token Card
+  "settings.accessToken.title": "Access Token",
+  "settings.accessToken.description": "Permanent access token for your Meta app.",
+  "settings.accessToken.placeholder.empty": "EAxxxx...",
+  "settings.accessToken.placeholder.keep": "•••••••• (leave blank to keep current)",
+
+  // Webhook Configuration Card
+  "settings.webhook.title": "Webhook Configuration",
+  "settings.webhook.description": "Configure the webhook to receive WhatsApp events.",
+  "settings.webhook.callbackUrl": "Webhook Callback URL",
+  "settings.webhook.callbackPlaceholder": "https://your-domain.com/api/webhooks/whatsapp",
+  "settings.webhook.verifyToken": "Verify Token",
+  "settings.webhook.verifyTokenPlaceholder": "Webhook verification token",
+
+  // App Secret Card
+  "settings.appSecret.title": "App Secret",
+  "settings.appSecret.description": "Your Meta app secret for webhook verification.",
+  "settings.appSecret.placeholder.empty": "App Secret",
+  "settings.appSecret.placeholder.keep": "•••••••• (leave blank to keep current)",
+
+  // Flow Encryption Card
+  "settings.flowEncryption.title": "WhatsApp Flow Encryption",
+  "settings.flowEncryption.description": "Dynamic Flows require a registered RSA key. Rotating keeps the previous key available for 24 hours.",
+  "settings.flowEncryption.registered": "Registered",
+  "settings.flowEncryption.notConfigured": "No Flow encryption key configured.",
+  "settings.flowEncryption.rotate": "Rotate key",
+  "settings.flowEncryption.configure": "Configure key",
+  "settings.flowEncryption.confirmRotate": "Rotate the registered Flow encryption key?",
+  "settings.flowEncryption.confirmConfigure": "Generate and register a Flow encryption key?",
+
+  // Flow Connectors Card
+  "settings.flowConnectors.title": "Dynamic Flow Connectors",
+  "settings.flowConnectors.description": "Approved HTTPS destinations that dynamic screens can call.",
+  "settings.flowConnectors.name": "Name",
+  "settings.flowConnectors.namePlaceholder": "Connector name",
+  "settings.flowConnectors.baseUrl": "Base URL",
+  "settings.flowConnectors.baseUrlPlaceholder": "https://api.example.com/flows/",
+  "settings.flowConnectors.auth": "Authentication",
+  "settings.flowConnectors.authNone": "No auth",
+  "settings.flowConnectors.authBearer": "Bearer token",
+  "settings.flowConnectors.authBasic": "Basic auth",
+  "settings.flowConnectors.authHeader": "Custom header",
+  "settings.flowConnectors.tokenPlaceholder": "Bearer token (encrypted at rest)",
+  "settings.flowConnectors.usernamePlaceholder": "Username",
+  "settings.flowConnectors.passwordPlaceholder": "Password",
+  "settings.flowConnectors.headerNamePlaceholder": "Header name",
+  "settings.flowConnectors.headerValuePlaceholder": "Header value",
+  "settings.flowConnectors.deleteConfirm": "Delete connector \"{name}\"?",
+  "settings.flowConnectors.empty": "No connectors configured.",
+
+  // Action buttons
+  "settings.button.save": "Save configuration",
+  "settings.button.testConnection": "Test connection",
+  "settings.button.testing": "Testing…",
+
+  // ── Automation Preview ───────────────────────────────────────────────────────
+  "settings.automationPreview.bannerTitle": "Preview — No active configuration",
+  "settings.automationPreview.bannerDescription": "This tab shows a preview of automation options. Full configuration will be available when the Copilot contract is enabled.",
+
+  // Copilot card
+  "settings.automation.copilot.title": "Copilot",
+  "settings.automation.copilot.description": "Allows AI to handle conversations when authorized.",
+  "settings.automation.copilot.enable": "Enable AI-assisted handling",
+  "settings.automation.copilot.enableHint": "Available when Copilot is enabled.",
+
+  // Handoff card
+  "settings.automation.handoff.title": "Handoff and Transfer",
+  "settings.automation.handoff.description": "Configure how the transition between automated and human handling is managed.",
+  "settings.automation.handoff.policy": "Transfer policy",
+  "settings.automation.handoff.humanTransfer": "Human transfer",
+  "settings.automation.handoff.humanTransferDesc": "When an operator responds, the conversation switches to human handling.",
+  "settings.automation.handoff.copilotReactivate": "Copilot reactivation",
+  "settings.automation.handoff.copilotReactivateDesc": "Copilot reactivation requires authorized operator intervention.",
+  "settings.automation.handoff.policyHint": "These policies will activate when Copilot is enabled.",
+
+  // Follow-up card
+  "settings.automation.followup.title": "Automatic Follow-up",
+  "settings.automation.followup.description": "Configure reminders when the customer stops responding.",
+  "settings.automation.followup.enable": "Enable follow-up",
+  "settings.automation.followup.enableHint": "Sends reminders to the customer after a period of inactivity.",
+  "settings.automation.followup.timing": "Reminder timing",
+  "settings.automation.followup.firstReminder": "First reminder",
+  "settings.automation.followup.unit": "Unit",
+  "settings.automation.followup.unitMinutes": "Minutes",
+  "settings.automation.followup.unitHours": "Hours",
+  "settings.automation.followup.maxReminders": "Max reminders",
+  "settings.automation.followup.allowedHours": "Allowed hours",
+  "settings.automation.followup.from": "From",
+  "settings.automation.followup.to": "To",
+  "settings.automation.followup.timezone": "Timezone",
+  "settings.automation.followup.messageType": "Message type",
+  "settings.automation.followup.messageTypePredefined": "Predefined message",
+  "settings.automation.followup.messageTypeAI": "AI-generated",
+  "settings.automation.followup.cancellationConditions": "Cancellation conditions",
+  "settings.automation.followup.cancelOnReply": "Cancel on customer reply",
+  "settings.automation.followup.cancelOnClose": "Cancel on conversation close",
+  "settings.automation.followup.disclaimer": "Values shown are illustrative. Full configuration will be available when the follow-up backend is implemented.",
+
   // ── Inbox ────────────────────────────────────────────────────────────────────
   // Conversation list
   "inbox.markAsRead": "Mark as read",
