@@ -10,7 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
+import { useI18n } from "@/components/i18n/language-provider";
 
 const EVENT_TYPES = [
   "inbound.message.received",
@@ -44,6 +46,7 @@ type FormState = { name: string; endpointUrl: string; subscriptions: string[] };
 const emptyForm: FormState = { name: "", endpointUrl: "https://", subscriptions: ["inbound.message.received"] };
 
 export function WebhookDestinationsClient({ tenantId }: { tenantId: string }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -67,15 +70,15 @@ export function WebhookDestinationsClient({ tenantId }: { tenantId: string }) {
       setSecret(data.signingSecret);
       setForm(emptyForm);
       qc.invalidateQueries({ queryKey: ["webhook-destinations", tenantId] });
-      toast({ title: "Webhook creado", description: "Copia el secreto ahora; no se volverá a mostrar." });
+      toast({ title: t("webhooks.createdToast"), description: t("webhooks.createdToastDescription") });
     },
-    onError: (e) => toast({ title: "No se pudo crear", description: e instanceof Error ? e.message : "Error desconocido", variant: "destructive" }),
+    onError: (e) => toast({ title: t("webhooks.errorCreate"), description: e instanceof Error ? e.message : t("webhooks.errorUnknown"), variant: "destructive" }),
   });
 
   const action = useMutation({
     mutationFn: ({ id, path }: { id: string; path: string }) => apiFetch(`/api/tenants/${tenantId}/webhook-destinations/${id}/${path}`, { method: "POST" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["webhook-destinations", tenantId] }),
-    onError: (e) => toast({ title: "Acción fallida", description: e instanceof Error ? e.message : "Error desconocido", variant: "destructive" }),
+    onError: (e) => toast({ title: t("webhooks.errorAction"), description: e instanceof Error ? e.message : t("webhooks.errorUnknown"), variant: "destructive" }),
   });
 
   const retire = useMutation({
@@ -98,45 +101,49 @@ export function WebhookDestinationsClient({ tenantId }: { tenantId: string }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex gap-1 border-b">
-        <button
-          onClick={() => setActiveTab("config")}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === "config" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          Configuración
-        </button>
-        <button
-          onClick={() => setActiveTab("docs")}
-          className={`px-4 py-2 text-sm font-medium transition-colors ${activeTab === "docs" ? "border-b-2 border-primary text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-        >
-          Documentación
-        </button>
+    <div className="flex h-full min-w-0 flex-col">
+      <PageHeader title={t("webhooks.title")} description={t("webhooks.pageDescription")} />
+      <div className="border-b bg-card px-4 py-2 sm:px-6">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "config" | "docs")}>
+          <TabsList className="h-10 gap-1 bg-transparent p-0 sm:justify-start">
+            <TabsTrigger
+              value="config"
+              className="h-10 rounded-lg border border-transparent px-4 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground data-[state=active]:border-primary/20 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none"
+            >
+              {t("webhooks.tabConfig")}
+            </TabsTrigger>
+            <TabsTrigger
+              value="docs"
+              className="h-10 rounded-lg border border-transparent px-4 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground data-[state=active]:border-primary/20 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none"
+            >
+              {t("webhooks.tabDocs")}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
-
+      <div className="space-y-4 p-4 sm:p-6">
       {activeTab === "docs" && <WebhookDocs />}
 
       {activeTab === "config" && (
       <>
-      <PageHeader title="Webhooks salientes" description="Configuración tenant-scoped para consumidores HTTP externos." />
       {secret && (
         <Card className="border-amber-300 bg-amber-50">
-          <CardHeader><CardTitle>Secreto visible una sola vez</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("webhooks.secretVisibleOnce")}</CardTitle></CardHeader>
           <CardContent><code className="break-all text-sm">{secret}</code></CardContent>
         </Card>
       )}
       <Card>
         <CardHeader>
-          <CardTitle>Nuevo destino</CardTitle>
-          <CardDescription>Solo HTTPS. Las IP privadas, loopback y redirecciones se vuelven a validar al entregar.</CardDescription>
+          <CardTitle>{t("webhooks.newDestination")}</CardTitle>
+          <CardDescription>{t("webhooks.newDestinationDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2">
-            <div><Label>Nombre</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-            <div><Label>URL HTTPS</Label><Input value={form.endpointUrl} onChange={(e) => setForm({ ...form, endpointUrl: e.target.value })} /></div>
+            <div><Label>{t("webhooks.labelName")}</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+            <div><Label>{t("webhooks.labelUrl")}</Label><Input value={form.endpointUrl} onChange={(e) => setForm({ ...form, endpointUrl: e.target.value })} /></div>
           </div>
           <div className="space-y-2">
-            <Label>Suscripciones</Label>
+            <Label>{t("webhooks.labelSubscriptions")}</Label>
             <div className="grid gap-2 md:grid-cols-2">
               {EVENT_TYPES.map((eventType) => (
                 <label key={eventType} className="flex items-center gap-2 rounded-md border p-2 text-sm">
@@ -146,28 +153,28 @@ export function WebhookDestinationsClient({ tenantId }: { tenantId: string }) {
               ))}
             </div>
           </div>
-          <Button onClick={() => create.mutate()} disabled={create.isPending || form.subscriptions.length === 0}>Crear destino</Button>
+          <Button onClick={() => create.mutate()} disabled={create.isPending || form.subscriptions.length === 0}>{t("webhooks.buttonCreate")}</Button>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Destinos</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("webhooks.destinations")}</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          {destinations.isLoading && <p>Cargando…</p>}
+          {destinations.isLoading && <p>{t("users.loading")}</p>}
           {destinations.data?.destinations.map((destination) => (
             <div key={destination.id} className="rounded-lg border p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div className="flex items-center gap-2"><h3 className="font-semibold">{destination.name}</h3><Badge>{destination.retiredAt ? "retirado" : destination.enabled ? "activo" : "deshabilitado"}</Badge></div>
+                  <div className="flex items-center gap-2"><h3 className="font-semibold">{destination.name}</h3><Badge>{destination.retiredAt ? t("webhooks.statusRetired") : destination.enabled ? t("webhooks.statusActive") : t("webhooks.statusDisabled")}</Badge></div>
                   <p className="break-all text-sm text-muted-foreground">{destination.endpointUrl}</p>
-                  <p className="text-xs text-muted-foreground">ID estable: {destination.id} · secreto v{destination.secretVersion}</p>
+                  <p className="text-xs text-muted-foreground">{t("webhooks.stableId")}: {destination.id} · {t("webhooks.secretoVersion")}{destination.secretVersion}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" onClick={() => action.mutate({ id: destination.id, path: destination.enabled ? "disable" : "enable" })} disabled={Boolean(destination.retiredAt)}>{destination.enabled ? "Deshabilitar" : "Habilitar"}</Button>
-                  <Button size="sm" variant="outline" onClick={() => rotate.mutate(destination.id)} disabled={Boolean(destination.retiredAt)}><RotateCcw className="mr-1 h-4 w-4" />Rotar</Button>
-                  <Button size="sm" variant="outline" onClick={() => action.mutate({ id: destination.id, path: "test" })} disabled={!destination.enabled || Boolean(destination.retiredAt)}><Send className="mr-1 h-4 w-4" />Probar</Button>
-                  <Button size="sm" variant="outline" onClick={() => setHistoryFor(destination.id)}><RefreshCw className="mr-1 h-4 w-4" />Historial</Button>
-                  <Button size="sm" variant="destructive" onClick={() => retire.mutate(destination.id)} disabled={Boolean(destination.retiredAt)}><Trash2 className="mr-1 h-4 w-4" />Retirar</Button>
+                  <Button size="sm" variant="outline" onClick={() => action.mutate({ id: destination.id, path: destination.enabled ? "disable" : "enable" })} disabled={Boolean(destination.retiredAt)}>{destination.enabled ? t("webhooks.buttonDisable") : t("webhooks.buttonEnable")}</Button>
+                  <Button size="sm" variant="outline" onClick={() => rotate.mutate(destination.id)} disabled={Boolean(destination.retiredAt)}><RotateCcw className="mr-1 h-4 w-4" />{t("webhooks.buttonRotate")}</Button>
+                  <Button size="sm" variant="outline" onClick={() => action.mutate({ id: destination.id, path: "test" })} disabled={!destination.enabled || Boolean(destination.retiredAt)}><Send className="mr-1 h-4 w-4" />{t("webhooks.buttonTest")}</Button>
+                  <Button size="sm" variant="outline" onClick={() => setHistoryFor(destination.id)}><RefreshCw className="mr-1 h-4 w-4" />{t("webhooks.buttonHistory")}</Button>
+                  <Button size="sm" variant="destructive" onClick={() => retire.mutate(destination.id)} disabled={Boolean(destination.retiredAt)}><Trash2 className="mr-1 h-4 w-4" />{t("webhooks.buttonRetire")}</Button>
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">{destination.subscriptions.map((item) => <Badge key={item} variant="outline">{item}</Badge>)}</div>
@@ -178,24 +185,26 @@ export function WebhookDestinationsClient({ tenantId }: { tenantId: string }) {
 
       {historyFor && (
         <Card>
-          <CardHeader><CardTitle>Historial de entrega</CardTitle><CardDescription>Sin cuerpos ni secretos.</CardDescription></CardHeader>
+          <CardHeader><CardTitle>{t("webhooks.deliveryHistory")}</CardTitle><CardDescription>{t("webhooks.deliveryHistoryDescription")}</CardDescription></CardHeader>
           <CardContent className="space-y-2">
-            {history.data?.history.length === 0 && <p className="text-sm text-muted-foreground">Sin entregas registradas.</p>}
+            {history.data?.history.length === 0 && <p className="text-sm text-muted-foreground">{t("webhooks.noDeliveries")}</p>}
             {history.data?.history.map((row) => (
               <div key={row.id} className="rounded-md border p-3 text-sm">
                 <div className="font-medium">{row.event.eventType} · {row.state}</div>
-                <div className="text-muted-foreground">{row.eventId} · intentos: {row.attemptCount}{row.lastError ? ` · ${row.lastError}` : ""}</div>
+                <div className="text-muted-foreground">{row.eventId} · {t("webhooks.attempts")}: {row.attemptCount}{row.lastError ? ` · ${row.lastError}` : ""}</div>
               </div>
             ))}
           </CardContent>
         </Card>
       )}
       </>)}
+      </div>
     </div>
   );
 }
 
 function CodeBlock({ code }: { code: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   return (
     <div className="group relative">
@@ -210,7 +219,7 @@ function CodeBlock({ code }: { code: string }) {
           setTimeout(() => setCopied(false), 1500);
         }}
         className="absolute right-2 top-2 rounded-md bg-white/10 p-1.5 text-zinc-200 opacity-0 transition-opacity hover:bg-white/20 group-hover:opacity-100"
-        title="Copiar"
+        title={t("webhooks.copyToClipboard")}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
@@ -219,15 +228,16 @@ function CodeBlock({ code }: { code: string }) {
 }
 
 function FieldTable({ fields }: { fields: { field: string; type: string; required: boolean; description: string }[] }) {
+  const { t } = useI18n();
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b">
-            <th className="pr-4 text-left font-medium">Campo</th>
-            <th className="pr-4 text-left font-medium">Tipo</th>
-            <th className="pr-4 text-left font-medium">Oblig.</th>
-            <th className="text-left font-medium">Descripción</th>
+            <th className="pr-4 text-left font-medium">{t("webhooks.fieldTableCampo")}</th>
+            <th className="pr-4 text-left font-medium">{t("webhooks.fieldTableTipo")}</th>
+            <th className="pr-4 text-left font-medium">{t("webhooks.fieldTableOblig")}</th>
+            <th className="text-left font-medium">{t("webhooks.fieldTableDescripcion")}</th>
           </tr>
         </thead>
         <tbody className="text-muted-foreground">
@@ -235,7 +245,7 @@ function FieldTable({ fields }: { fields: { field: string; type: string; require
             <tr key={f.field} className="border-b last:border-0">
               <td className="pr-4 font-mono text-foreground">{f.field}</td>
               <td className="pr-4"><Badge variant="outline" className="font-mono text-[10px]">{f.type}</Badge></td>
-              <td className="pr-4">{f.required ? <span className="text-foreground">Sí</span> : "No"}</td>
+              <td className="pr-4">{f.required ? <span className="text-foreground">{t("webhooks.fieldTableSi")}</span> : t("webhooks.fieldTableNo")}</td>
               <td>{f.description}</td>
             </tr>
           ))}
@@ -266,6 +276,7 @@ function EventCard({
   example: string;
   notes?: string[];
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="rounded-lg border">
@@ -283,35 +294,35 @@ function EventCard({
           <p className="text-xs text-muted-foreground">{description}</p>
 
           <div className="space-y-1">
-            <h4 className="text-xs font-semibold">Cuándo se emite</h4>
+            <h4 className="text-xs font-semibold">{t("webhooks.sectionWhen")}</h4>
             <p className="text-xs text-muted-foreground">{when}</p>
           </div>
 
           <div className="space-y-1">
-            <h4 className="text-xs font-semibold">Casos de uso habituales</h4>
+            <h4 className="text-xs font-semibold">{t("webhooks.sectionUseCases")}</h4>
             <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
               {useCases.map((uc, i) => <li key={i}>{uc}</li>)}
             </ul>
           </div>
 
           <div className="space-y-1">
-            <h4 className="text-xs font-semibold">Envelope — campos comunes</h4>
+            <h4 className="text-xs font-semibold">{t("webhooks.sectionEnvelope")}</h4>
             <FieldTable fields={envelopeFields} />
           </div>
 
           <div className="space-y-1">
-            <h4 className="text-xs font-semibold">Payload — campos específicos del evento</h4>
+            <h4 className="text-xs font-semibold">{t("webhooks.sectionPayload")}</h4>
             <FieldTable fields={payloadFields} />
           </div>
 
           <div className="space-y-1">
-            <h4 className="text-xs font-semibold">Ejemplo</h4>
+            <h4 className="text-xs font-semibold">{t("webhooks.sectionExample")}</h4>
             <CodeBlock code={example} />
           </div>
 
           {notes && notes.length > 0 && (
             <div className="space-y-1">
-              <h4 className="text-xs font-semibold">Consideraciones</h4>
+              <h4 className="text-xs font-semibold">{t("webhooks.sectionNotes")}</h4>
               <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
                 {notes.map((n, i) => <li key={i}>{n}</li>)}
               </ul>
@@ -324,114 +335,109 @@ function EventCard({
 }
 
 function WebhookDocs() {
+  const { t } = useI18n();
   const envelopeFields = [
-    { field: "id", type: "string", required: true, description: "ID de evento estable, generado como evt:{type}:{tenantId}:{...}. Usar para deduplicación." },
-    { field: "type", type: "string", required: true, description: "Tipo de evento, p. ej. inbound.message.received." },
-    { field: "version", type: "number", required: true, description: "Versión del contrato de eventos. Actualmente 1." },
-    { field: "tenantId", type: "string", required: true, description: "ID del tenant que posee este evento. No se comparten eventos entre tenants." },
-    { field: "occurredAt", type: "string (ISO 8601)", required: true, description: "Momento en que ocurrió el evento, en UTC (RFC 3339)." },
-    { field: "recordedAt", type: "string (ISO 8601)", required: true, description: "Momento en que el productor materializó el evento." },
-    { field: "entities", type: "array", required: true, description: "Referencias canónicas (tenant, waba, phone, conversation, message, contact)." },
-    { field: "meta.producer", type: "string", required: true, description: 'Etiqueta del productor, p. ej. "whatsapp-business-admin".' },
-    { field: "meta.correlationId", type: "string?", required: false, description: "ID opcional que vincula el evento con causación upstream." },
-    { field: "payload", type: "object", required: true, description: "Datos específicos del tipo de evento (campos propios más abajo)." },
+    { field: "id", type: "string", required: true, description: t("webhooks.docs.f.env.id") },
+    { field: "type", type: "string", required: true, description: t("webhooks.docs.f.env.type") },
+    { field: "version", type: "number", required: true, description: t("webhooks.docs.f.env.version") },
+    { field: "tenantId", type: "string", required: true, description: t("webhooks.docs.f.env.tenantId") },
+    { field: "occurredAt", type: "string (ISO 8601)", required: true, description: t("webhooks.docs.f.env.occurredAt") },
+    { field: "recordedAt", type: "string (ISO 8601)", required: true, description: t("webhooks.docs.f.env.recordedAt") },
+    { field: "entities", type: "array", required: true, description: t("webhooks.docs.f.env.entities") },
+    { field: "meta.producer", type: "string", required: true, description: t("webhooks.docs.f.env.metaProducer") },
+    { field: "meta.correlationId", type: "string?", required: false, description: t("webhooks.docs.f.env.metaCorrelationId") },
+    { field: "payload", type: "object", required: true, description: t("webhooks.docs.f.env.payload") },
   ];
 
   const inboundEnvelopeFields = envelopeFields;
 
   const inboundPayloadFields = [
-    { field: "conversationId", type: "string", required: true, description: "ID de la conversación dentro de la plataforma." },
-    { field: "messageId", type: "string", required: true, description: "ID del mensaje dentro de la plataforma." },
-    { field: "contactId", type: "string", required: true, description: "ID del contacto que envió el mensaje." },
-    { field: "phoneNumberId", type: "string", required: true, description: "ID del número de teléfono que recibió el mensaje." },
-    { field: "wabaAccountId", type: "string", required: true, description: "ID de la cuenta de WhatsApp Business." },
-    { field: "type", type: "string", required: true, description: "Tipo de mensaje: TEXT, IMAGE, VIDEO, AUDIO, DOCUMENT, STICKER, LOCATION, INTERACTIVE, BUTTON, REACTION, CONTACTS, TEMPLATE." },
-    { field: "receivedAt", type: "string (ISO 8601)", required: true, description: "Marca de tiempo del momento en que se recibió el mensaje." },
-    { field: "providerMessageId", type: "string?", required: false, description: "ID del mensaje en Meta (wamid.*), solo referencia." },
-    { field: "preview", type: "string?", required: false, description: "Vista previa truncada del cuerpo del mensaje (máx. 140 chars). Nunca se expone el cuerpo completo." },
+    { field: "conversationId", type: "string", required: true, description: t("webhooks.docs.f.conversationId") },
+    { field: "messageId", type: "string", required: true, description: t("webhooks.docs.f.messageId") },
+    { field: "contactId", type: "string", required: true, description: t("webhooks.docs.f.inb.contactId") },
+    { field: "phoneNumberId", type: "string", required: true, description: t("webhooks.docs.f.inb.phoneNumberId") },
+    { field: "wabaAccountId", type: "string", required: true, description: t("webhooks.docs.f.wabaAccountId") },
+    { field: "type", type: "string", required: true, description: t("webhooks.docs.f.inb.type") },
+    { field: "receivedAt", type: "string (ISO 8601)", required: true, description: t("webhooks.docs.f.inb.receivedAt") },
+    { field: "providerMessageId", type: "string?", required: false, description: t("webhooks.docs.f.inb.providerMessageId") },
+    { field: "preview", type: "string?", required: false, description: t("webhooks.docs.f.inb.preview") },
   ];
 
   const outboundAcceptedPayloadFields = [
-    { field: "conversationId", type: "string", required: true, description: "ID de la conversación dentro de la plataforma." },
-    { field: "messageId", type: "string", required: true, description: "ID del mensaje dentro de la plataforma." },
-    { field: "contactId", type: "string", required: true, description: "ID del contacto destinatario." },
-    { field: "phoneNumberId", type: "string", required: true, description: "ID del número de teléfono desde el que se envió." },
-    { field: "wabaAccountId", type: "string", required: true, description: "ID de la cuenta de WhatsApp Business." },
-    { field: "type", type: "string", required: true, description: "Tipo de mensaje enviado." },
-    { field: "acceptedAt", type: "string (ISO 8601)", required: true, description: "Momento en que Meta aceptó el mensaje." },
-    { field: "providerMessageId", type: "string?", required: false, description: "ID asignado por Meta tras el ack (wamid.*)." },
+    { field: "conversationId", type: "string", required: true, description: t("webhooks.docs.f.conversationId") },
+    { field: "messageId", type: "string", required: true, description: t("webhooks.docs.f.messageId") },
+    { field: "contactId", type: "string", required: true, description: t("webhooks.docs.f.acc.contactId") },
+    { field: "phoneNumberId", type: "string", required: true, description: t("webhooks.docs.f.acc.phoneNumberId") },
+    { field: "wabaAccountId", type: "string", required: true, description: t("webhooks.docs.f.wabaAccountId") },
+    { field: "type", type: "string", required: true, description: t("webhooks.docs.f.acc.type") },
+    { field: "acceptedAt", type: "string (ISO 8601)", required: true, description: t("webhooks.docs.f.acc.acceptedAt") },
+    { field: "providerMessageId", type: "string?", required: false, description: t("webhooks.docs.f.acc.providerMessageId") },
   ];
 
   const outboundStatusPayloadFields = [
-    { field: "conversationId", type: "string", required: true, description: "ID de la conversación." },
-    { field: "messageId", type: "string", required: true, description: "ID del mensaje dentro de la plataforma." },
-    { field: "phoneNumberId", type: "string", required: true, description: "ID del número de teléfono." },
-    { field: "wabaAccountId", type: "string", required: true, description: "ID de la cuenta de WhatsApp Business." },
-    { field: "previousStatus", type: "string | null", required: true, description: "Estado anterior del mensaje. Puede ser null en la primera notificación." },
-    { field: "status", type: "string", required: true, description: "Nuevo estado: PENDING, SENT, DELIVERED, READ, FAILED, RECEIVED." },
-    { field: "changedAt", type: "string (ISO 8601)", required: true, description: "Momento del cambio de estado." },
-    { field: "providerMessageId", type: "string?", required: false, description: "ID del mensaje en Meta (wamid.*)." },
+    { field: "conversationId", type: "string", required: true, description: t("webhooks.docs.f.cv.conversationId") },
+    { field: "messageId", type: "string", required: true, description: t("webhooks.docs.f.messageId") },
+    { field: "phoneNumberId", type: "string", required: true, description: t("webhooks.docs.f.st.phoneNumberId") },
+    { field: "wabaAccountId", type: "string", required: true, description: t("webhooks.docs.f.wabaAccountId") },
+    { field: "previousStatus", type: "string | null", required: true, description: t("webhooks.docs.f.st.previousStatus") },
+    { field: "status", type: "string", required: true, description: t("webhooks.docs.f.st.status") },
+    { field: "changedAt", type: "string (ISO 8601)", required: true, description: t("webhooks.docs.f.st.changedAt") },
+    { field: "providerMessageId", type: "string?", required: false, description: t("webhooks.docs.f.st.providerMessageId") },
   ];
 
   const conversationPayloadFields = [
-    { field: "conversationId", type: "string", required: true, description: "ID de la conversación." },
-    { field: "contactId", type: "string", required: true, description: "ID del contacto asociado." },
-    { field: "phoneNumberId", type: "string | null", required: true, description: "ID del número de teléfono asociado." },
-    { field: "wabaAccountId", type: "string | null", required: true, description: "ID de la cuenta de WhatsApp Business." },
-    { field: "kind", type: "string", required: true, description: "Tipo de cambio: CREATED (nueva conversación), STATUS_CHANGED (cambio de estado), REASSIGNED (reasignación)." },
-    { field: "status", type: "string | null", required: true, description: "Estado: OPEN (abierta), CLOSED (cerrada). null en eventos de tipo CREATED." },
-    { field: "occurredAt", type: "string (ISO 8601)", required: true, description: "Momento del cambio." },
+    { field: "conversationId", type: "string", required: true, description: t("webhooks.docs.f.cv.conversationId") },
+    { field: "contactId", type: "string", required: true, description: t("webhooks.docs.f.cv.contactId") },
+    { field: "phoneNumberId", type: "string | null", required: true, description: t("webhooks.docs.f.cv.phoneNumberId") },
+    { field: "wabaAccountId", type: "string | null", required: true, description: t("webhooks.docs.f.cv.wabaAccountId") },
+    { field: "kind", type: "string", required: true, description: t("webhooks.docs.f.cv.kind") },
+    { field: "status", type: "string | null", required: true, description: t("webhooks.docs.f.cv.status") },
+    { field: "occurredAt", type: "string (ISO 8601)", required: true, description: t("webhooks.docs.f.cv.occurredAt") },
   ];
 
   return (
     <div className="max-w-3xl space-y-6">
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Introducción</h2>
+        <h2 className="text-sm font-semibold">{t("webhooks.docs.intro.title")}</h2>
         <p className="text-xs text-muted-foreground">
-          Los webhooks salientes permiten que el sistema notifique a aplicaciones externas en tiempo real
-          cuando ocurre un evento de mensajería o conversación. Un consumidor típico registra una URL
-          de endpoint HTTPS y suscribe los eventos que le interesan. Cada evento se entrega como una
-          solicitud HTTP POST con un cuerpo JSON canónico, firmado con HMAC-SHA256 para permitir
-          verificación de autenticidad e integridad.
+          {t("webhooks.docs.intro.p1")}
         </p>
         <p className="text-xs text-muted-foreground">
-          El contrato de eventos está versionado (versión 1). Todos los campos son opcionales
-          a nivel de TypeScript solo cuando así lo declara el contrato; los campos marcados como
-          obligatorios siempre estarán presentes.
+          {t("webhooks.docs.intro.p2")}
         </p>
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Entrega de eventos</h2>
+        <h2 className="text-sm font-semibold">{t("webhooks.docs.delivery.title")}</h2>
         <div className="space-y-2">
           <div className="grid grid-cols-[120px_1fr] gap-1 text-xs">
-            <span className="font-medium text-muted-foreground">Método</span>
-            <span>HTTP POST, application/json</span>
-            <span className="font-medium text-muted-foreground">Autenticación</span>
-            <span>HMAC-SHA256 con secreto compartido. Encabezados: <code className="rounded-sm bg-muted px-1">X-WBA-Timestamp</code> y <code className="rounded-sm bg-muted px-1">X-WBA-Signature</code>. El cuerpo se firma como <code className="rounded-sm bg-muted px-1">timestamp.body</code> usando HMAC-SHA256. Tolerancia de 5 min.</span>
-            <span className="font-medium text-muted-foreground">Encabezados</span>
-            <span><code className="rounded-sm bg-muted px-1">X-Canonical-Event-Id</code> (ID del evento), <code className="rounded-sm bg-muted px-1">X-Canonical-Tenant-Id</code> (tenant)</span>
-            <span className="font-medium text-muted-foreground">Timeout</span>
-            <span>5 segundos (máx. configurable hasta 30 s)</span>
-            <span className="font-medium text-muted-foreground">Reintentos</span>
-            <span>Máx. 5 intentos con backoff exponencial (1 s – 60 s) y jitter. Se agotan después de 5 intentos fallidos.</span>
-            <span className="font-medium text-muted-foreground">Respuestas</span>
-            <span>2xx = aceptado. 4xx = error terminal (no se reintenta). 5xx / timeout / 429 = reintentable.</span>
-            <span className="font-medium text-muted-foreground">Idempotencia</span>
-            <span>El ID de evento es estable y determinista. Un consumidor que recibe el mismo ID dos veces debe tratar la segunda entrega como duplicado.</span>
-            <span className="font-medium text-muted-foreground">Orden</span>
-            <span>No hay garantía de orden entre eventos de diferentes tipos. Para eventos del mismo mensaje (p. ej. accepted → delivered → read), el orden de occurrence se preserva.</span>
-            <span className="font-medium text-muted-foreground">URLs</span>
-            <span>Solo HTTPS en producción. HTTP localhost permitido solo en pruebas.</span>
-            <span className="font-medium text-muted-foreground">Seguridad</span>
-            <span>SSRF: se resuelve el hostname una vez y se fija la conexión a esa IP. Credenciales en la URL no están permitidas. IPs privadas están bloqueadas.</span>
+            <span className="font-medium text-muted-foreground">{t("webhooks.docs.delivery.method")}</span>
+            <span>{t("webhooks.docs.delivery.methodValue")}</span>
+            <span className="font-medium text-muted-foreground">{t("webhooks.docs.delivery.auth")}</span>
+            <span>{t("webhooks.docs.delivery.authValue")}</span>
+            <span className="font-medium text-muted-foreground">{t("webhooks.docs.delivery.headers")}</span>
+            <span>{t("webhooks.docs.delivery.headersValue")}</span>
+            <span className="font-medium text-muted-foreground">{t("webhooks.docs.delivery.timeout")}</span>
+            <span>{t("webhooks.docs.delivery.timeoutValue")}</span>
+            <span className="font-medium text-muted-foreground">{t("webhooks.docs.delivery.retries")}</span>
+            <span>{t("webhooks.docs.delivery.retriesValue")}</span>
+            <span className="font-medium text-muted-foreground">{t("webhooks.docs.delivery.responses")}</span>
+            <span>{t("webhooks.docs.delivery.responsesValue")}</span>
+            <span className="font-medium text-muted-foreground">{t("webhooks.docs.delivery.idempotency")}</span>
+            <span>{t("webhooks.docs.delivery.idempotencyValue")}</span>
+            <span className="font-medium text-muted-foreground">{t("webhooks.docs.delivery.order")}</span>
+            <span>{t("webhooks.docs.delivery.orderValue")}</span>
+            <span className="font-medium text-muted-foreground">{t("webhooks.docs.delivery.urls")}</span>
+            <span>{t("webhooks.docs.delivery.urlsValue")}</span>
+            <span className="font-medium text-muted-foreground">{t("webhooks.docs.delivery.security")}</span>
+            <span>{t("webhooks.docs.delivery.securityValue")}</span>
           </div>
         </div>
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Envelope canónico</h2>
-        <p className="text-xs text-muted-foreground">Todos los eventos comparten esta estructura. Los campos específicos del evento están en <code className="rounded-sm bg-muted px-1">payload</code>.</p>
+        <h2 className="text-sm font-semibold">{t("webhooks.docs.envelope.title")}</h2>
+        <p className="text-xs text-muted-foreground">{t("webhooks.docs.envelope.description")}</p>
         <FieldTable fields={inboundEnvelopeFields} />
         <CodeBlock code={`{
   "id": "evt:inbound.message.received:tenant_abc:msg_xyz",
@@ -454,19 +460,19 @@ function WebhookDocs() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Eventos disponibles</h2>
-        <p className="text-xs text-muted-foreground">Haga clic en un evento para expandir los detalles y el ejemplo.</p>
+        <h2 className="text-sm font-semibold">{t("webhooks.docs.eventTypes.title")}</h2>
+        <p className="text-xs text-muted-foreground">{t("webhooks.docs.eventTypes.description")}</p>
 
         <EventCard
           eventType="inbound.message.received"
-          title="Mensaje entrante recibido"
-          description="Se emite cuando llega un mensaje de un contacto al número de WhatsApp Business."
-          when="Cuando WhatsApp entrega un mensaje de texto, multimedia, ubicación, sticker, botón o interactivo al webhook de Meta."
+          title={t("webhooks.docs.evt.inbound.title")}
+          description={t("webhooks.docs.evt.inbound.description")}
+          when={t("webhooks.docs.evt.inbound.when")}
           useCases={[
-            "Sincronizar conversaciones en un CRM o plataforma de automatización.",
-            "Activar un chatbot o flujo de automatización en Mastra / n8n.",
-            "Crear tickets en un sistema de soporte cuando llega un mensaje.",
-            "Extraer datos de formularios de WhatsApp Flows completados.",
+            t("webhooks.docs.evt.inbound.uc1"),
+            t("webhooks.docs.evt.inbound.uc2"),
+            t("webhooks.docs.evt.inbound.uc3"),
+            t("webhooks.docs.evt.inbound.uc4"),
           ]}
           envelopeFields={inboundEnvelopeFields}
           payloadFields={inboundPayloadFields}
@@ -499,21 +505,21 @@ function WebhookDocs() {
   }
 }`}
           notes={[
-            "El cuerpo completo del mensaje NO se incluye. Solo una vista previa truncada a 140 caracteres.",
-            "La conversación ya existe o se crea automáticamente en la plataforma.",
-            "El mensaje se marca como RECEIVED tras este evento.",
+            t("webhooks.docs.evt.inbound.note1"),
+            t("webhooks.docs.evt.inbound.note2"),
+            t("webhooks.docs.evt.inbound.note3"),
           ]}
         />
 
         <EventCard
           eventType="outbound.message.accepted"
-          title="Mensaje saliente aceptado"
-          description="Se emite cuando Meta confirma la aceptación de un mensaje saliente enviado a través de la API."
-          when="Cuando WhatsApp reconoce un mensaje enviado y le asigna un ID de proveedor (wamid)."
+          title={t("webhooks.docs.evt.accepted.title")}
+          description={t("webhooks.docs.evt.accepted.description")}
+          when={t("webhooks.docs.evt.accepted.when")}
           useCases={[
-            "Confirmar que un mensaje fue recibido por Meta antes de marcarlo como enviado.",
-            "Validar que el número de teléfono es reachable antes de enviar mensajes en cadena.",
-            "Auditar volúmenes de mensajería enviada.",
+            t("webhooks.docs.evt.accepted.uc1"),
+            t("webhooks.docs.evt.accepted.uc2"),
+            t("webhooks.docs.evt.accepted.uc3"),
           ]}
           envelopeFields={inboundEnvelopeFields}
           payloadFields={outboundAcceptedPayloadFields}
@@ -545,21 +551,21 @@ function WebhookDocs() {
   }
 }`}
           notes={[
-            "Este evento confirma que Meta recibió la solicitud, no que el destinatario lo leyó.",
-            "Si Meta rechaza el número (no reachable), el evento no se emite; se emite outbound.message.status_changed con status: FAILED.",
+            t("webhooks.docs.evt.accepted.note1"),
+            t("webhooks.docs.evt.accepted.note2"),
           ]}
         />
 
         <EventCard
           eventType="outbound.message.status_changed"
-          title="Cambio de estado de mensaje saliente"
-          description="Se emite cuando cambia el estado de entrega de un mensaje saliente (enviado, entregado, leído, fallido)."
-          when="Cuando Meta notifica un cambio de estado en la entrega del mensaje (sent, delivered, read, failed)."
+          title={t("webhooks.docs.evt.statusChanged.title")}
+          description={t("webhooks.docs.evt.statusChanged.description")}
+          when={t("webhooks.docs.evt.statusChanged.when")}
           useCases={[
-            "Actualizar el estado de mensajes en un CRM o dashboard de operadores.",
-            "Notificar al usuario cuando su mensaje es leído (read receipt).",
-            "Reintentar o marcar como fallido en un sistema de seguimiento de campañas.",
-            "Detectar números no reachable para depurar tasas de entrega.",
+            t("webhooks.docs.evt.statusChanged.uc1"),
+            t("webhooks.docs.evt.statusChanged.uc2"),
+            t("webhooks.docs.evt.statusChanged.uc3"),
+            t("webhooks.docs.evt.statusChanged.uc4"),
           ]}
           envelopeFields={inboundEnvelopeFields}
           payloadFields={outboundStatusPayloadFields}
@@ -590,23 +596,23 @@ function WebhookDocs() {
   }
 }`}
           notes={[
-            "Los estados posibles son: PENDING, SENT, DELIVERED, READ, FAILED, RECEIVED.",
-            "La monotonicidad se respeta: un estado no puede degradarse (read no puede llegar antes que delivered).",
-            "Si previousStatus y status son iguales, el evento no se emite.",
-            "Este evento no incluye contactId porque es optional en el contrato del mensaje.",
+            t("webhooks.docs.evt.statusChanged.note1"),
+            t("webhooks.docs.evt.statusChanged.note2"),
+            t("webhooks.docs.evt.statusChanged.note3"),
+            t("webhooks.docs.evt.statusChanged.note4"),
           ]}
         />
 
         <EventCard
           eventType="conversation.changed"
-          title="Conversación modificada"
-          description="Se emite cuando se crea una nueva conversación o cambia su estado (abierta/cerrada)."
-          when="Cuando llega el primer mensaje de un contacto (crea conversación OPEN) o cuando un operador cierra/reabre la conversación."
+          title={t("webhooks.docs.evt.conversation.title")}
+          description={t("webhooks.docs.evt.conversation.description")}
+          when={t("webhooks.docs.evt.conversation.when")}
           useCases={[
-            "Abrir automáticamente tickets de soporte al recibir un mensaje de un cliente nuevo.",
-            "Notificar a un equipo cuando una conversación pasa a estado CLOSED para revisión.",
-            "Limpiar conversaciones inactivas en sistemas externos.",
-            "Detectar cuando un cliente inicia una nueva sesión de atención.",
+            t("webhooks.docs.evt.conversation.uc1"),
+            t("webhooks.docs.evt.conversation.uc2"),
+            t("webhooks.docs.evt.conversation.uc3"),
+            t("webhooks.docs.evt.conversation.uc4"),
           ]}
           envelopeFields={inboundEnvelopeFields}
           payloadFields={conversationPayloadFields}
@@ -636,20 +642,17 @@ function WebhookDocs() {
   }
 }`}
           notes={[
-            'kind: CREATED = conversación nueva. STATUS_CHANGED = cambio de estado. REASSIGNED = reasignación de operador.',
-            'status: OPEN (abierta) o CLOSED (cerrada). null en kind: CREATED.',
-            "Si kind y status son iguales a los anteriores, el evento no se emite.",
+            t("webhooks.docs.evt.conversation.note1"),
+            t("webhooks.docs.evt.conversation.note2"),
+            t("webhooks.docs.evt.conversation.note3"),
           ]}
         />
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Verificar la firma</h2>
+        <h2 className="text-sm font-semibold">{t("webhooks.docs.signature.title")}</h2>
         <p className="text-xs text-muted-foreground">
-          Si el destino tiene un secreto configurado, cada request incluye{" "}
-          <code className="rounded-sm bg-muted px-1">X-WBA-Timestamp</code> y{" "}
-          <code className="rounded-sm bg-muted px-1">X-WBA-Signature</code>. El cuerpo
-          se firma con HMAC-SHA256 sobre <code className="rounded-sm bg-muted px-1">timestamp.body</code>.
+          {t("webhooks.docs.signature.p1")}
         </p>
         <CodeBlock code={`import crypto from "crypto";
 
@@ -664,31 +667,13 @@ function verify(body, timestampHeader, signatureHeader, secret) {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">Convenciones importantes</h2>
+        <h2 className="text-sm font-semibold">{t("webhooks.docs.conventions.title")}</h2>
         <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-          <li>
-            <strong>IDs estables:</strong> todos los IDs (conversationId, messageId, contactId…) son
-            IDs internos de la plataforma. No asumir formato de Meta.
-          </li>
-          <li>
-            <strong>Deduplicación:</strong> usar <code className="rounded-sm bg-muted px-1">id</code>
-            {" "}del envelope para detectar duplicados. El mismo evento nunca se entrega dos veces
-            en circunstancias normales, pero la idempotencia es buena práctica.
-          </li>
-          <li>
-            <strong>Occurrence vs. recording:</strong> <code className="rounded-sm bg-muted px-1">occurredAt</code>{" "}
-            es el momento real del evento; <code className="rounded-sm bg-muted px-1">recordedAt</code> es
-            cuando se persistió. Consumers deben usar <code className="rounded-sm bg-muted px-1">occurredAt</code>{" "}
-            para ordenar.
-          </li>
-          <li>
-            <strong>Sin secretos ni PII:</strong> los payloads de eventos nunca contienen tokens,
-            secretos ni contenido de mensajes entrantes.
-          </li>
-          <li>
-            <strong>Teléfono sin +:</strong> los IDs de teléfono son IDs internos de la plataforma,
-            no números de teléfono en formato E.164.
-          </li>
+          <li>{t("webhooks.docs.conventions.stableIds")}</li>
+          <li>{t("webhooks.docs.conventions.deduplication")}</li>
+          <li>{t("webhooks.docs.conventions.occurrence")}</li>
+          <li>{t("webhooks.docs.conventions.noSecrets")}</li>
+          <li>{t("webhooks.docs.conventions.phone")}</li>
         </ul>
       </section>
     </div>
