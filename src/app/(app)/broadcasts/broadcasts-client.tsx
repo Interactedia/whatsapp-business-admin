@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
+import { useI18n } from "@/components/i18n/language-provider";
 
 type Broadcast = {
   id: string;
@@ -38,6 +39,7 @@ const STATUS_VARIANT: Record<Broadcast["status"], BadgeProps["variant"]> = {
 export function BroadcastsClient() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const { t } = useI18n();
 
   const { data: broadcasts = [] } = useQuery({
     queryKey: ["broadcasts"],
@@ -48,13 +50,13 @@ export function BroadcastsClient() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        title="Broadcasts"
-        description="Send an approved template to many contacts at once."
+        title={t("broadcasts.title")}
+        description={t("broadcasts.description")}
         actions={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm">
-                <Plus className="h-4 w-4" /> New broadcast
+                <Plus className="h-4 w-4" /> {t("broadcasts.new")}
               </Button>
             </DialogTrigger>
             <NewBroadcastDialog onClose={() => setOpen(false)} onCreated={() => qc.invalidateQueries({ queryKey: ["broadcasts"] })} />
@@ -67,11 +69,11 @@ export function BroadcastsClient() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className="w-40">Template</TableHead>
-                <TableHead className="w-28">Status</TableHead>
-                <TableHead className="w-56">Progress</TableHead>
-                <TableHead className="w-40">Created</TableHead>
+                <TableHead>{t("broadcasts.colName")}</TableHead>
+                <TableHead className="w-40">{t("broadcasts.colTemplate")}</TableHead>
+                <TableHead className="w-28">{t("broadcasts.colStatus")}</TableHead>
+                <TableHead className="w-56">{t("broadcasts.colProgress")}</TableHead>
+                <TableHead className="w-40">{t("broadcasts.colCreated")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -79,7 +81,7 @@ export function BroadcastsClient() {
                 <TableRow>
                   <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                     <Megaphone className="mx-auto mb-1 h-6 w-6 opacity-40" />
-                    No broadcasts yet.
+                    {t("broadcasts.empty")}
                   </TableCell>
                 </TableRow>
               )}
@@ -91,7 +93,7 @@ export function BroadcastsClient() {
                     <TableCell data-label="Name" className="font-medium">{b.name}</TableCell>
                     <TableCell data-label="Template" className="text-xs text-muted-foreground">{b.templateName}</TableCell>
                     <TableCell data-label="Status">
-                      <Badge variant={STATUS_VARIANT[b.status]}>{b.status}</Badge>
+                      <Badge variant={STATUS_VARIANT[b.status]} title={b.status}>{t("broadcasts.status." + b.status as keyof typeof STATUS_VARIANT)}</Badge>
                     </TableCell>
                     <TableCell data-label="Progress">
                       <div className="flex items-center gap-2">
@@ -119,6 +121,7 @@ type ApprovedTemplate = { id: string; name: string; language: string; status: st
 
 function NewBroadcastDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [audienceType, setAudienceType] = useState<"all" | "tag">("all");
@@ -140,68 +143,66 @@ function NewBroadcastDialog({ onClose, onCreated }: { onClose: () => void; onCre
         }),
       }),
     onSuccess: (r) => {
-      toast({ title: `Broadcast started`, description: `${r.total} recipients queued.` });
+      toast({ title: t("broadcasts.success"), description: t("broadcasts.successRecipients").replace("{count}", String(r.total)) });
       onCreated();
       onClose();
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Could not start", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("broadcasts.error"), description: e.message }),
   });
 
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>New broadcast</DialogTitle>
+        <DialogTitle>{t("broadcasts.dialogTitle")}</DialogTitle>
       </DialogHeader>
       <div className="space-y-3">
         <div className="space-y-1">
-          <Label>Campaign name</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Diwali sale" />
+          <Label>{t("broadcasts.labelName")}</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("broadcasts.placeholderName")} />
         </div>
         <div className="space-y-1">
-          <Label>Approved template</Label>
+          <Label>{t("broadcasts.labelTemplate")}</Label>
           <Select value={templateId} onValueChange={setTemplateId}>
             <SelectTrigger>
-              <SelectValue placeholder={templates.length ? "Choose a template" : "No approved templates"} />
+              <SelectValue placeholder={templates.length ? t("broadcasts.placeholderTemplate") : t("broadcasts.placeholderTemplateEmpty")} />
             </SelectTrigger>
             <SelectContent>
-              {templates.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.name} ({t.language})
+              {templates.map((tmpl) => (
+                <SelectItem key={tmpl.id} value={tmpl.id}>
+                  {tmpl.name} ({tmpl.language})
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-1">
-          <Label>Audience</Label>
+          <Label>{t("broadcasts.labelAudience")}</Label>
           <Select value={audienceType} onValueChange={(v) => setAudienceType(v as "all" | "tag")}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All contacts</SelectItem>
-              <SelectItem value="tag">Contacts with a tag</SelectItem>
+              <SelectItem value="all">{t("broadcasts.audienceAll")}</SelectItem>
+              <SelectItem value="tag">{t("broadcasts.audienceTag")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         {audienceType === "tag" && (
           <div className="space-y-1">
-            <Label>Tag</Label>
-            <Input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="vip" />
+            <Label>{t("broadcasts.labelTag")}</Label>
+            <Input value={tag} onChange={(e) => setTag(e.target.value)} placeholder={t("broadcasts.placeholderTag")} />
           </div>
         )}
-        <p className="text-[11px] text-muted-foreground">
-          Messages send using the template’s sample values. Delivery status updates live from webhooks.
-        </p>
+        <p className="text-[11px] text-muted-foreground">{t("broadcasts.disclaimer")}</p>
       </div>
       <DialogFooter>
-        <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+        <Button variant="outline" size="sm" onClick={onClose}>{t("broadcasts.cancel")}</Button>
         <Button
           size="sm"
           disabled={!name || !templateId || (audienceType === "tag" && !tag) || create.isPending}
           onClick={() => create.mutate()}
         >
-          Start broadcast
+          {t("broadcasts.start")}
         </Button>
       </DialogFooter>
     </DialogContent>
