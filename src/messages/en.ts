@@ -790,6 +790,18 @@ export const en: Record<MessageKey, string> = {
   "dashboard.waNotConnected.desc":
     "Set up your WhatsApp Business account to start receiving and sending messages.",
   "dashboard.waNotConnected.action": "Go to settings",
+  "dashboard.tile.conversations": "Conversations",
+  "dashboard.tile.conversations.sub": "{count} unread",
+  "dashboard.tile.contacts": "Contacts",
+  "dashboard.tile.contacts.sub": "in address book",
+  "dashboard.tile.templates": "Templates",
+  "dashboard.tile.templates.sub": "{count} approved",
+  "dashboard.tile.flows": "Flows",
+  "dashboard.tile.flows.sub": "active",
+  "dashboard.tile.broadcasts": "Broadcasts",
+  "dashboard.tile.broadcasts.sub": "campaigns",
+  "dashboard.tile.submissions": "Submissions",
+  "dashboard.tile.submissions.sub": "flow entries",
 
   // ── Admin Dashboard ──────────────────────────────────────────────────────────
   "admin.title": "System Administration",

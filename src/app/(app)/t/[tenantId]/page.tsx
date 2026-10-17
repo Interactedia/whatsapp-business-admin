@@ -80,51 +80,54 @@ export default async function TenantDashboardPage({
   // /api/tenants/:id/settings → `connected` and the sidebar footer).
   const wabaConnected = wabaCfg ? isConfigured(wabaCfg) : false;
 
+  // WA-UI-FROZEN-BUG-01: presentation keys only — queries, values, hrefs,
+  // icons and visibility are unchanged. Labels/subtitles are resolved by the
+  // client through the i18n dictionaries (dashboard.tile.*).
   const tiles = [
     {
-      label: "Conversations",
+      key: "conversations" as const,
       value: stats.conversations,
-      sub: `${stats.unread} unread`,
+      subCount: stats.unread,
       href: `/t/${tenantId}/conversations`,
       icon: "MessageSquare" as const,
       visible: true,
     },
     {
-      label: "Contacts",
+      key: "contacts" as const,
       value: stats.contacts,
-      sub: "in address book",
+      subCount: null,
       href: `/t/${tenantId}/contacts`,
       icon: "Users" as const,
       visible: true,
     },
     {
-      label: "Templates",
+      key: "templates" as const,
       value: stats.templates,
-      sub: `${stats.approved} approved`,
+      subCount: stats.approved,
       href: `/t/${tenantId}/templates`,
       icon: "LayoutTemplate" as const,
       visible: isAdmin,
     },
     {
-      label: "Flows",
+      key: "flows" as const,
       value: stats.flows,
-      sub: "active",
+      subCount: null,
       href: `/t/${tenantId}/flows`,
       icon: "Workflow" as const,
       visible: isAdmin,
     },
     {
-      label: "Broadcasts",
+      key: "broadcasts" as const,
       value: stats.broadcasts,
-      sub: "campaigns",
+      subCount: null,
       href: `/t/${tenantId}/broadcasts`,
       icon: "Megaphone" as const,
       visible: isAdmin,
     },
     {
-      label: "Submissions",
+      key: "submissions" as const,
       value: "—",
-      sub: "flow entries",
+      subCount: null,
       href: `/t/${tenantId}/submissions`,
       icon: "ScrollText" as const,
       visible: true,

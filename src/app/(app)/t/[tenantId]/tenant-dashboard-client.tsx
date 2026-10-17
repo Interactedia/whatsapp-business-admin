@@ -27,10 +27,14 @@ const ICON_MAP = {
 
 type IconName = keyof typeof ICON_MAP;
 
+type TileKey = "conversations" | "contacts" | "templates" | "flows" | "broadcasts" | "submissions";
+
 type Tile = {
-  label: string;
+  /** Stable key; labels/subtitles come from dashboard.tile.<key>[.sub] messages. */
+  key: TileKey;
   value: number | string;
-  sub: string;
+  /** Optional count interpolated into the `{count}` subtitle message. */
+  subCount: number | null;
   href: string;
   icon: IconName;
   visible: boolean;
@@ -100,11 +104,17 @@ export function TenantDashboardClient({
           <div className="grid grid-cols-1 gap-3 min-[430px]:grid-cols-2 lg:grid-cols-3">
             {tiles.map((tile) => {
               const Icon = ICON_MAP[tile.icon];
+              // ponytail: reuse the same .replace() interpolation as dashboard.description; no i18n lib needed.
+              const label = t(`dashboard.tile.${tile.key}`, tile.key);
+              const sub = t(`dashboard.tile.${tile.key}.sub`, "").replace(
+                "{count}",
+                String(tile.subCount ?? ""),
+              );
               return (
                 <Link
-                  key={tile.label}
+                  key={tile.key}
                   href={tile.href}
-                  aria-label={`${tile.label}: ${tile.value}. ${tile.sub}`}
+                  aria-label={`${label}: ${tile.value}. ${sub}`}
                   className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <Card className="h-full border-border bg-card text-card-foreground transition-all duration-150 group-hover:-translate-y-0.5 group-hover:border-primary/30 group-hover:shadow-md">
@@ -118,13 +128,13 @@ export function TenantDashboardClient({
                             <Icon className="h-4 w-4 text-primary" />
                           </span>
                           <p className="truncate text-sm font-medium text-muted-foreground">
-                            {tile.label}
+                            {label}
                           </p>
                         </div>
                         <div className="mt-3 text-[28px] font-semibold leading-none tabular-nums text-foreground">
                           {tile.value}
                         </div>
-                        <p className="mt-1.5 text-xs text-muted-foreground">{tile.sub}</p>
+                        <p className="mt-1.5 text-xs text-muted-foreground">{sub}</p>
                       </div>
                       <ChevronRight
                         className="mt-1 h-4 w-4 shrink-0 text-muted-foreground/50 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-primary"
