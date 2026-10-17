@@ -981,6 +981,7 @@ export const es = {
   // Page header
   "settings.title": "Configuración",
   "settings.description": "Administra las conexiones y el funcionamiento de tu organización.",
+  "settings.loading": "Cargando configuración…",
 
   // Tabs
   "settings.tab.meta": "Conexión Meta",

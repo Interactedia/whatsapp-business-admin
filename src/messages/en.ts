@@ -982,6 +982,7 @@ export const en: Record<MessageKey, string> = {
   // Page header
   "settings.title": "Settings",
   "settings.description": "Manage your organization's connections and operation.",
+  "settings.loading": "Loading configuration…",
 
   // Tabs
   "settings.tab.meta": "Meta Connection",
