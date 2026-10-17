@@ -696,6 +696,90 @@ export const es = {
   "apiDocs.flows.note": "Los lanzamientos directos de Flow siguen la regla de 24 horas. Para iniciar uno más tarde, usa una plantilla aprobada que contenga un botón de Flow a través del endpoint de mensajes existente.",
   "apiDocs.errors": "Errores",
   "apiDocs.errors.note": "Los errores devuelven un estado no-2xx con un cuerpo consistente:",
+
+  // ── Logs ──────────────────────────────────────────────────────────────────
+  "logs.title": "Logs",
+  "logs.description": "Consulta llamadas API y eventos de webhooks para diagnosticar la actividad del sistema.",
+  "logs.refresh": "Actualizar",
+  "logs.updating": "Actualizando…",
+  "logs.lastUpdated": "Última actualización:",
+  "logs.filters": "Filtros",
+  "logs.clearFilters": "Limpiar filtros",
+  "logs.results": "Resultados",
+  "logs.showing": "Mostrando {from}–{to} de {total}",
+  "logs.records": "registros",
+  "logs.perPage": "por página",
+
+  // ── Logs — Tabs ────────────────────────────────────────────────────────────
+  "logs.tabs.api": "Llamadas API",
+  "logs.tabs.webhook": "Webhooks",
+
+  // ── Logs — Filter labels ───────────────────────────────────────────────────
+  "logs.filter.method": "Método",
+  "logs.filter.method.placeholder": "GET, POST…",
+  "logs.filter.endpoint": "Endpoint",
+  "logs.filter.endpoint.placeholder": "Coincidencia parcial…",
+  "logs.filter.status": "Estado",
+  "logs.filter.status.all": "Todos",
+  "logs.filter.status.success": "Correcto",
+  "logs.filter.status.failed": "Fallido",
+  "logs.filter.related": "Relacionado",
+  "logs.filter.related.all": "Todos",
+  "logs.filter.related.template": "Template",
+  "logs.filter.related.message": "Message",
+  "logs.filter.related.broadcast": "Broadcast",
+  "logs.filter.related.media": "Media",
+  "logs.filter.signature": "Firma",
+  "logs.filter.signature.all": "Todas",
+  "logs.filter.signature.valid": "Válida",
+  "logs.filter.signature.invalid": "No verificada",
+  "logs.filter.processed": "Procesado",
+  "logs.filter.processed.all": "Todos",
+  "logs.filter.processed.ok": "OK",
+  "logs.filter.processed.error": "Error",
+  "logs.filter.from": "Desde",
+  "logs.filter.to": "Hasta",
+
+  // ── Logs — Table headers ────────────────────────────────────────────────────
+  "logs.table.time": "Hora",
+  "logs.table.method": "Método",
+  "logs.table.tenant": "Tenant",
+  "logs.table.endpoint": "Endpoint",
+  "logs.table.status": "Estado",
+  "logs.table.duration": "Duración",
+  "logs.table.related": "Relacionado",
+  "logs.table.summary": "Resumen",
+  "logs.table.signature": "Firma",
+  "logs.table.processed": "Procesado",
+  "logs.table.action": "Acción",
+  "logs.table.view": "Ver",
+
+  // ── Logs — Badge values ─────────────────────────────────────────────────────
+  "logs.badge.valid": "válida",
+  "logs.badge.unverified": "no verificada",
+  "logs.badge.ok": "ok",
+  "logs.badge.error": "error",
+
+  // ── Logs — Empty / loading / error ─────────────────────────────────────────
+  "logs.loading": "Cargando registros…",
+  "logs.empty.api": "No hay registros que coincidan con los filtros.",
+  "logs.empty.webhook": "No hay webhooks que coincidan con los filtros.",
+  "logs.error.title": "No se pudieron cargar los registros.",
+  "logs.error.retry": "Verifica la conexión con el servidor e inténtalo de nuevo.",
+  "logs.error.retryAction": "Intentar nuevamente",
+  "logs.error.table": "Error al cargar los registros.",
+
+  // ── Logs — Pagination ──────────────────────────────────────────────────────
+  "logs.pagination.records": "registros",
+  "logs.pagination.perPage": "por página",
+  "logs.pagination.page": "Página",
+  "logs.pagination.of": "de",
+  "logs.pagination.prev": "Página anterior",
+  "logs.pagination.next": "Página siguiente",
+
+  // ── Logs — Detail dialog ────────────────────────────────────────────────────
+  "logs.detail.http": "Detalle HTTP",
+  "logs.detail.webhook": "Detalle webhook",
 } as const;
 
 export type MessageKey = keyof typeof es;

@@ -698,4 +698,88 @@ export const en: Record<MessageKey, string> = {
   "apiDocs.flows.note": "Direct Flow launches follow the 24-hour rule. To initiate one later, use an approved template containing a Flow button through the existing messages endpoint.",
   "apiDocs.errors": "Errors",
   "apiDocs.errors.note": "Errors return a non-2xx status with a consistent body:",
+
+  // ── Logs ──────────────────────────────────────────────────────────────────
+  "logs.title": "Logs",
+  "logs.description": "Query API calls and webhook events to diagnose system activity.",
+  "logs.refresh": "Refresh",
+  "logs.updating": "Updating…",
+  "logs.lastUpdated": "Last updated:",
+  "logs.filters": "Filters",
+  "logs.clearFilters": "Clear filters",
+  "logs.results": "Results",
+  "logs.showing": "Showing {from}–{to} of {total}",
+  "logs.records": "records",
+  "logs.perPage": "per page",
+
+  // ── Logs — Tabs ────────────────────────────────────────────────────────────
+  "logs.tabs.api": "API Calls",
+  "logs.tabs.webhook": "Webhooks",
+
+  // ── Logs — Filter labels ───────────────────────────────────────────────────
+  "logs.filter.method": "Method",
+  "logs.filter.method.placeholder": "GET, POST…",
+  "logs.filter.endpoint": "Endpoint",
+  "logs.filter.endpoint.placeholder": "Partial match…",
+  "logs.filter.status": "Status",
+  "logs.filter.status.all": "All",
+  "logs.filter.status.success": "Success",
+  "logs.filter.status.failed": "Failed",
+  "logs.filter.related": "Related",
+  "logs.filter.related.all": "All",
+  "logs.filter.related.template": "Template",
+  "logs.filter.related.message": "Message",
+  "logs.filter.related.broadcast": "Broadcast",
+  "logs.filter.related.media": "Media",
+  "logs.filter.signature": "Signature",
+  "logs.filter.signature.all": "All",
+  "logs.filter.signature.valid": "Valid",
+  "logs.filter.signature.invalid": "Unverified",
+  "logs.filter.processed": "Processed",
+  "logs.filter.processed.all": "All",
+  "logs.filter.processed.ok": "OK",
+  "logs.filter.processed.error": "Error",
+  "logs.filter.from": "From",
+  "logs.filter.to": "To",
+
+  // ── Logs — Table headers ────────────────────────────────────────────────────
+  "logs.table.time": "Time",
+  "logs.table.method": "Method",
+  "logs.table.tenant": "Tenant",
+  "logs.table.endpoint": "Endpoint",
+  "logs.table.status": "Status",
+  "logs.table.duration": "Duration",
+  "logs.table.related": "Related",
+  "logs.table.summary": "Summary",
+  "logs.table.signature": "Signature",
+  "logs.table.processed": "Processed",
+  "logs.table.action": "Action",
+  "logs.table.view": "View",
+
+  // ── Logs — Badge values ─────────────────────────────────────────────────────
+  "logs.badge.valid": "valid",
+  "logs.badge.unverified": "unverified",
+  "logs.badge.ok": "ok",
+  "logs.badge.error": "error",
+
+  // ── Logs — Empty / loading / error ─────────────────────────────────────────
+  "logs.loading": "Loading records…",
+  "logs.empty.api": "No records match the current filters.",
+  "logs.empty.webhook": "No webhooks match the current filters.",
+  "logs.error.title": "Could not load records.",
+  "logs.error.retry": "Check your server connection and try again.",
+  "logs.error.retryAction": "Try again",
+  "logs.error.table": "Error loading records.",
+
+  // ── Logs — Pagination ──────────────────────────────────────────────────────
+  "logs.pagination.records": "records",
+  "logs.pagination.perPage": "per page",
+  "logs.pagination.page": "Page",
+  "logs.pagination.of": "of",
+  "logs.pagination.prev": "Previous page",
+  "logs.pagination.next": "Next page",
+
+  // ── Logs — Detail dialog ────────────────────────────────────────────────────
+  "logs.detail.http": "HTTP Detail",
+  "logs.detail.webhook": "Webhook Detail",
 };
