@@ -881,6 +881,42 @@ export const es = {
   "tenants.remove.confirming": "Quitando...",
   "tenants.remove.confirm": "Quitar acceso",
 
+  // ── Queue Observability ───────────────────────────────────────────────────────
+  "queueObservability.title": "Observabilidad de Colas y Outbox",
+  "queueObservability.description":
+    "Señales operativas de solo lectura para colas BullMQ, publicación de outbox y resultados de envío.",
+  "queueObservability.queueMetrics": "Métricas de colas",
+  "queueObservability.outboxTerminal": "Terminal de outbox",
+  "queueObservability.uncertainAttempts": "Intentos UNCERTAIN",
+  "queueObservability.available": "disponible",
+  "queueObservability.unavailable": "no disponible",
+  "queueObservability.running": "ejecutando",
+  "queueObservability.paused": "pausado",
+  "queueObservability.bullmqQueues": "Colas BullMQ",
+  "queueObservability.table.queue": "Cola",
+  "queueObservability.table.waiting": "Esperando",
+  "queueObservability.table.active": "Activa",
+  "queueObservability.table.delayed": "Retrasada",
+  "queueObservability.table.completed": "Completada",
+  "queueObservability.table.failed": "Fallida",
+  "queueObservability.table.status": "Estado",
+  "queueObservability.postgresOutbox": "Outbox de PostgreSQL y resultados de envío de Meta",
+  "queueObservability.outboxPublicationState": "Estado de publicación del outbox",
+  "queueObservability.outboundSendState": "Estado de intento de envío saliente",
+  "queueObservability.pending": "Pendiente",
+  "queueObservability.claimed": "Reclamado",
+  "queueObservability.retryable": "Reintentable",
+  "queueObservability.published": "Publicado",
+  "queueObservability.terminal": "Terminal",
+  "queueObservability.expiredLeases": "Concesiones expiradas",
+  "queueObservability.databaseUnavailable":
+    "métricas de base de datos no disponibles",
+  "queueObservability.disclaimerTitle": "Aviso de evidencia de entrega de Meta",
+  "queueObservability.disclaimerText":
+    "La completación de BullMQ y la publicación del outbox no constituyen evidencia de entrega de Meta. ",
+  "queueObservability.disclaimerEmphasis":
+    "UNCERTAIN significa que el resultado externo de Meta es desconocido y no debe tratarse como FAILED ni como reintentable automáticamente.",
+
 } as const;
 
 export type MessageKey = keyof typeof es;

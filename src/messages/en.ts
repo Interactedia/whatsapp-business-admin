@@ -882,4 +882,40 @@ export const en: Record<MessageKey, string> = {
   "tenants.remove.confirming": "Removing...",
   "tenants.remove.confirm": "Remove access",
 
+  // ── Queue Observability ───────────────────────────────────────────────────────
+  "queueObservability.title": "Queue & Outbox Observability",
+  "queueObservability.description":
+    "Read-only operational signals for BullMQ queues, outbox publication, and outbound send outcomes.",
+  "queueObservability.queueMetrics": "Queue metrics",
+  "queueObservability.outboxTerminal": "Outbox terminal",
+  "queueObservability.uncertainAttempts": "UNCERTAIN attempts",
+  "queueObservability.available": "available",
+  "queueObservability.unavailable": "unavailable",
+  "queueObservability.running": "running",
+  "queueObservability.paused": "paused",
+  "queueObservability.bullmqQueues": "BullMQ queues",
+  "queueObservability.table.queue": "Queue",
+  "queueObservability.table.waiting": "Waiting",
+  "queueObservability.table.active": "Active",
+  "queueObservability.table.delayed": "Delayed",
+  "queueObservability.table.completed": "Completed",
+  "queueObservability.table.failed": "Failed",
+  "queueObservability.table.status": "Status",
+  "queueObservability.postgresOutbox": "PostgreSQL outbox and Meta send outcomes",
+  "queueObservability.outboxPublicationState": "Outbox publication state",
+  "queueObservability.outboundSendState": "Outbound send attempt state",
+  "queueObservability.pending": "Pending",
+  "queueObservability.claimed": "Claimed",
+  "queueObservability.retryable": "Retryable",
+  "queueObservability.published": "Published",
+  "queueObservability.terminal": "Terminal",
+  "queueObservability.expiredLeases": "Expired leases",
+  "queueObservability.databaseUnavailable":
+    "database metrics unavailable",
+  "queueObservability.disclaimerTitle": "Meta delivery evidence disclaimer",
+  "queueObservability.disclaimerText":
+    "BullMQ completion and outbox publication are not Meta delivery evidence. ",
+  "queueObservability.disclaimerEmphasis":
+    "UNCERTAIN means the external Meta outcome is unknown and must not be treated as FAILED or automatically retryable.",
+
 };
