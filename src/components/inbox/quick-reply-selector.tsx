@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, MessageSquareText, Command } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "@/components/i18n/language-provider";
 
 /**
  * Quick Reply data structure.
@@ -101,6 +102,7 @@ export function QuickReplySelector({
   initialQuery = "",
   className,
 }: QuickReplySelectorProps) {
+  const { t } = useI18n();
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -190,7 +192,7 @@ export function QuickReplySelector({
         className
       )}
       role="dialog"
-      aria-label="Selector de respuestas rápidas"
+      aria-label={t("inbox.quickReplySelector")}
       onKeyDown={handleKeyDown}
     >
       {/* Header with search */}
@@ -199,11 +201,11 @@ export function QuickReplySelector({
         <Input
           ref={searchInputRef}
           type="text"
-          placeholder="Buscar respuestas rápidas..."
+          placeholder={t("inbox.searchQuickReplies")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="h-8 flex-1 border-0 bg-transparent p-0 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-          aria-label="Buscar respuestas rápidas"
+          aria-label={t("inbox.searchQuickRepliesLabel")}
           aria-controls="quick-reply-list"
           aria-activedescendant={
             filteredReplies.length > 0 ? `quick-reply-item-${filteredReplies[focusedIndex].id}` : undefined
@@ -218,14 +220,14 @@ export function QuickReplySelector({
       <div
         id="quick-reply-list"
         role="listbox"
-        aria-label="Respuestas rápidas disponibles"
+        aria-label={t("inbox.availableQuickReplies")}
         className="max-h-60 overflow-y-auto p-1 scroll-thin"
       >
         {filteredReplies.length === 0 ? (
           <div className="py-6 text-center text-xs text-muted-foreground">
             <MessageSquareText className="mx-auto mb-2 h-8 w-8 opacity-50" aria-hidden="true" />
-            <p>No hay respuestas coincidentes</p>
-            <p className="mt-1 text-[10px]">Intenta con otro término de búsqueda</p>
+            <p>{t("inbox.noMatchingReplies")}</p>
+            <p className="mt-1 text-[10px]">{t("inbox.tryDifferentSearch")}</p>
           </div>
         ) : (
           <ul className="space-y-0.5">
@@ -270,11 +272,11 @@ export function QuickReplySelector({
       {/* Footer hint */}
       <div className="flex items-center justify-between border-t px-3 py-1.5 text-[10px] text-muted-foreground">
         <span>
-          <kbd className="rounded bg-muted px-1">↑↓</kbd> navegar
+          <kbd className="rounded bg-muted px-1">↑↓</kbd> {t("inbox.navigateUpDown")}
           <span className="mx-1">·</span>
-          <kbd className="rounded bg-muted px-1">↵</kbd> insertar
+          <kbd className="rounded bg-muted px-1">↵</kbd> {t("inbox.insertWithEnter")}
           <span className="mx-1">·</span>
-          <kbd className="rounded bg-muted px-1">esc</kbd> cerrar
+          <kbd className="rounded bg-muted px-1">esc</kbd> {t("inbox.closeWithEsc")}
         </span>
       </div>
     </div>

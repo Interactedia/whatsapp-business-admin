@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/i18n/language-provider";
 
 /**
  * WA-UI-016: Automation Status Indicators
@@ -23,6 +24,7 @@ interface AutomationIndicatorsProps {
 }
 
 export function AutomationIndicators({ className }: AutomationIndicatorsProps) {
+  const { t } = useI18n();
   // WA-UI-016 §C: No invented states until backend contracts exist.
   // The indicator zone renders but shows nothing until a real state source is available.
   // When connected, render: <CopilotIndicator enabled={copilotEnabled} /> <FollowUpIndicator enabled={followUpEnabled} />
@@ -31,7 +33,7 @@ export function AutomationIndicators({ className }: AutomationIndicatorsProps) {
     <div
       className={cn("flex items-center gap-1", className)}
       role="status"
-      aria-label="Indicadores de automatización"
+      aria-label={t("inbox.automationIndicators")}
     >
       {/* Empty zone - states will be connected when ADR-0009 §11 is implemented */}
     </div>

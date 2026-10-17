@@ -938,6 +938,116 @@ export const es = {
   "login.mobileTitle": "WhatsApp Business Admin",
   "login.mobileSubtitle": "Panel de control",
 
+  // ── Inbox ────────────────────────────────────────────────────────────────────
+  // Conversation list
+  "inbox.markAsRead": "Marcar como leído",
+  "inbox.markAsUnread": "Marcar como no leído",
+  "inbox.closeConversation": "Cerrar conversación",
+  "inbox.reopenConversation": "Reabrir conversación",
+  "inbox.assignAgent": "Asignar agente",
+  "inbox.assignFunctionSoon": "Función próximamente disponible",
+  "inbox.emptyConversations": "Sin conversaciones aún.",
+  "inbox.noFilterResults": "Sin resultados para este filtro.",
+  "inbox.loading": "Cargando…",
+
+  // Thread pane
+  "inbox.sessionOpen": "Sesión abierta · ~{hours}h restantes",
+  "inbox.sessionWindowClosed": "Ventana de 24 horas cerrada — envía una plantilla aprobada",
+  "inbox.outsideWindow": "Esta conversación está fuera de la ventana de 24 horas. Solo puedes enviar una plantilla aprobada.",
+  "inbox.sendTemplate": "Enviar plantilla",
+  "inbox.sendFlow": "Enviar Flow",
+  "inbox.noMessagesYet": "Aún no hay mensajes. Saluda 👋",
+
+  // Composer
+  "inbox.attachFile": "Adjuntar archivo",
+  "inbox.quickReplies": "Respuestas rápidas",
+  "inbox.writeMessageOrSlash": "Escribe un mensaje o / para respuestas rápidas…",
+
+  // AI Assistant
+  "inbox.closeAiAssistant": "Cerrar asistente IA",
+  "inbox.openAiAssistant": "Abrir asistente IA",
+
+  // Message origin
+  "inbox.sentByApiOrAutomation": "Enviado por API o automatización",
+  "inbox.sentByAgent": "Enviado por un agente",
+  "inbox.api": "API",
+  "inbox.human": "Humano",
+
+  // Flow picker
+  "inbox.sendWhatsAppFlow": "Enviar un WhatsApp Flow",
+  "inbox.noPublishedFlows": "No hay Flows publicados disponibles.",
+
+  // Image preview
+  "inbox.imagePreview": "Vista previa de imagen",
+  "inbox.flowSubmission": "enviado",
+  "inbox.responseDataPurged": "Los datos de respuesta han sido eliminados.",
+
+  // Quick reply selector
+  "inbox.quickReplySelector": "Selector de respuestas rápidas",
+  "inbox.searchQuickReplies": "Buscar respuestas rápidas...",
+  "inbox.searchQuickRepliesLabel": "Buscar respuestas rápidas",
+  "inbox.availableQuickReplies": "Respuestas rápidas disponibles",
+  "inbox.noMatchingReplies": "No hay respuestas coincidentes",
+  "inbox.tryDifferentSearch": "Intenta con otro término de búsqueda",
+  "inbox.navigateUpDown": "↑↓ navegar",
+  "inbox.insertWithEnter": "↵ insertar",
+  "inbox.closeWithEsc": "esc cerrar",
+
+  // Status filter
+  "inbox.filterByStatus": "Filtrar por estado",
+  "inbox.status": "Estado",
+  "inbox.all": "Todos",
+  "inbox.attention": "Atención",
+  "inbox.followUp": "Seguimiento",
+  "inbox.soon": "Pronto",
+  "inbox.clearFilters": "Limpiar filtros",
+
+  // Copilot controls
+  "inbox.copilot": "Copilot",
+  "inbox.on": "Encendido",
+  "inbox.availableSoon": "Disponible próximamente",
+  "inbox.attentionControlNotConfigured": "Control de atención no configurado",
+
+  // Automation indicators
+  "inbox.automationIndicators": "Indicadores de automatización",
+
+  // Tasks panel
+  "inbox.tasks": "Tareas",
+  "inbox.openTasksPanel": "Abrir panel de tareas",
+
+  // Writing assistant
+  "inbox.improveWriting": "Mejorar escritura",
+  "inbox.closePanel": "Cerrar panel",
+  "inbox.improvementMode": "Modo de mejora",
+  "inbox.yourOriginalText": "Tu texto original",
+  "inbox.originalTextExample": "Ejemplo de texto original",
+  "inbox.thisIsDemoExample": "Este es un ejemplo para demostración",
+  "inbox.suggestion": "Sugerencia",
+  "inbox.improvedSuggestion": "Sugerencia mejorada",
+  "inbox.suggestionExample": "Ejemplo de sugerencia",
+  "inbox.suggestedTextEditable": "Texto sugerido - editable",
+  "inbox.writeSomethingToSeeSuggestions": "Escribe algo para ver sugerencias...",
+  "inbox.demoSuggestionNotApplied": "Ejemplo demostrativo — esta sugerencia no se aplica a tu texto real",
+  "inbox.discard": "Descartar",
+  "inbox.useSuggestion": "Usar sugerencia",
+  "inbox.aiBackendNotConnected": "Backend de IA no conectado",
+  "inbox.demoModeEscToClose": "Modo demostración · esc para cerrar",
+  "inbox.useArrowsToChangeModeEscToClose": "Usa ↑↓ para cambiar modo · esc para cerrar",
+  "inbox.demoNotProcessedYourText": "DEMOSTRACIÓN — No se ha procesado tu texto",
+  "inbox.demoExampleSuggestionNotProcessed": "DEMOSTRACIÓN — Sugerencia de ejemplo, no procesada por IA",
+  "inbox.improveText": "Mejorar texto",
+  "inbox.improveMessageText": "Mejorar texto del mensaje",
+
+  // Writing modes
+  "inbox.mode.spelling": "Corregir ortografía",
+  "inbox.mode.spellingDesc": "Detecta y corrige errores ortográficos",
+  "inbox.mode.writing": "Mejorar redacción",
+  "inbox.mode.writingDesc": "Mejora la claridad y fluidez del texto",
+  "inbox.mode.professional": "Hacer más profesional",
+  "inbox.mode.professionalDesc": "Adapta el tono para un contexto formal",
+  "inbox.mode.brief": "Hacer más breve",
+  "inbox.mode.briefDesc": "Condensa el mensaje manteniendo lo esencial",
+
 } as const;
 
 export type MessageKey = keyof typeof es;

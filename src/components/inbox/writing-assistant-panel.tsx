@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles, X, Check, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/components/i18n/language-provider";
 
 /**
  * Writing Assistant Modes (Feature C)
@@ -11,11 +12,11 @@ import { Button } from "@/components/ui/button";
  */
 export type WritingMode = "spelling" | "writing" | "professional" | "brief";
 
-export const WRITING_MODES: { id: WritingMode; label: string; description: string }[] = [
-  { id: "spelling", label: "Corregir ortografía", description: "Detecta y corrige errores ortográficos" },
-  { id: "writing", label: "Mejorar redacción", description: "Mejora la claridad y fluidez del texto" },
-  { id: "professional", label: "Hacer más profesional", description: "Adapta el tono para un contexto formal" },
-  { id: "brief", label: "Hacer más breve", description: "Condensa el mensaje manteniendo lo esencial" },
+export const WRITING_MODES: { id: WritingMode; labelKey: string; descriptionKey: string }[] = [
+  { id: "spelling", labelKey: "inbox.mode.spelling", descriptionKey: "inbox.mode.spellingDesc" },
+  { id: "writing", labelKey: "inbox.mode.writing", descriptionKey: "inbox.mode.writingDesc" },
+  { id: "professional", labelKey: "inbox.mode.professional", descriptionKey: "inbox.mode.professionalDesc" },
+  { id: "brief", labelKey: "inbox.mode.brief", descriptionKey: "inbox.mode.briefDesc" },
 ];
 
 // Demo suggestion text - clearly marked as DEMO per WA-UI-018 Feature D
@@ -71,6 +72,7 @@ export function WritingAssistantPanel({
   onAccept,
   onDiscard,
 }: WritingAssistantPanelProps) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const suggestionRef = useRef<HTMLTextAreaElement>(null);
   const [editedSuggestion, setEditedSuggestion] = useState(DEMO_SUGGESTION.suggested);
@@ -139,7 +141,7 @@ export function WritingAssistantPanel({
         "w-full sm:max-w-lg sm:mx-auto sm:left-1/2 sm:-translate-x-1/2"
       )}
       role="dialog"
-      aria-label="Mejorar escritura"
+      aria-label={t("inbox.improveWriting")}
       onKeyDown={handleKeyDown}
     >
       {/* WA-UI-018: Prominent DEMO warning banner - always visible */}
@@ -147,8 +149,8 @@ export function WritingAssistantPanel({
         <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
         <span className="text-xs font-medium text-amber-800">
           {isDemoMode
-            ? "DEMOSTRACIÓN — No se ha procesado tu texto"
-            : "DEMOSTRACIÓN — Sugerencia de ejemplo, no procesada por IA"}
+            ? t("inbox.demoNotProcessedYourText")
+            : t("inbox.demoExampleSuggestionNotProcessed")}
         </span>
       </div>
 
@@ -156,14 +158,14 @@ export function WritingAssistantPanel({
       <div className="flex items-center justify-between border-b px-3 py-2">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />
-          <h2 className="text-sm font-semibold">Mejorar escritura</h2>
+          <h2 className="text-sm font-semibold">{t("inbox.improveWriting")}</h2>
         </div>
         <Button
           variant="ghost"
           size="icon"
           className="h-7 w-7"
           onClick={onClose}
-          aria-label="Cerrar panel"
+          aria-label={t("inbox.closePanel")}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -171,7 +173,7 @@ export function WritingAssistantPanel({
 
       {/* Mode Selector */}
       <div className="border-b px-3 py-2">
-        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Modo de mejora">
+        <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t("inbox.improvementMode")}>
           {WRITING_MODES.map((m) => (
             <button
               key={m.id}
@@ -185,9 +187,9 @@ export function WritingAssistantPanel({
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
-              title={m.description}
+              title={t(m.descriptionKey)}
             >
-              {m.label}
+              {t(m.labelKey)}
             </button>
           ))}
         </div>
@@ -198,7 +200,7 @@ export function WritingAssistantPanel({
         {/* Original Text */}
         <div>
           <label className="mb-1 block text-xs font-medium text-muted-foreground">
-            {isDemoMode ? "Ejemplo de texto original" : "Tu texto original"}
+            {isDemoMode ? t("inbox.originalTextExample") : t("inbox.yourOriginalText")}
           </label>
           <div
             className={cn(
@@ -212,7 +214,7 @@ export function WritingAssistantPanel({
           </div>
           {isDemoMode && (
             <p className="mt-1 text-[10px] text-amber-600">
-              Este es un ejemplo para demostración
+              {t("inbox.thisIsDemoExample")}
             </p>
           )}
         </div>
@@ -220,14 +222,14 @@ export function WritingAssistantPanel({
         {/* Visual separator */}
         <div className="flex items-center gap-2">
           <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
-          <span className="shrink-0 text-[10px] text-muted-foreground">Sugerencia</span>
+          <span className="shrink-0 text-[10px] text-muted-foreground">{t("inbox.suggestion")}</span>
           <div className="h-px flex-1 border-t border-dashed border-muted-foreground/30" />
         </div>
 
         {/* Suggested Text */}
         <div>
           <label className="mb-1 block text-xs font-medium text-muted-foreground">
-            {isDemoMode ? "Ejemplo de sugerencia" : "Sugerencia mejorada"}
+            {isDemoMode ? t("inbox.suggestionExample") : t("inbox.improvedSuggestion")}
           </label>
           <textarea
             ref={suggestionRef}
@@ -240,13 +242,13 @@ export function WritingAssistantPanel({
               "resize-none min-h-[80px]",
               isDemoMode ? "border-amber-200 bg-amber-50/30" : "bg-background border-input"
             )}
-            aria-label="Texto sugerido - editable"
-            placeholder="Escribe algo para ver sugerencias..."
+            aria-label={t("inbox.suggestedTextEditable")}
+            placeholder={t("inbox.writeSomethingToSeeSuggestions")}
           />
           {isDemoMode && (
             <p className="mt-1 flex items-center gap-1 text-[10px] text-amber-600">
               <AlertTriangle className="h-3 w-3" />
-              Ejemplo demostrativo — esta sugerencia no se aplica a tu texto real
+              {t("inbox.demoSuggestionNotApplied")}
             </p>
           )}
         </div>
@@ -263,7 +265,7 @@ export function WritingAssistantPanel({
           }}
           className="text-xs"
         >
-          Descartar
+          {t("inbox.discard")}
         </Button>
         <Button
           size="sm"
@@ -276,10 +278,10 @@ export function WritingAssistantPanel({
           }}
           className="text-xs"
           disabled={!editedSuggestion.trim() || !canApplySuggestion}
-          title={!canApplySuggestion ? "Backend de IA no conectado" : "Aplicar sugerencia al mensaje"}
+          title={!canApplySuggestion ? t("inbox.aiBackendNotConnected") : t("inbox.useSuggestion")}
         >
           <Check className="mr-1 h-3 w-3" />
-          Usar sugerencia
+          {t("inbox.useSuggestion")}
         </Button>
       </div>
 
@@ -287,11 +289,11 @@ export function WritingAssistantPanel({
       <div className="flex items-center justify-between border-t bg-muted/30 px-3 py-1.5 text-[10px] text-muted-foreground">
         <span>
           {isDemoMode
-            ? "Modo demostración · esc para cerrar"
-            : "Usa ↑↓ para cambiar modo · esc para cerrar"}
+            ? t("inbox.demoModeEscToClose")
+            : t("inbox.useArrowsToChangeModeEscToClose")}
         </span>
         {isDemoMode && (
-          <span className="text-amber-600">Backend de IA no conectado</span>
+          <span className="text-amber-600">{t("inbox.aiBackendNotConnected")}</span>
         )}
       </div>
     </div>

@@ -3,6 +3,7 @@
 import { Bot, Clock, Info } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/i18n/language-provider";
 
 /**
  * WA-UI-015: Copilot, Handoff & Follow-up controls
@@ -63,25 +64,26 @@ function DisabledSwitchControl({
  * Tablet/Mobile: Compact row below contact info
  */
 export function CopilotControls() {
+  const { t } = useI18n();
   return (
     <div className="flex flex-col gap-2 sm:gap-3">
       {/* Switch row - responsive: inline on desktop, compact on mobile */}
       <div className="flex flex-wrap items-center gap-3 sm:gap-4">
         {/* Copilot switch */}
         <div className="flex items-center gap-2">
-          <ControlLabel icon={Bot} label="Copilot" />
+          <ControlLabel icon={Bot} label={t("inbox.copilot")} />
           <DisabledSwitchControl
-            label="ON"
-            sublabel="Disponible próximamente"
+            label={t("inbox.on")}
+            sublabel={t("inbox.availableSoon")}
           />
         </div>
 
         {/* Follow-up switch */}
         <div className="flex items-center gap-2">
-          <ControlLabel icon={Clock} label="Seguimiento" />
+          <ControlLabel icon={Clock} label={t("inbox.followUp")} />
           <DisabledSwitchControl
-            label="ON"
-            sublabel="Disponible próximamente"
+            label={t("inbox.on")}
+            sublabel={t("inbox.availableSoon")}
           />
         </div>
       </div>
@@ -101,11 +103,12 @@ export function CopilotControls() {
  * Following ADR-0009 D5 guidance - informational only, no simulated state.
  */
 export function HandoffStatus() {
+  const { t } = useI18n();
   return (
     <div className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/20 bg-muted/30 px-3 py-2">
       <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <span className="text-xs text-muted-foreground">
-        Control de atención no configurado
+        {t("inbox.attentionControlNotConfigured")}
       </span>
     </div>
   );

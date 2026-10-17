@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/components/i18n/language-provider";
 
 /**
  * WA-UI-016: Status Filter Dropdown
@@ -45,55 +46,55 @@ interface StatusFilterProps {
   onChange: (value: StatusFilterState) => void;
 }
 
-const ATTENTION_OPTIONS: { value: AttentionFilter; label: string; icon: React.ReactNode; disabled: boolean; disabledReason?: string }[] = [
-  {
-    value: "all",
-    label: "Todos",
-    icon: null,
-    disabled: false,
-  },
-  {
-    value: "copilot",
-    label: "Copilot",
-    icon: <Bot className="h-3.5 w-3.5 text-teal-600" />,
-    disabled: true,
-    disabledReason: "Disponible cuando se habilite el control de automatización",
-  },
-  {
-    value: "human",
-    label: "Humano",
-    icon: <UserRound className="h-3.5 w-3.5 text-slate-500" />,
-    disabled: true,
-    disabledReason: "Disponible cuando se habilite el control de automatización",
-  },
-];
-
-const FOLLOWUP_OPTIONS: { value: FollowUpFilter; label: string; icon: React.ReactNode; disabled: boolean; disabledReason?: string }[] = [
-  {
-    value: "all",
-    label: "Todos",
-    icon: null,
-    disabled: false,
-  },
-  {
-    value: "with",
-    label: "Con seguimiento",
-    icon: <Clock className="h-3.5 w-3.5 text-amber-600" />,
-    disabled: true,
-    disabledReason: "Disponible cuando se habilite el control de automatización",
-  },
-  {
-    value: "without",
-    label: "Sin seguimiento",
-    icon: null,
-    disabled: true,
-    disabledReason: "Disponible cuando se habilite el control de automatización",
-  },
-];
-
 export function StatusFilter({ value, onChange }: StatusFilterProps) {
-  const [open, setOpen] = useState(false);
+  const { t } = useI18n();
+  const ATTENTION_OPTIONS: { value: AttentionFilter; label: string; icon: React.ReactNode; disabled: boolean; disabledReason?: string }[] = [
+    {
+      value: "all",
+      label: t("inbox.all"),
+      icon: null,
+      disabled: false,
+    },
+    {
+      value: "copilot",
+      label: t("inbox.copilot"),
+      icon: <Bot className="h-3.5 w-3.5 text-teal-600" />,
+      disabled: true,
+      disabledReason: t("inbox.availableSoon"),
+    },
+    {
+      value: "human",
+      label: t("inbox.human"),
+      icon: <UserRound className="h-3.5 w-3.5 text-slate-500" />,
+      disabled: true,
+      disabledReason: t("inbox.availableSoon"),
+    },
+  ];
 
+  const FOLLOWUP_OPTIONS: { value: FollowUpFilter; label: string; icon: React.ReactNode; disabled: boolean; disabledReason?: string }[] = [
+    {
+      value: "all",
+      label: t("inbox.all"),
+      icon: null,
+      disabled: false,
+    },
+    {
+      value: "with",
+      label: t("inbox.followUp"),
+      icon: <Clock className="h-3.5 w-3.5 text-amber-600" />,
+      disabled: true,
+      disabledReason: t("inbox.availableSoon"),
+    },
+    {
+      value: "without",
+      label: "Sin seguimiento",
+      icon: null,
+      disabled: true,
+      disabledReason: t("inbox.availableSoon"),
+    },
+  ];
+
+  const [open, setOpen] = useState(false);
   const hasActiveFilters = value.attention !== "all" || value.followUp !== "all";
 
   const toggleAttention = (newValue: AttentionFilter) => {
@@ -133,12 +134,12 @@ export function StatusFilter({ value, onChange }: StatusFilterProps) {
             "h-7 gap-1.5 px-2 text-xs",
             hasActiveFilters && "border-teal-500 bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300"
           )}
-          aria-label="Filtrar por estado"
+          aria-label={t("inbox.filterByStatus")}
           aria-haspopup="menu"
           aria-expanded={open}
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
-          <span>Estado</span>
+          <span>{t("inbox.status")}</span>
           {hasActiveFilters && (
             <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-teal-500 text-[10px] font-semibold text-white">
               {getActiveFiltersCount()}
@@ -155,7 +156,7 @@ export function StatusFilter({ value, onChange }: StatusFilterProps) {
         {/* Attention section */}
         <div className="px-2 py-1.5">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Atención
+            {t("inbox.attention")}
           </span>
         </div>
         {ATTENTION_OPTIONS.map((option) => (
@@ -179,7 +180,7 @@ export function StatusFilter({ value, onChange }: StatusFilterProps) {
             {option.icon}
             <span className="flex-1">{option.label}</span>
             {option.disabled && (
-              <span className="text-[10px] text-muted-foreground/70">Pronto</span>
+              <span className="text-[10px] text-muted-foreground/70">{t("inbox.soon")}</span>
             )}
             {value.attention === option.value && !option.disabled && (
               <span className="ml-auto text-teal-600">✓</span>
@@ -192,7 +193,7 @@ export function StatusFilter({ value, onChange }: StatusFilterProps) {
         {/* Follow-up section */}
         <div className="px-2 py-1.5">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Seguimiento
+            {t("inbox.followUp")}
           </span>
         </div>
         {FOLLOWUP_OPTIONS.map((option) => (
@@ -216,7 +217,7 @@ export function StatusFilter({ value, onChange }: StatusFilterProps) {
             {option.icon}
             <span className="flex-1">{option.label}</span>
             {option.disabled && (
-              <span className="text-[10px] text-muted-foreground/70">Pronto</span>
+              <span className="text-[10px] text-muted-foreground/70">{t("inbox.soon")}</span>
             )}
             {value.followUp === option.value && !option.disabled && (
               <span className="ml-auto text-teal-600">✓</span>
@@ -235,7 +236,7 @@ export function StatusFilter({ value, onChange }: StatusFilterProps) {
               className="text-destructive focus:text-destructive"
             >
               <X className="mr-2 h-3.5 w-3.5" />
-              Limpiar filtros
+              {t("inbox.clearFilters")}
             </DropdownMenuItem>
           </>
         )}

@@ -939,4 +939,114 @@ export const en: Record<MessageKey, string> = {
   "login.mobileTitle": "WhatsApp Business Admin",
   "login.mobileSubtitle": "Control panel",
 
+  // ── Inbox ────────────────────────────────────────────────────────────────────
+  // Conversation list
+  "inbox.markAsRead": "Mark as read",
+  "inbox.markAsUnread": "Mark as unread",
+  "inbox.closeConversation": "Close conversation",
+  "inbox.reopenConversation": "Reopen conversation",
+  "inbox.assignAgent": "Assign agent",
+  "inbox.assignFunctionSoon": "Function available soon",
+  "inbox.emptyConversations": "No conversations yet.",
+  "inbox.noFilterResults": "No results for this filter.",
+  "inbox.loading": "Loading…",
+
+  // Thread pane
+  "inbox.sessionOpen": "Session open · ~{hours}h left",
+  "inbox.sessionWindowClosed": "24h window closed — send an approved template",
+  "inbox.outsideWindow": "This chat is outside the 24-hour window. You can only send an approved template.",
+  "inbox.sendTemplate": "Send template",
+  "inbox.sendFlow": "Send Flow",
+  "inbox.noMessagesYet": "No messages yet. Say hello 👋",
+
+  // Composer
+  "inbox.attachFile": "Attach file",
+  "inbox.quickReplies": "Quick replies",
+  "inbox.writeMessageOrSlash": "Write a message or / for quick replies…",
+
+  // AI Assistant
+  "inbox.closeAiAssistant": "Close AI assistant",
+  "inbox.openAiAssistant": "Open AI assistant",
+
+  // Message origin
+  "inbox.sentByApiOrAutomation": "Sent by API or automation",
+  "inbox.sentByAgent": "Sent by an agent",
+  "inbox.api": "API",
+  "inbox.human": "Human",
+
+  // Flow picker
+  "inbox.sendWhatsAppFlow": "Send a WhatsApp Flow",
+  "inbox.noPublishedFlows": "No published Flows are available.",
+
+  // Image preview
+  "inbox.imagePreview": "Image preview",
+  "inbox.flowSubmission": "submitted",
+  "inbox.responseDataPurged": "Response data has been purged.",
+
+  // Quick reply selector
+  "inbox.quickReplySelector": "Quick reply selector",
+  "inbox.searchQuickReplies": "Search quick replies...",
+  "inbox.searchQuickRepliesLabel": "Search quick replies",
+  "inbox.availableQuickReplies": "Available quick replies",
+  "inbox.noMatchingReplies": "No matching replies",
+  "inbox.tryDifferentSearch": "Try a different search term",
+  "inbox.navigateUpDown": "↑↓ navigate",
+  "inbox.insertWithEnter": "↵ insert",
+  "inbox.closeWithEsc": "esc close",
+
+  // Status filter
+  "inbox.filterByStatus": "Filter by status",
+  "inbox.status": "Status",
+  "inbox.all": "All",
+  "inbox.attention": "Attention",
+  "inbox.followUp": "Follow-up",
+  "inbox.soon": "Soon",
+  "inbox.clearFilters": "Clear filters",
+
+  // Copilot controls
+  "inbox.copilot": "Copilot",
+  "inbox.on": "ON",
+  "inbox.availableSoon": "Available soon",
+  "inbox.attentionControlNotConfigured": "Attention control not configured",
+
+  // Automation indicators
+  "inbox.automationIndicators": "Automation indicators",
+
+  // Tasks panel
+  "inbox.tasks": "Tasks",
+  "inbox.openTasksPanel": "Open tasks panel",
+
+  // Writing assistant
+  "inbox.improveWriting": "Improve writing",
+  "inbox.closePanel": "Close panel",
+  "inbox.improvementMode": "Improvement mode",
+  "inbox.yourOriginalText": "Your original text",
+  "inbox.originalTextExample": "Original text example",
+  "inbox.thisIsDemoExample": "This is a demonstration example",
+  "inbox.suggestion": "Suggestion",
+  "inbox.improvedSuggestion": "Improved suggestion",
+  "inbox.suggestionExample": "Suggestion example",
+  "inbox.suggestedTextEditable": "Suggested text - editable",
+  "inbox.writeSomethingToSeeSuggestions": "Write something to see suggestions...",
+  "inbox.demoSuggestionNotApplied": "Demo example — this suggestion is not applied to your actual text",
+  "inbox.discard": "Discard",
+  "inbox.useSuggestion": "Use suggestion",
+  "inbox.aiBackendNotConnected": "AI backend not connected",
+  "inbox.demoModeEscToClose": "Demo mode · esc to close",
+  "inbox.useArrowsToChangeModeEscToClose": "Use ↑↓ to change mode · esc to close",
+  "inbox.demoNotProcessedYourText": "DEMO — Your text has not been processed",
+  "inbox.demoExampleSuggestionNotProcessed": "DEMO — Example suggestion, not processed by AI",
+  "inbox.improveText": "Improve text",
+  "inbox.improveMessageText": "Improve message text",
+
+  // Writing modes
+  "inbox.mode.spelling": "Correct spelling",
+  "inbox.mode.spellingDesc": "Detects and corrects spelling errors",
+  "inbox.mode.writing": "Improve writing",
+  "inbox.mode.writingDesc": "Improves text clarity and fluency",
+  "inbox.mode.professional": "Make more professional",
+  "inbox.mode.professionalDesc": "Adapts tone for a formal context",
+  "inbox.mode.brief": "Make more brief",
+  "inbox.mode.briefDesc": "Condenses the message while keeping the essentials",
+
 };

@@ -24,6 +24,7 @@ import {
   Lock,
   Sparkles,
 } from "lucide-react";
+import { useI18n } from "@/components/i18n/language-provider";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -983,14 +984,15 @@ interface TasksButtonProps {
 }
 
 export function TasksButton({ onClick, active }: TasksButtonProps) {
+  const { t } = useI18n();
   return (
     <Button
       variant="ghost"
       size="icon"
       className={cn("h-8 w-8", active && "bg-accent text-accent-foreground")}
       onClick={onClick}
-      title="Tareas"
-      aria-label="Abrir panel de tareas"
+      title={t("inbox.tasks")}
+      aria-label={t("inbox.openTasksPanel")}
       aria-pressed={active}
     >
       <ListTodo className="h-4 w-4" />

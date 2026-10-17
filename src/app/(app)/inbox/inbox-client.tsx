@@ -39,6 +39,7 @@ import { QuickReplySelector } from "@/components/inbox/quick-reply-selector";
 import { WritingAssistantPanel, WritingAssistantButton, type WritingMode } from "@/components/inbox/writing-assistant-panel";
 import { AssistantPanel, TasksButton, type AssistantTab } from "@/components/inbox/tasks-panel";
 import type { TemplateContent } from "@/lib/whatsapp/template-content";
+import { useI18n } from "@/components/i18n/language-provider";
 
 type Contact = { id: string; waId: string; name: string | null; profileName: string | null; tags: string[] };
 type Conversation = {
@@ -140,6 +141,7 @@ function ConversationItem({
   onAssign,
   isPending,
 }: ConversationItemProps) {
+  const { t } = useI18n();
   const hasTags = c.contact.tags.length > 0;
   const visibleTags = c.contact.tags.slice(0, 2);
   const extraTags = c.contact.tags.length - 2;
@@ -241,7 +243,7 @@ function ConversationItem({
             className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-foreground transition-colors hover:bg-[var(--menu-item-hover)] focus:bg-[var(--menu-item-hover)] data-[disabled]:opacity-50 cursor-pointer"
           >
             <Mail className="h-4 w-4 text-[var(--text-muted)]" />
-            {c.unreadCount > 0 ? "Marcar como leído" : "Marcar como no leído"}
+            {c.unreadCount > 0 ? t("inbox.markAsRead") : t("inbox.markAsUnread")}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={(e) => { e.stopPropagation(); onToggleStatus(); }}
@@ -249,30 +251,30 @@ function ConversationItem({
             className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-foreground transition-colors hover:bg-[var(--menu-item-hover)] focus:bg-[var(--menu-item-hover)] data-[disabled]:opacity-50 cursor-pointer"
           >
             <Clock3 className="h-4 w-4 text-[var(--text-muted)]" />
-            {c.status === "OPEN" ? "Cerrar conversación" : "Reabrir conversación"}
+            {c.status === "OPEN" ? t("inbox.closeConversation") : t("inbox.reopenConversation")}
           </DropdownMenuItem>
           <DropdownMenuSeparator className="my-1 bg-[var(--separator)]" />
           <DropdownMenuItem
             onClick={(e) => { e.stopPropagation(); onAssign(); }}
             disabled
             className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--text-disabled)] cursor-not-allowed"
-            title="Función próximamente disponible"
+            title={t("inbox.assignFunctionSoon")}
           >
             <User className="h-4 w-4 text-[var(--text-disabled)]" />
-            Asignar agente
+            {t("inbox.assignAgent")}
           </DropdownMenuItem>
-          <DropdownMenuItem disabled className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--text-disabled)] cursor-not-allowed" title="Función próximamente disponible">
+          <DropdownMenuItem disabled className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--text-disabled)] cursor-not-allowed" title={t("inbox.assignFunctionSoon")}>
             <Star className="h-4 w-4 text-[var(--text-disabled)]" />
-            Añadir a favoritos
+            Add to favorites
           </DropdownMenuItem>
-          <DropdownMenuItem disabled className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--text-disabled)] cursor-not-allowed" title="Función próximamente disponible">
+          <DropdownMenuItem disabled className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--text-disabled)] cursor-not-allowed" title={t("inbox.assignFunctionSoon")}>
             <ListFilter className="h-4 w-4 text-[var(--text-disabled)]" />
-            Añadir a lista
+            Add to list
           </DropdownMenuItem>
           <DropdownMenuSeparator className="my-1 bg-[var(--separator)]" />
-          <DropdownMenuItem disabled className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--text-disabled)] cursor-not-allowed" title="Función próximamente disponible">
+          <DropdownMenuItem disabled className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] text-[var(--text-disabled)] cursor-not-allowed" title={t("inbox.assignFunctionSoon")}>
             <Lock className="h-4 w-4 text-[var(--text-disabled)]" />
-            Ver contacto
+            View contact
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -295,6 +297,7 @@ export function InboxClient({
   const params = useSearchParams();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { t } = useI18n();
   const activeId = params.get("c");
   // Derive tenantId from the explicit tenant-scoped basePath (/t/:tenantId/conversations).
   const tenantId = basePath.startsWith("/t/") ? basePath.split("/")[2] : "";
@@ -495,7 +498,7 @@ export function InboxClient({
         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-auto scroll-thin p-2">
           {filteredConversations.length === 0 && (
             <div className="p-6 text-center text-xs text-muted-foreground">
-              {filter === "all" ? "Sin conversaciones aún." : "Sin resultados para este filtro."}
+              {filter === "all" ? t("inbox.emptyConversations") : t("inbox.noFilterResults")}
             </div>
           )}
           {filteredConversations.map((c) => (
@@ -543,6 +546,7 @@ export function InboxClient({
 }
 
 function EmptyThread({ onToggleAi }: { onToggleAi: () => void }) {
+  const { t } = useI18n();
   return (
     <div className="relative flex h-full flex-col items-center justify-center text-muted-foreground">
       <MessageSquare className="mb-2 h-10 w-10 opacity-30" />
@@ -552,7 +556,7 @@ function EmptyThread({ onToggleAi }: { onToggleAi: () => void }) {
         size="icon"
         className="absolute bottom-4 right-4 h-10 w-10 rounded-full shadow-md"
         onClick={onToggleAi}
-        aria-label="Abrir asistente IA"
+        aria-label={t("inbox.openAiAssistant")}
       >
         <Bot className="h-5 w-5" />
       </Button>
@@ -561,6 +565,7 @@ function EmptyThread({ onToggleAi }: { onToggleAi: () => void }) {
 }
 
 function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggleAi, assistantTab, onTabChange }: { tenantId: string; conversationId: string; onBack: () => void; showAiAssistant: boolean; onToggleAi: () => void; assistantTab: AssistantTab; onTabChange: (tab: AssistantTab) => void }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const { toast } = useToast();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -689,12 +694,12 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
     if (data.conversation.windowOpen && data.conversation.lastInboundAt) {
       const closesAt = new Date(data.conversation.lastInboundAt).getTime() + 24 * 3600 * 1000;
       const hrs = Math.max(0, Math.round((closesAt - Date.now()) / 3600000));
-      return { open: true, label: `Session open · ~${hrs}h left` };
+      return { open: true, label: t("inbox.sessionOpen", `Session open · ~${hrs}h left`).replace("{hours}", String(hrs)) };
     }
-    return { open: false, label: "24h window closed — send an approved template" };
-  }, [data]);
+    return { open: false, label: t("inbox.sessionWindowClosed") };
+  }, [data, t]);
 
-  if (isLoading || !data) return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading…</div>;
+  if (isLoading || !data) return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t("inbox.loading")}</div>;
 
   const contact = data.conversation.contact;
   const windowOpen = data.conversation.windowOpen;
@@ -741,7 +746,7 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
                   onTabChange("ai");
                 }
               }}
-              aria-label={showAiAssistant && assistantTab === "ai" ? "Cerrar asistente IA" : "Abrir asistente IA"}
+              aria-label={showAiAssistant && assistantTab === "ai" ? t("inbox.closeAiAssistant") : t("inbox.openAiAssistant")}
             >
               <Bot className="h-4 w-4" />
             </Button>
@@ -757,7 +762,7 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
       <div ref={scrollRef} className="wa-wallpaper min-h-0 flex-1 space-y-1.5 overflow-auto p-2 scroll-thin sm:p-4">
         {data.messages.map((m) => <div key={m.id}><MessageBubble m={m} onPreviewImage={setPreviewImage} />{data.flowSubmissions.filter((submission) => submission.waMessageId === m.waMessageId).map((submission) => <FlowSubmissionCard key={submission.id} submission={submission} />)}</div>)}
         {data.messages.length === 0 && (
-          <div className="mt-10 text-center text-xs text-muted-foreground">No messages yet. Say hello 👋</div>
+          <div className="mt-10 text-center text-xs text-muted-foreground">{t("inbox.noMessagesYet")}</div>
         )}
       </div>
 
@@ -775,16 +780,16 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
                 e.target.value = "";
               }}
             />
-            <Button variant="ghost" size="icon" title="Adjuntar archivo" onClick={() => fileRef.current?.click()} disabled={sendMedia.isPending}>
+            <Button variant="ghost" size="icon" title={t("inbox.attachFile")} onClick={() => fileRef.current?.click()} disabled={sendMedia.isPending}>
               <Paperclip className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" title="Enviar Flow" onClick={() => setShowFlows(true)}><Workflow className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" title="Enviar plantilla" onClick={() => setShowTemplates(true)}><LayoutTemplate className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" title={t("inbox.sendFlow")} onClick={() => setShowFlows(true)}><Workflow className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" title={t("inbox.sendTemplate")} onClick={() => setShowTemplates(true)}><LayoutTemplate className="h-4 w-4" /></Button>
             {/* WA-UI-017: Quick replies button */}
             <Button
               variant="ghost"
               size="icon"
-              title="Respuestas rápidas"
+              title={t("inbox.quickReplies")}
               onClick={() => {
                 setShowQuickReplies(!showQuickReplies);
                 setSlashCommandQuery("");
@@ -868,7 +873,7 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
                   }
                 }, 150);
               }}
-              placeholder="Escribe un mensaje o / para respuestas rápidas…"
+              placeholder={t("inbox.writeMessageOrSlash")}
             />
             <Button size="icon" disabled={!text.trim() || sendText.isPending} onClick={() => sendText.mutate(text.trim())}>
               <Send className="h-4 w-4" />
@@ -920,10 +925,10 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
         ) : (
           <div className="flex flex-col items-stretch gap-2 rounded-md bg-muted/50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
             <span className="text-xs text-muted-foreground">
-              This chat is outside the 24-hour window. You can only send an approved template.
+              {t("inbox.outsideWindow")}
             </span>
             <Button size="sm" onClick={() => setShowTemplates(true)}>
-              <LayoutTemplate className="h-4 w-4" /> Send template
+              <LayoutTemplate className="h-4 w-4" /> {t("inbox.sendTemplate")}
             </Button>
           </div>
         )}
@@ -938,7 +943,7 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
       <FlowPicker open={showFlows} onClose={() => setShowFlows(false)} onPick={(id) => sendFlow.mutate(id)} pending={sendFlow.isPending} />
       <Dialog open={!!previewImage} onOpenChange={(open) => !open && setPreviewImage(null)}>
         <DialogContent className="max-w-5xl border-0 bg-transparent p-0 shadow-none">
-          <DialogHeader className="sr-only"><DialogTitle>{previewImage?.alt || "Image preview"}</DialogTitle></DialogHeader>
+          <DialogHeader className="sr-only"><DialogTitle>{previewImage?.alt || t("inbox.imagePreview")}</DialogTitle></DialogHeader>
           {previewImage && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={previewImage.url} alt={previewImage.alt} className="max-h-[85vh] w-full rounded-lg object-contain" />
@@ -950,7 +955,8 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
 }
 
 function FlowSubmissionCard({ submission }: { submission: FlowSubmission }) {
-  return <div className="ml-2 mt-1 max-w-md rounded-lg border border-emerald-200 bg-white p-3 text-zinc-900 shadow-xs dark:border-emerald-900 dark:bg-[#202c33] dark:text-zinc-50"><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400"><Workflow className="h-4 w-4" /> {submission.flow.name} submitted</div>{submission.response ? <div className="space-y-1">{Object.entries(submission.response).map(([key, value]) => <div key={key} className="grid grid-cols-1 gap-0.5 text-xs min-[430px]:grid-cols-[110px_1fr] min-[430px]:gap-2"><span className="font-medium">{key}</span><span className="wrap-break-word text-muted-foreground">{typeof value === "object" ? JSON.stringify(value) : String(value)}</span></div>)}</div> : <div className="text-xs text-muted-foreground">Response data has been purged.</div>}</div>;
+  const { t } = useI18n();
+  return <div className="ml-2 mt-1 max-w-md rounded-lg border border-emerald-200 bg-white p-3 text-zinc-900 shadow-xs dark:border-emerald-900 dark:bg-[#202c33] dark:text-zinc-50"><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400"><Workflow className="h-4 w-4" /> {submission.flow.name} {t("inbox.flowSubmission")}</div>{submission.response ? <div className="space-y-1">{Object.entries(submission.response).map(([key, value]) => <div key={key} className="grid grid-cols-1 gap-0.5 text-xs min-[430px]:grid-cols-[110px_1fr] min-[430px]:gap-2"><span className="font-medium">{key}</span><span className="wrap-break-word text-muted-foreground">{typeof value === "object" ? JSON.stringify(value) : String(value)}</span></div>)}</div> : <div className="text-xs text-muted-foreground">{t("inbox.responseDataPurged")}</div>}</div>;
 }
 
 function MessageBubble({ m, onPreviewImage }: { m: Msg; onPreviewImage: (image: { url: string; alt: string }) => void }) {
@@ -987,19 +993,20 @@ function MessageBubble({ m, onPreviewImage }: { m: Msg; onPreviewImage: (image: 
  * Never infers origin from Copilot state.
  */
 function MessageOrigin({ sentById }: { sentById?: string | null }) {
+  const { t } = useI18n();
   if (!sentById) {
     // External API or internal automation — no sentById on the record.
     return (
-      <span className="flex items-center gap-0.5" title="Enviado por API o automatización">
+      <span className="flex items-center gap-0.5" title={t("inbox.sentByApiOrAutomation")}>
         <Bot className="h-3 w-3" aria-hidden="true" />
-        <span>API</span>
+        <span>{t("inbox.api")}</span>
       </span>
     );
   }
   return (
-    <span className="flex items-center gap-0.5" title="Enviado por un agente">
+    <span className="flex items-center gap-0.5" title={t("inbox.sentByAgent")}>
       <User className="h-3 w-3" aria-hidden="true" />
-      <span>Humano</span>
+      <span>{t("inbox.human")}</span>
     </span>
   );
 }
@@ -1064,6 +1071,7 @@ function StatusTick({ status, errorJson }: { status: string; errorJson?: { uncer
 
 type PublishedFlow = { id: string; name: string; categories: string[] };
 function FlowPicker({ open, onClose, onPick, pending }: { open: boolean; onClose: () => void; onPick: (id: string) => void; pending: boolean }) {
+  const { t } = useI18n();
   const { data: flows = [] } = useQuery({ queryKey: ["flows", "published"], queryFn: () => apiFetch<PublishedFlow[]>("/api/flows?published=true"), enabled: open });
-  return <Dialog open={open} onOpenChange={(value) => !value && onClose()}><DialogContent><DialogHeader><DialogTitle>Send a WhatsApp Flow</DialogTitle></DialogHeader><div className="max-h-80 space-y-1 overflow-auto">{flows.map((flow) => <button key={flow.id} disabled={pending} onClick={() => onPick(flow.id)} className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left hover:border-primary/40 disabled:opacity-50"><span className="text-sm font-medium">{flow.name}</span><Badge variant="outline">{flow.categories[0]?.replaceAll("_", " ")}</Badge></button>)}{!flows.length && <p className="py-6 text-center text-xs text-muted-foreground">No published Flows are available.</p>}</div></DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={(value) => !value && onClose()}><DialogContent><DialogHeader><DialogTitle>{t("inbox.sendWhatsAppFlow")}</DialogTitle></DialogHeader><div className="max-h-80 space-y-1 overflow-auto">{flows.map((flow) => <button key={flow.id} disabled={pending} onClick={() => onPick(flow.id)} className="flex w-full items-center justify-between rounded-md border px-3 py-2 text-left hover:border-primary/40 disabled:opacity-50"><span className="text-sm font-medium">{flow.name}</span><Badge variant="outline">{flow.categories[0]?.replaceAll("_", " ")}</Badge></button>)}{!flows.length && <p className="py-6 text-center text-xs text-muted-foreground">{t("inbox.noPublishedFlows")}</p>}</div></DialogContent></Dialog>;
 }
