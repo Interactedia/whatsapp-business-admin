@@ -782,4 +782,12 @@ export const en: Record<MessageKey, string> = {
   // ── Logs — Detail dialog ────────────────────────────────────────────────────
   "logs.detail.http": "HTTP Detail",
   "logs.detail.webhook": "Webhook Detail",
+
+  // ── Tenant Dashboard ─────────────────────────────────────────────────────────
+  "dashboard.title": "Dashboard",
+  "dashboard.description": "{tenant} activity summary.",
+  "dashboard.waNotConnected.title": "WhatsApp is not connected",
+  "dashboard.waNotConnected.desc":
+    "Set up your WhatsApp Business account to start receiving and sending messages.",
+  "dashboard.waNotConnected.action": "Go to settings",
 };

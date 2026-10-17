@@ -780,6 +780,14 @@ export const es = {
   // ── Logs — Detail dialog ────────────────────────────────────────────────────
   "logs.detail.http": "Detalle HTTP",
   "logs.detail.webhook": "Detalle webhook",
+
+  // ── Tenant Dashboard ─────────────────────────────────────────────────────────
+  "dashboard.title": "Dashboard",
+  "dashboard.description": "Resumen de actividad de {tenant}.", // placeholder for interpolation
+  "dashboard.waNotConnected.title": "WhatsApp no está conectado",
+  "dashboard.waNotConnected.desc":
+    "Configura tu cuenta de WhatsApp Business para comenzar a recibir y enviar mensajes.",
+  "dashboard.waNotConnected.action": "Ir a configuración",
 } as const;
 
 export type MessageKey = keyof typeof es;
