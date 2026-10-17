@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, MessageSquare, Search, Pencil, Users } from "lucide-react";
+import { useI18n } from "@/components/i18n/language-provider";
 import { apiFetch } from "@/lib/fetcher";
 import { PageHeader } from "@/components/shell/page-header";
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,7 @@ export function ContactsClient({
   const qc = useQueryClient();
   const router = useRouter();
   const { toast } = useToast();
+  const { t } = useI18n();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [edit, setEdit] = useState<Contact | null>(null);
@@ -92,9 +94,9 @@ export function ContactsClient({
     mutationFn: (id: string) => apiFetch(`${baseUrl}/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       invalidate();
-      toast({ title: "Contacto eliminado" });
+      toast({ title: t("contacts.toast.deleted") });
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "Error al eliminar", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("contacts.toast.deleteError"), description: e.message }),
   });
 
   const startChat = useMutation({
@@ -104,20 +106,20 @@ export function ContactsClient({
         body: JSON.stringify({ waId: c.waId, name: c.name ?? undefined }),
       }),
     onSuccess: (conv) => router.push(`${conversationsHref}?c=${conv.id}`),
-    onError: (e: Error) => toast({ variant: "destructive", title: "No se puede iniciar conversación", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("contacts.toast.chatError"), description: e.message }),
   });
 
   return (
     <div className="flex h-full flex-col">
-      {/* Scope A: Estandarizado PageHeader en español */}
+      {/* Scope A: Estandarizado PageHeader */}
       <PageHeader
-        title="Contactos"
-        description="Administra tus contactos y sus conversaciones."
+        title={t("contacts.title")}
+        description={t("contacts.description")}
         actions={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm">
-                <Plus className="h-4 w-4" /> Nuevo contacto
+                <Plus className="h-4 w-4" /> {t("contacts.newContact")}
               </Button>
             </DialogTrigger>
             <ContactDialog onClose={() => setOpen(false)} onSaved={invalidate} baseUrl={baseUrl} allTags={allTags} />
@@ -135,7 +137,7 @@ export function ContactsClient({
               <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="h-8 pl-9 text-sm"
-                placeholder="Buscar por nombre o teléfono..."
+                placeholder={t("contacts.searchPlaceholder")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -143,7 +145,11 @@ export function ContactsClient({
             {!isLoading && contacts.length > 0 && (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Users className="h-3.5 w-3.5" />
-                <span>{contacts.length} contacto{contacts.length !== 1 ? "s" : ""}</span>
+                <span>
+                  {contacts.length === 1
+                    ? t("contacts.count").split("|")[0].replace("{count}", String(contacts.length)).trim()
+                    : t("contacts.count").split("|")[1]?.replace("{count}", String(contacts.length)).trim()}
+                </span>
               </div>
             )}
           </div>
@@ -151,10 +157,10 @@ export function ContactsClient({
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-4">Contacto</TableHead>
-                <TableHead className="hidden sm:table-cell w-36">Teléfono</TableHead>
-                <TableHead className="hidden md:table-cell">Etiquetas</TableHead>
-                <TableHead className="w-28 pr-4 text-right">Acciones</TableHead>
+                <TableHead className="pl-4">{t("contacts.table.contact")}</TableHead>
+                <TableHead className="hidden sm:table-cell w-36">{t("contacts.table.phone")}</TableHead>
+                <TableHead className="hidden md:table-cell">{t("contacts.table.tags")}</TableHead>
+                <TableHead className="w-28 pr-4 text-right">{t("contacts.table.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -164,7 +170,7 @@ export function ContactsClient({
                   <TableCell colSpan={4} className="h-48 text-center text-muted-foreground">
                     <div className="flex flex-col items-center gap-2">
                       <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                      <span className="text-sm">Cargando contactos...</span>
+                      <span className="text-sm">{t("contacts.loading")}</span>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -177,8 +183,8 @@ export function ContactsClient({
                         <Users className="h-6 w-6 text-muted-foreground" />
                       </div>
                       <div>
-                        <p className="font-medium text-foreground">Sin contactos</p>
-                        <p className="mt-1 text-sm text-muted-foreground">Agrega tu primer contacto con el botón de arriba.</p>
+                        <p className="font-medium text-foreground">{t("contacts.empty.noContacts")}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{t("contacts.empty.noContactsHint")}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -192,8 +198,8 @@ export function ContactsClient({
                         <Search className="h-6 w-6 text-muted-foreground" />
                       </div>
                       <div>
-                        <p className="font-medium text-foreground">Sin resultados</p>
-                        <p className="mt-1 text-sm text-muted-foreground">No se encontraron contactos para &ldquo;{search}&rdquo;.</p>
+                        <p className="font-medium text-foreground">{t("contacts.empty.noResults")}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{t("contacts.empty.noResultsHint").replace("{search}", search)}</p>
                       </div>
                     </div>
                   </TableCell>
@@ -213,7 +219,7 @@ export function ContactsClient({
                         </Avatar>
                         <div className="min-w-0 flex-1">
                           <p className="truncate font-medium text-sm text-foreground">
-                            {c.name || c.profileName || <span className="text-muted-foreground">Desconocido</span>}
+                            {c.name || c.profileName || <span className="text-muted-foreground">{t("contacts.unknown")}</span>}
                           </p>
                         </div>
                       </div>
@@ -272,7 +278,7 @@ export function ContactsClient({
                             className="h-8 w-8 text-destructive hover:text-destructive"
                             title="Eliminar contacto"
                             onClick={() => {
-                              if (confirm("¿Eliminar este contacto?")) remove.mutate(c.id);
+                              if (confirm(t("contacts.confirm.delete"))) remove.mutate(c.id);
                             }}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -297,6 +303,7 @@ export function ContactsClient({
 
 function ContactDialog({ contact, onClose, onSaved, baseUrl, allTags }: { contact?: Contact; onClose: () => void; onSaved: () => void; baseUrl: string; allTags: string[] }) {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [form, setForm] = useState({
     waId: contact?.waId ?? "",
     name: contact?.name ?? "",
@@ -316,51 +323,51 @@ function ContactDialog({ contact, onClose, onSaved, baseUrl, allTags }: { contac
         : apiFetch(baseUrl, { method: "POST", body: JSON.stringify({ waId: form.waId, ...payload }) });
     },
     onSuccess: () => {
-      toast({ title: contact ? "Contacto actualizado" : "Contacto agregado" });
+      toast({ title: contact ? t("contacts.toast.updated") : t("contacts.toast.created") });
       onSaved();
       onClose();
     },
-    onError: (e: Error) => toast({ variant: "destructive", title: "No se pudo guardar", description: e.message }),
+    onError: (e: Error) => toast({ variant: "destructive", title: t("contacts.toast.saveError"), description: e.message }),
   });
 
   return (
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>{contact ? "Editar contacto" : "Nuevo contacto"}</DialogTitle>
+        <DialogTitle>{contact ? t("contacts.dialog.editTitle") : t("contacts.dialog.newTitle")}</DialogTitle>
       </DialogHeader>
       <div className="space-y-3">
         <div className="space-y-1">
-          <Label htmlFor="contact-wa-id">Número de WhatsApp (solo dígitos, sin +)</Label>
+          <Label htmlFor="contact-wa-id">{t("contacts.dialog.waIdLabel")}</Label>
           <Input
             id="contact-wa-id"
             value={form.waId}
             onChange={(e) => setForm({ ...form, waId: e.target.value.replace(/\D/g, "") })}
-            placeholder="51912345678"
+            placeholder={t("contacts.dialog.waIdPlaceholder")}
             disabled={!!contact}
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="contact-name">Nombre</Label>
+          <Label htmlFor="contact-name">{t("contacts.dialog.nameLabel")}</Label>
           <Input id="contact-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="contact-tags">Etiquetas</Label>
+          <Label htmlFor="contact-tags">{t("contacts.dialog.tagsLabel")}</Label>
           <SmartTagsCombobox
             id="contact-tags"
             value={form.tags}
             onChange={(tags) => setForm({ ...form, tags })}
             suggestions={allTags}
-            placeholder="Buscar o crear etiqueta..."
+            placeholder={t("contacts.dialog.tagsPlaceholder")}
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="contact-notes">Notas</Label>
+          <Label htmlFor="contact-notes">{t("contacts.dialog.notesLabel")}</Label>
           <Textarea id="contact-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </div>
       </div>
       <DialogFooter>
-        <Button variant="outline" size="sm" onClick={onClose}>Cancelar</Button>
-        <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>Guardar</Button>
+        <Button variant="outline" size="sm" onClick={onClose}>{t("contacts.dialog.cancel")}</Button>
+        <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending}>{t("contacts.dialog.save")}</Button>
       </DialogFooter>
     </DialogContent>
   );
