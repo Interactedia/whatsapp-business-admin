@@ -325,6 +325,28 @@ export const es = {
   "preview.noComponentsBranch": "No hay componentes en esta rama.",
   "preview.default": "Predeterminado",
   "preview.noComponentsCase": "No hay componentes en este caso.",
+
+  // Submissions — list
+  "submissions.title": "Envíos de Flow",
+  "submissions.description": "Busca respuestas estructuradas, revisa datos sensibles de forma segura y supervisar la entrega.",
+  "submissions.searchPlaceholder": "Buscar contacto o número de WhatsApp…",
+  "submissions.colFlow": "Flow",
+  "submissions.colContact": "Contacto",
+  "submissions.colFields": "Campos",
+  "submissions.colDelivery": "Entrega",
+  "submissions.colCompleted": "Completado",
+  "submissions.colActions": "Acciones",
+  "submissions.loading": "Cargando…",
+  "submissions.empty": "No hay envíos de Flow completados.",
+  "submissions.deliveryNotConfigured": "No configurado",
+  "submissions.deliveryPending": "Pendiente",
+  "submissions.openConversation": "Abrir conversación",
+  "submissions.purgedResponse": "Los datos de respuesta fueron eliminados según la política de retención de este Flow.",
+  "submissions.retrySuccess": "Reenvío de webhook ejecutado",
+  "submissions.retryError": "Reintento fallido",
+  "submissions.actionView": "Ver",
+  "submissions.actionRetryWebhook": "Reintentar webhook",
+  "submissions.purgedBadge": "Eliminado",
 } as const;
 
 export type MessageKey = keyof typeof es;
