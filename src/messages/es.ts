@@ -18,7 +18,7 @@ export const es = {
   "nav.users": "Users",
   "nav.queues": "Queues",
   "nav.logs": "Logs",
-  "nav.tenants": "Tenants",
+  "nav.tenants": "Organizaciones",
   "nav.adminDashboard": "Dashboard",
 
   // Navigation group headers
@@ -392,7 +392,7 @@ export const es = {
 
   // Users — table headers
   "users.table.user": "Usuario",
-  "users.table.tenantAccess": "Acceso al tenant",
+  "users.table.tenantAccess": "Acceso a la organización",
   "users.table.role": "Rol",
   "users.table.status": "Estado",
   "users.table.created": "Creado",
@@ -411,14 +411,14 @@ export const es = {
   "users.role.admin": "Administrador",
   "users.role.adminDesc": "Acceso completo",
   "users.role.systemAdmin": "Administrador del sistema",
-  "users.role.systemAdminDesc": "Administración del tenant",
+  "users.role.systemAdminDesc": "Administración de la organización",
 
   // Users — actions and titles
   "users.action.resetPassword": "Restablecer contraseña",
   "users.action.delete": "Eliminar",
   "users.action.activate": "Activar",
   "users.action.deactivate": "Desactivar",
-  "users.action.addMember": "Agregar miembro al tenant",
+  "users.action.addMember": "Agregar miembro a la organización",
   "users.action.newUser": "Nuevo usuario",
 
   // Users — create dialog
@@ -449,14 +449,14 @@ export const es = {
   "users.reset.error": "Error al restablecer",
 
   // Users — add member dialog
-  "users.addMember.title": "Agregar miembro al tenant",
-  "users.addMember.description": "Asigna un usuario existente a este tenant para que pueda acceder a su inbox, contactos y recursos.",
+  "users.addMember.title": "Agregar miembro a la organización",
+  "users.addMember.description": "Asigna un usuario existente a esta organización para que pueda acceder a su inbox, contactos y recursos.",
   "users.addMember.labelSelect": "Seleccionar usuario",
   "users.addMember.placeholderSelect": "Elige un usuario activo...",
-  "users.addMember.noUsers": "Todos los usuarios activos ya están asignados a este tenant.",
+  "users.addMember.noUsers": "Todos los usuarios activos ya están asignados a esta organización.",
   "users.addMember.action": "Agregar",
   "users.addMember.adding": "Agregando...",
-  "users.addMember.success": "Usuario agregado como miembro del tenant",
+  "users.addMember.success": "Usuario agregado como miembro de la organización",
   "users.addMember.error": "Error al agregar",
 
   // Users — general errors
@@ -469,7 +469,7 @@ export const es = {
 
   // Webhooks — outgoing destinations
   "webhooks.title": "Webhooks salientes",
-  "webhooks.pageDescription": "Configuración tenant-scoped para consumidores HTTP externos.",
+  "webhooks.pageDescription": "Configuración por organización para consumidores HTTP externos.",
   "webhooks.newDestination": "Nuevo destino",
   "webhooks.newDestinationDescription": "Solo HTTPS. Las IP privadas, loopback y redirecciones se vuelven a validar al entregar.",
   "webhooks.labelName": "Nombre",
@@ -524,7 +524,7 @@ export const es = {
   "webhooks.docs.delivery.auth": "Autenticación",
   "webhooks.docs.delivery.authValue": "HMAC-SHA256 con secreto compartido. Encabezados: X-WBA-Timestamp y X-WBA-Signature. El cuerpo se firma como timestamp.body usando HMAC-SHA256. Tolerancia de 5 min.",
   "webhooks.docs.delivery.headers": "Encabezados",
-  "webhooks.docs.delivery.headersValue": "X-Canonical-Event-Id (ID del evento), X-Canonical-Tenant-Id (tenant)",
+  "webhooks.docs.delivery.headersValue": "X-Canonical-Event-Id (ID del evento), X-Canonical-Tenant-Id (organización)",
   "webhooks.docs.delivery.timeout": "Timeout",
   "webhooks.docs.delivery.timeoutValue": "5 segundos (máx. configurable hasta 30 s)",
   "webhooks.docs.delivery.retries": "Reintentos",
@@ -547,7 +547,7 @@ export const es = {
   "webhooks.docs.f.env.id": "ID de evento estable, generado como evt:{type}:{tenantId}:{...}. Usar para deduplicación.",
   "webhooks.docs.f.env.type": "Tipo de evento, p. ej. inbound.message.received.",
   "webhooks.docs.f.env.version": "Versión del contrato de eventos. Actualmente 1.",
-  "webhooks.docs.f.env.tenantId": "ID del tenant que posee este evento. No se comparten eventos entre tenants.",
+  "webhooks.docs.f.env.tenantId": "ID de la organización que posee este evento. No se comparten eventos entre organizaciones.",
   "webhooks.docs.f.env.occurredAt": "Momento en que ocurrió el evento, en UTC (RFC 3339).",
   "webhooks.docs.f.env.recordedAt": "Momento en que el productor materializó el evento.",
   "webhooks.docs.f.env.entities": "Referencias canónicas (tenant, waba, phone, conversation, message, contact).",
@@ -657,7 +657,7 @@ export const es = {
   "developer.createDialog.hint": "Dale un nombre para reconocerla más adelante.",
   "developer.createDialog.nameLabel": "Nombre de la clave",
   "developer.createDialog.namePlaceholder": "Ej: Producción, Prueba…",
-  "developer.createDialog.tenantLabel": "Tenant",
+  "developer.createDialog.tenantLabel": "Organización",
   "developer.createDialog.cancel": "Cancelar",
   "developer.createDialog.create": "Crear clave",
   "developer.createDialog.creating": "Creando…",
@@ -743,7 +743,7 @@ export const es = {
   // ── Logs — Table headers ────────────────────────────────────────────────────
   "logs.table.time": "Hora",
   "logs.table.method": "Método",
-  "logs.table.tenant": "Tenant",
+  "logs.table.tenant": "Organización",
   "logs.table.endpoint": "Endpoint",
   "logs.table.status": "Estado",
   "logs.table.duration": "Duración",
@@ -791,14 +791,14 @@ export const es = {
 
   // ── Admin Dashboard ──────────────────────────────────────────────────────────
   "admin.title": "Administración del sistema",
-  "admin.description": "Vista general de la plataforma. Gestiona tenants y usuarios desde la sección de administración.",
-  "admin.stats.tenants": "Tenants",
+  "admin.description": "Vista general de la plataforma. Gestiona organizaciones y usuarios desde la sección de administración.",
+  "admin.stats.tenants": "Organizaciones",
   "admin.stats.users": "Usuarios",
   "admin.stats.activeUsers": "Usuarios activos",
   "admin.stats.memberships": "Membresías",
   "admin.stats.conversations": "Conversaciones",
   "admin.section.administration": "Administración",
-  "admin.link.manageTenants": "Gestionar tenants y membresías",
+  "admin.link.manageTenants": "Gestionar organizaciones y membresías",
   "admin.link.manageUsers": "Gestionar usuarios",
   "admin.link.queuesOutbox": "Colas y bandeja de salida",
   // ── Admin Dashboard — Recent Activity ───────────────────────────────────────
@@ -824,44 +824,44 @@ export const es = {
   "admin.recentActivity.unresolved": "Sin resolver",
 
   // ── Tenants Admin ─────────────────────────────────────────────────────────
-  "tenants.admin.title": "Administración de tenants",
+  "tenants.admin.title": "Administración de organizaciones",
   "tenants.admin.description":
-    "Gestión centralizada de organizaciones y tenants para administradores del sistema.",
-  "tenants.admin.newTenant": "Nuevo tenant",
+    "Gestión centralizada de organizaciones para administradores del sistema.",
+  "tenants.admin.newTenant": "Nueva organización",
   "tenants.admin.table.organization": "Organización",
   "tenants.admin.table.members": "Miembros",
   "tenants.admin.badge.member_one": "miembro",
   "tenants.admin.badge.member_other": "miembros",
   "tenants.admin.table.created": "Creado",
   "tenants.admin.table.actions": "Acciones",
-  "tenants.admin.loading": "Cargando tenants...",
+  "tenants.admin.loading": "Cargando organizaciones...",
   "tenants.admin.empty":
-    'No se encontraron tenants. Haz clic en "Nuevo tenant" para crear uno.',
+    'No se encontraron organizaciones. Haz clic en "Nueva organización" para crear una.',
   "tenants.admin.memberDetail": "Detalle de miembro",
   // Create tenant dialog
-  "tenants.create.title": "Crear nuevo tenant",
+  "tenants.create.title": "Crear nueva organización",
   "tenants.create.description":
     "Las organizaciones proporcionan aislamiento estricto de assets, contactos y conversaciones de WhatsApp.",
-  "tenants.create.label": "Nombre del tenant",
+  "tenants.create.label": "Nombre de la organización",
   "tenants.create.placeholder": "p. ej. Acme Corporation",
   "tenants.create.cancel": "Cancelar",
   "tenants.create.submitting": "Creando...",
-  "tenants.create.submit": "Crear tenant",
-  "tenants.create.success": "Tenant creado exitosamente",
-  "tenants.create.error": "Error al crear tenant",
+  "tenants.create.submit": "Crear organización",
+  "tenants.create.success": "Organización creada exitosamente",
+  "tenants.create.error": "Error al crear organización",
   // Members dialog
   "tenants.members.title": "Detalle de miembros",
-  "tenants.members.tenantId": "ID del tenant:",
+  "tenants.members.tenantId": "ID de la organización:",
   "tenants.members.activeCount": "Miembros activos",
   "tenants.members.activeCount_one": "Miembro activo",
   "tenants.members.addMember": "Agregar miembro",
-  "tenants.members.selectLabel": "Seleccionar usuario existente para asignar como miembro del tenant",
+  "tenants.members.selectLabel": "Seleccionar usuario existente para asignar como miembro de la organización",
   "tenants.members.selectPlaceholder": "Elige un usuario...",
   "tenants.members.confirm": "Confirmar",
   "tenants.members.confirming": "Agregando...",
   "tenants.members.cancel": "Cancelar",
   "tenants.members.loading": "Cargando miembros...",
-  "tenants.members.empty": "Aún no hay miembros asignados a este tenant.",
+  "tenants.members.empty": "Aún no hay miembros asignados a esta organización.",
   "tenants.members.table.user": "Usuario",
   "tenants.members.table.email": "Correo",
   "tenants.members.table.role": "Rol",
@@ -869,7 +869,7 @@ export const es = {
   "tenants.members.table.actions": "Acciones",
   "tenants.members.remove": "Quitar",
   "tenants.members.close": "Cerrar",
-  "tenants.members.addSuccess": "Usuario agregado al tenant",
+  "tenants.members.addSuccess": "Usuario agregado a la organización",
   "tenants.members.addError": "Error al agregar miembro",
   "tenants.members.removeSuccess": "Miembro eliminado de la organización",
   "tenants.members.removeError": "Error al eliminar miembro",

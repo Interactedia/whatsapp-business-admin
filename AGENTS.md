@@ -97,4 +97,15 @@ Before modifying any UI component, page, or screen, consult `docs/ui/visual-cont
 9. **Do not mix backend work during WA-UI-CLOSURE** — unless a technical need is demonstrated. Keep UI and backend work in separate tasks.
 10. **Do not declare a screen complete solely because it compiles or tests pass** — visual verification is required.
 
+## 11. Tenant terminology in Spanish UI
+
+**Convention:** In Spanish UI, the technical term "tenant" must appear as "organización" (singular) and "organizaciones" (plural).
+
+- Tenant → Organización
+- Tenants → Organizaciones
+- New tenant → Nueva organización
+- Create tenant → Crear organización
+
+Applies only to user-visible text in Spanish. Does not affect code, APIs, routes, schemas, identifiers, or technical contracts.
+
 **Visual vs. functional completion:** A screen can be visually finished while its backend is still pending. Pending-functional controls must not fake success (no mock success toasts, no fake data shown as production).
