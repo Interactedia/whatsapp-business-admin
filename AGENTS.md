@@ -109,3 +109,9 @@ Before modifying any UI component, page, or screen, consult `docs/ui/visual-cont
 Applies only to user-visible text in Spanish. Does not affect code, APIs, routes, schemas, identifiers, or technical contracts.
 
 **Visual vs. functional completion:** A screen can be visually finished while its backend is still pending. Pending-functional controls must not fake success (no mock success toasts, no fake data shown as production).
+
+## 12. UI BASELINE v1.0 — FROZEN
+
+**UI BASELINE v1.0 está FROZEN.** Ningún trabajo posterior puede modificar contratos visuales, navegación o i18n fuera del alcance explícitamente autorizado. La certificación y su frontera están en `docs/ui/ui-baseline-v1.0-certification.md`.
+
+Correcciones de bugs reales siguen permitidas, siempre que sean locales, justificadas y verificadas en navegador (desktop y 375px). Este congelamiento no impide mejoras futuras aprobadas expresamente por el usuario, ni congela backend, APIs, base de datos, infraestructura o integraciones.
