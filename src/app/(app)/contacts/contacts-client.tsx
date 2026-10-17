@@ -250,14 +250,14 @@ export function ContactsClient({
                       </div>
                     </TableCell>
                     {/* Columna: Acciones */}
-                    <TableCell className="pr-4" data-label="Acciones">
+                    <TableCell className="pr-4" data-label={t("contacts.table.actions")}>
                       {/* Scope D: Acciones con tooltips accesibles */}
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          title="Abrir conversación"
+                          aria-label={t("contacts.action.open")}
                           onClick={() => startChat.mutate(c)}
                         >
                           <MessageSquare className="h-4 w-4" />
@@ -266,7 +266,7 @@ export function ContactsClient({
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          title="Editar contacto"
+                          aria-label={t("contacts.action.edit")}
                           onClick={() => setEdit(c)}
                         >
                           <Pencil className="h-4 w-4" />
@@ -276,7 +276,7 @@ export function ContactsClient({
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 text-destructive hover:text-destructive"
-                            title="Eliminar contacto"
+                            aria-label={t("contacts.action.delete")}
                             onClick={() => {
                               if (confirm(t("contacts.confirm.delete"))) remove.mutate(c.id);
                             }}
