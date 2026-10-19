@@ -53,7 +53,15 @@ vi.mock("@/lib/whatsapp/client", () => ({
 vi.mock("@/lib/whatsapp/typing/config", () => ({
   TYPING_ENABLED: true,
   TYPING_REQUEST_TIMEOUT_MS: 10_000,
-  TYPING_MIN_INTERVAL_MS: 0,
+  TYPING_COOLDOWN_MS: 25_000,
+}));
+
+// ── Cooldown mock (unit tests never touch Redis) ────────────────────────────
+
+const mockAcquireCooldown = vi.hoisted(() => vi.fn<() => Promise<boolean>>());
+
+vi.mock("@/lib/whatsapp/typing/cooldown", () => ({
+  tryAcquireTypingCooldown: mockAcquireCooldown,
 }));
 
 // ── Tenant module — mirror WeakSet so tests can seed trusted contexts ───────────
@@ -149,6 +157,8 @@ describe("WA-TYPING-INDICATOR sendTypingIndicator", () => {
     // Default graphFetch implementation (safe fallback for tests that don't
     // queue a specific value but still exercise the queue callback path).
     mockGraphFetch.mockImplementation(() => Promise.resolve(undefined));
+    // Cooldown is granted by default; specific tests revoke it.
+    mockAcquireCooldown.mockResolvedValue(true);
     trustedContexts.clear();
     mockResolveTenantContext.mockResolvedValue(ctx);
   });
@@ -373,5 +383,61 @@ describe("WA-TYPING-INDICATOR sendTypingIndicator", () => {
     expect(result.success).toBe(false);
     expect(result.reason).toContain("no associated phone number");
     expect(mockGraphFetch).not.toHaveBeenCalled();
+  });
+
+  // ── WA-TYPING-01: Redis cooldown ──────────────────────────────────────────
+
+  it("dispatches typing when the cooldown slot is acquired", async () => {
+    mockFindUnique.mockResolvedValueOnce(makeConversation());
+    mockFindFirst.mockResolvedValueOnce(makeMessage());
+    mockGraphFetch.mockResolvedValueOnce({ success: true });
+
+    const result = await sendTypingIndicator({
+      context: ctx,
+      conversationId: "conv-1",
+      inboundMessageId: "msg-1",
+      markAsRead: true,
+    });
+
+    expect(mockAcquireCooldown).toHaveBeenCalledWith(TENANT_ID, "123456789", "15550000002");
+    expect(result.success).toBe(true);
+    expect(mockGraphFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards typing BEFORE any Meta call when the cooldown is active", async () => {
+    mockFindUnique.mockResolvedValueOnce(makeConversation());
+    mockFindFirst.mockResolvedValueOnce(makeMessage());
+    mockAcquireCooldown.mockResolvedValue(false);
+
+    const result = await sendTypingIndicator({
+      context: ctx,
+      conversationId: "conv-1",
+      inboundMessageId: "msg-1",
+      markAsRead: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.reason).toContain("cooldown");
+    expect(mockGraphFetch).not.toHaveBeenCalled();
+  });
+
+  it("sendReadReceipt bypasses the typing cooldown", async () => {
+    mockFindUnique.mockResolvedValueOnce(makeConversation());
+    mockFindFirst.mockResolvedValueOnce(makeMessage());
+    mockGraphFetch.mockResolvedValueOnce({ success: true });
+    mockAcquireCooldown.mockResolvedValue(false); // would block typing
+
+    const { sendReadReceipt } = await import("@/lib/whatsapp/typing/service");
+    const result = await sendReadReceipt({
+      context: ctx,
+      conversationId: "conv-1",
+      inboundMessageId: "msg-1",
+      markAsRead: true,
+    });
+
+    expect(mockAcquireCooldown).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    const body = mockGraphFetch.mock.calls[0]![0] as { body: Record<string, unknown> };
+    expect(body.body["typing_indicator"]).toBeUndefined();
   });
 });

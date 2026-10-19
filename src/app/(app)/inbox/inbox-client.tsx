@@ -581,10 +581,11 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
   const fileRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  // ponytail: throttle typing pings to the server. The server's Meta client
-  // already enforces TYPING_MIN_INTERVAL_MS, but we cap the request rate
-  // here to keep the network and auth hook quiet.
+  // ponytail: throttle typing pings to the server. The server enforces a
+  // Redis cooldown per recipient anyway, but we cap the request rate here
+  // to keep the network and auth hook quiet.
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingAbortRef = useRef<AbortController | null>(null);
   const lastTypingSentRef = useRef<number>(0);
   function sendTypingPing(draft: string) {
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
@@ -593,9 +594,17 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
     const wait = since >= 2000 ? 0 : 2000 - since;
     typingTimerRef.current = setTimeout(() => {
       lastTypingSentRef.current = Date.now();
+      // WA-TYPING-01: the ping carries an AbortController so cancelTyping()
+      // (on Send) drops a request that already left the browser. The server
+      // is the authoritative filter: a Redis cooldown admits at most one
+      // typing request per window and discards the rest before enqueuing,
+      // so nothing is ever scheduled to fire after Send.
+      const ac = new AbortController();
+      typingAbortRef.current = ac;
       void apiFetch(`/api/tenants/${tenantId}/conversations/${conversationId}/typing`, {
         method: "POST",
         body: JSON.stringify({ draft }),
+        signal: ac.signal,
       }).catch(() => {
         // ponytail: best-effort; never let typing pings surface a toast
       });
@@ -649,13 +658,28 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
     qc.invalidateQueries({ queryKey: ["conversations", tenantId] });
   };
 
+  // ponytail: cancel pending typing ping as soon as the operator commits a
+  // send (onMutate fires before the POST /messages leaves the browser). The
+  // server never schedules typing for the future (Redis cooldown admits at
+  // most one request per window, discarded before enqueue), so this only
+  // needs to drop the local debounce timer and abort an in-flight fetch.
+  const cancelTyping = () => {
+    if (typingTimerRef.current) {
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = null;
+    }
+    if (typingAbortRef.current) {
+      typingAbortRef.current.abort();
+      typingAbortRef.current = null;
+    }
+    lastTypingSentRef.current = 0;
+  };
+
   const sendText = useMutation({
     mutationFn: (t: string) =>
       apiFetch(`/api/tenants/${tenantId}/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ kind: "text", text: t }) }),
-    onSuccess: () => {
-      setText("");
-      invalidate();
-    },
+    onMutate: cancelTyping,
+    onSuccess: () => { setText(""); invalidate(); },
     onError: (e: Error) => toast({ variant: "destructive", title: "Not sent", description: e.message }),
   });
 
@@ -667,6 +691,7 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
         if (!r.ok) throw new Error((await r.json()).error || "Upload failed");
       });
     },
+    onMutate: cancelTyping,
     onSuccess: invalidate,
     onError: (e: Error) => toast({ variant: "destructive", title: "Not sent", description: e.message }),
   });
@@ -677,14 +702,13 @@ function ThreadPane({ tenantId, conversationId, onBack, showAiAssistant, onToggl
         method: "POST",
         body: JSON.stringify({ kind: "template", ...input }),
       }),
-    onSuccess: () => {
-      setShowTemplates(false);
-      invalidate();
-    },
+    onMutate: cancelTyping,
+    onSuccess: () => { setShowTemplates(false); invalidate(); },
     onError: (e: Error) => toast({ variant: "destructive", title: "Not sent", description: e.message }),
   });
   const sendFlow = useMutation({
     mutationFn: (flowId: string) => apiFetch(`/api/tenants/${tenantId}/conversations/${conversationId}/messages`, { method: "POST", body: JSON.stringify({ kind: "flow", flowId, cta: "Open form" }) }),
+    onMutate: cancelTyping,
     onSuccess: () => { setShowFlows(false); invalidate(); },
     onError: (e: Error) => toast({ variant: "destructive", title: "Flow not sent", description: e.message }),
   });

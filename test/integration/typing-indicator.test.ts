@@ -22,6 +22,15 @@ async function main() {
   };
 
   try {
+    // 0. WA-TYPING-01: clear any leftover typing cooldown for acme so the run
+    //    is deterministic (the cooldown lives in Redis and survives reruns).
+    const { getRedis } = await import("@/lib/redis/client");
+    const redis = getRedis();
+    if (redis) {
+      const stale = await redis.keys("typing:cooldown:acme:*");
+      if (stale.length) await redis.del(...stale);
+    }
+
     // 1. Verify Acme Corp tenant exists in PostgreSQL
     const tenant = await prisma.tenant.findUnique({
       where: { id: "acme" },

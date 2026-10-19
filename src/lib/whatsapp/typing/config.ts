@@ -1,32 +1,23 @@
 /**
  * Configuration for the WhatsApp typing-indicator service.
  *
- * Defaults are conservative: in-process per-phone-number serialization via p-queue
- * ensures only one ephemeral request fires at a time per phone number, preventing
- * uncontrolled Meta API traffic without introducing a distributed rate-limit
- * infrastructure.
- *
- * Limitations under multiple instances:
- *   - Each Node.js process maintains its own p-queue instance.
- *   - If two instances of the application run simultaneously (e.g. two Next.js
- *     workers), each will independently serialize typing requests for its own
- *     phone numbers.
- *   - For single-tenant deployments this is sufficient.  Multi-tenant,
- *     multi-instance deployments that need a shared limit should evaluate a
- *     Redis-backed approach after ADR-0005 (BullMQ/Redis) is accepted and only
- *     then as a separate implementation unit.
+ * Rate control (WA-TYPING-01 simplified): a single atomic Redis cooldown per
+ * (tenant, sender phone number, recipient) admits at most one typing request
+ * per window; everything else is discarded before being enqueued. The
+ * per-phone p-queue only serialises the requests that passed the cooldown —
+ * it never schedules future work.
  */
 
 /** Timeout for the Meta typing-indicator HTTP request in milliseconds. */
 export const TYPING_REQUEST_TIMEOUT_MS = 10_000;
 
 /**
- * Minimum interval between two typing-indicator requests for the same phone number.
- * Prevents a caller from flooding Meta with back-to-back requests.
- * Value chosen to allow a natural typing pause while staying well within Meta's
- * implicit rate expectations for the `/messages` endpoint.
+ * Cooldown window between two typing-indicator requests for the same
+ * (tenant, sender phone number, recipient) triple. Matches Meta's typing
+ * indicator lifetime (~25s): while an indicator is on screen, further pings
+ * add nothing. Enforced atomically in Redis (see ./cooldown.ts).
  */
-export const TYPING_MIN_INTERVAL_MS = 5_000;
+export const TYPING_COOLDOWN_MS = 25_000;
 
 /**
  * Flag that globally enables or disables the typing-indicator capability.

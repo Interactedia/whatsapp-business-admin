@@ -12,6 +12,12 @@
  *     resolveTenantContext pipeline as the messages endpoint
  *   - a non-empty draft is required (server-side guard so a stuck client
  *     cannot spam Meta)
+ *
+ * Rate control (WA-TYPING-01 simplified): the service applies an atomic
+ * Redis cooldown per (tenant, sender phone number, recipient). At most one
+ * typing request reaches Meta per window; everything else is discarded
+ * before being enqueued. Nothing is scheduled for future dispatch, so no
+ * typing request can fire after the operator pressed Send.
  */
 import { z } from "zod";
 import { handle, ok, fail, HttpError } from "@/lib/api";
@@ -38,8 +44,10 @@ export const POST = handle(async (req, { params }) => {
     throw err;
   }
 
-  // ponytail: parse after auth so a malformed body cannot trigger a tenant lookup
-  const body = bodySchema.parse(await req.json());
+  // ponytail: parse after auth so a malformed body cannot trigger a tenant
+  // lookup. The parsed draft is not used further — validation itself is the
+  // point (non-empty draft required so a stuck client cannot spam Meta).
+  bodySchema.parse(await req.json());
 
   // Verify the conversation belongs to this tenant.
   const conversation = await prisma.conversation.findFirst({

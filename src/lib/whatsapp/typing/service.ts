@@ -38,13 +38,15 @@
  * - Mutate `Conversation.unreadCount` or any other internal read state (invariant 9).
  * - Block outbound message delivery.
  *
- * ## Rate control
+ * ## Rate control (WA-TYPING-01 simplified)
  *
- * Uses `p-queue` for in-process, per-phone-number request serialisation.
- * Each phone number gets its own queue so concurrent conversations on different
- * numbers are not blocked.  Under multiple server instances each instance maintains
- * its own queues; this is sufficient for single-tenant deployments.  Redis-backed
- * coordination would require a separate implementation unit (ADR-0005).
+ * A single atomic Redis cooldown per (tenant, sender phone number, recipient)
+ * admits at most ONE typing request per TYPING_COOLDOWN_MS window; every other
+ * request is discarded BEFORE being enqueued.  The per-phone `p-queue` only
+ * serialises the survivors (concurrency 1, no interval): it never schedules a
+ * typing request for the future, so nothing can fire late after the operator
+ * pressed Send.  The cooldown lives in Redis, so it is a shared authority
+ * across processes and survives restarts (see ./cooldown.ts).
  *
  * ## Failure semantics
  *
@@ -64,8 +66,8 @@ import type { WabaConfig } from "@/lib/settings";
 import {
   TYPING_ENABLED,
   TYPING_REQUEST_TIMEOUT_MS,
-  TYPING_MIN_INTERVAL_MS,
 } from "./config";
+import { tryAcquireTypingCooldown } from "./cooldown";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,8 +119,10 @@ const phoneQueues = new Map<string, PQueue>();
 function queueFor(phoneNumberId: string): PQueue {
   let q = phoneQueues.get(phoneNumberId);
   if (!q) {
-    // `interval` enforces the minimum gap between two requests for the same phone.
-    q = new PQueue({ concurrency: 1, interval: TYPING_MIN_INTERVAL_MS, intervalCap: 1 });
+    // WA-TYPING-01: serialisation only — no `interval`/`intervalCap`, so the
+    // queue never holds a request for future dispatch. Rate limiting is the
+    // Redis cooldown's job, applied BEFORE enqueue.
+    q = new PQueue({ concurrency: 1 });
     phoneQueues.set(phoneNumberId, q);
   }
   return q;
@@ -251,14 +255,32 @@ async function sendReceiptRequest(
     return { success: false, reason: "WhatsApp is not connected for this phone number" };
   }
 
-  // ── 4. Enqueue per-phone-number (rate control) ───────────────────────────
+  // ── 4. Atomic Redis cooldown BEFORE enqueuing (WA-TYPING-01) ─────────────
+  // At most one typing request per (tenant, sender phone, recipient) per
+  // cooldown window. Everything else is discarded here — never enqueued,
+  // therefore never dispatched late. Read receipts (sendReadReceipt) are not
+  // rate-limited by this cooldown: they carry no typing indicator and are
+  // driven by the operator opening the thread.
+  if (includeTypingIndicator) {
+    const acquired = await tryAcquireTypingCooldown(
+      opts.context.tenantId,
+      phoneNumber.metaPhoneNumberId,
+      conversation.contact.waId,
+    );
+    if (!acquired) {
+      return { success: false, reason: "typing cooldown active for this recipient" };
+    }
+  }
+
+  // ── 5. Enqueue per-phone-number (serialisation only) ─────────────────────
   // waMessageId is already verified non-null above; store in const so the
   // async callback's closure can use it without TS narrowing loss.
   const wamid = message.waMessageId as string;
+  const tenantIdForExecution = phoneNumber.wabaAccount.tenantId;
   const queue = queueFor(phoneNumber.id);
 
   return await queue.add(async () =>
-    executeTypingRequest(cfg, wamid, phoneNumber.wabaAccount.tenantId, includeTypingIndicator),
+    executeTypingRequest(cfg, wamid, tenantIdForExecution, includeTypingIndicator),
   );
 }
 
