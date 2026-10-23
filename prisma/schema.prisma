@@ -493,6 +493,13 @@ model OutboundSendAttempt {
   tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   state           OutboundAttemptState @default(PENDING)
   attemptCount    Int                  @default(0)
+  // WA-OUTRETRY-01: auto-retry bookkeeping. autoRetryCount counts ONLY
+  // scheduler-initiated retries (excludes the initial attempt and any
+  // manual operator retries). nextEligibleRetryAt is the earliest wall
+  // clock time the scheduler may re-enqueue the message.
+  autoRetryCount       Int       @default(0)
+  nextEligibleRetryAt  DateTime?
+  lastRetryAfterSec    Int?      // Retry-After seconds from last Meta 429/5xx
   ownerId         String?              // worker / dispatcher ID that claimed
   claimExpiresAt  DateTime?            // lease expiry; null when not CLAIMED
   metaRequestStartedAt DateTime?       // set before crossing the Meta send boundary
@@ -507,6 +514,7 @@ model OutboundSendAttempt {
 
   @@index([messageId, state])
   @@index([state, claimExpiresAt])
+  @@index([state, nextEligibleRetryAt])
   @@index([tenantId, state])
 }
 

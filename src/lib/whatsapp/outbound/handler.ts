@@ -37,8 +37,13 @@ import {
   markOutboundSent,
   markOutboundFailed,
   markOutboundUncertain,
+  markOutboundAutoRetryScheduled,
   type OutboundAttemptRecord,
 } from "./repository";
+import {
+  AUTO_RETRY_BACKOFF_SECONDS,
+  MAX_AUTO_RETRIES,
+} from "./retry-config";
 
 // ---------------------------------------------------------------------------
 // Error classification
@@ -244,6 +249,10 @@ export async function handleOutboundMessage(
   const row = await prisma.message.findUnique({
     where: { id: messageId },
     include: {
+      attempts: {
+        select: { state: true },
+        take: 1,
+      },
       conversation: {
         select: {
           id: true,
@@ -282,7 +291,7 @@ export async function handleOutboundMessage(
       existingState: row.status,
     };
   }
-  if (row.status === "FAILED") {
+  if (row.status === "FAILED" && row.attempts?.[0]?.state !== "RETRYABLE") {
     return {
       status: "skipped",
       messageId,
@@ -324,21 +333,32 @@ export async function handleOutboundMessage(
   }
 
   const attempt = claim.attempt!;
-  const started = await markOutboundMetaRequestStarted(prisma, {
-    attemptId: attempt.id,
-    ownerId: OWNER_ID,
-  });
-  if (!started) {
-    return {
-      status: "skipped",
-      messageId,
-      reason: "ALREADY_CLAIMED",
-      existingState: "CLAIMED",
-    };
-  }
 
   // We have durably crossed the Meta send boundary. Call Meta.
   const apiPayload = await buildPayloadFromMessage(messageId, row, to);
+
+  // WA-OUTRETRY-01: persist metaRequestStartedAt *inside* graphFetch via the
+  // beforeMetaRequest hook, so the column is set only when the actual fetch
+  // is about to fire. If the hook throws, the request never crosses the
+  // network and we classify the failure as pre-frontier (safe to auto-retry).
+  let frontierReached = false;
+  const setFrontier = async () => {
+    const row = await markOutboundMetaRequestStarted(prisma, {
+      attemptId: attempt.id,
+      ownerId: OWNER_ID,
+    });
+    if (!row) {
+      // The claim was lost between our SELECT and this UPDATE. This is a
+      // pre-frontier condition: the request was never dispatched. Surface
+      // as a parse-equivalent error so the classifier can mark it for
+      // AUTO_RETRY (next attempt will go through the regular claim path).
+      throw new MetaResponseError(
+        "MISSING_MESSAGE_ID",
+        "Outbound attempt lost its claim before crossing the Meta send boundary",
+      );
+    }
+    frontierReached = true;
+  };
 
   try {
     const res = await graphFetch<{ messages: { id: string }[] }>({
@@ -347,6 +367,7 @@ export async function handleOutboundMessage(
       body: apiPayload,
       related: { type: "message", id: messageId },
       config: cfg,
+      beforeMetaRequest: setFrontier,
       diagnostics: {
         tenantId,
         wabaId: wabaAccountId,
@@ -413,7 +434,17 @@ export async function handleOutboundMessage(
       attemptId: attempt.id,
     };
   } catch (err) {
-    return await recordFailure(err, attempt, messageId, tenantId, conversationId, phoneNumberId, wabaAccountId, row.status);
+    return await recordFailure(
+      err,
+      attempt,
+      messageId,
+      tenantId,
+      conversationId,
+      phoneNumberId,
+      wabaAccountId,
+      row.status,
+      frontierReached,
+    );
   }
 }
 
@@ -432,54 +463,149 @@ export class MetaResponseError extends Error {
   }
 }
 
+export type FailureCategory = "AUTO_RETRY" | "UNCERTAIN" | "TERMINAL";
+
 export interface FailureClassification {
   result: "failed" | "uncertain";
+  category: FailureCategory;
   errorCode: OutboundErrorCode;
   retryable: boolean;
+  /**
+   * true when the auto-retry scheduler may re-enqueue this attempt. Only
+   * meaningful when `category === "AUTO_RETRY"`. Other categories must
+   * never be auto-retried (the scheduler itself enforces this as well).
+   */
+  autoRetryable: boolean;
   metaStatus?: number;
   message: string;
+  /** Parsed Retry-After from Meta (seconds) when present on 429/5xx. */
+  retryAfterSeconds?: number;
+  /**
+   * WA-OUTRETRY-01: true when the failure is observed *before* the request
+   * crossed the Meta send boundary (network error before fetch, JSON
+   * failure, beforeMetaRequest hook threw). Pre-frontier PARSE_ERROR is
+   * safe to auto-retry; post-frontier PARSE_ERROR is UNCERTAIN.
+   */
+  preFrontier: boolean;
 }
 
-export function classifyError(err: unknown): FailureClassification {
+/**
+ * Map a thrown error to a FailureClassification.
+ *
+ * @param err  The error thrown by graphFetch or downstream code.
+ * @param preFrontier  true if the failure happened before the Meta request
+ *   was dispatched (i.e. `metaRequestStartedAt IS NULL`). The handler
+ *   computes this by checking the attempt row before classifying.
+ */
+export function classifyError(err: unknown, preFrontier: boolean): FailureClassification {
   const errorMessage = err instanceof Error ? err.message : String(err);
 
   if (err instanceof MetaResponseError) {
+    // MISSING_MESSAGE_ID and other meta-200-but-no-wamid cases are UNCERTAIN:
+    // Meta may have accepted but the response was incomplete.
     return {
       result: "uncertain",
+      category: "UNCERTAIN",
       errorCode: err.classification,
       retryable: false,
+      autoRetryable: false,
       message: errorMessage,
+      preFrontier,
     };
   }
 
   if (err instanceof WhatsAppApiError) {
-    // 401/403 — auth failure, certain failure, no retry
+    // 401/403 — auth failure, terminal, no retry
     if (err.status === 401 || err.status === 403) {
-      return { result: "failed", errorCode: "AUTH_ERROR", retryable: false, metaStatus: err.status, message: errorMessage };
+      return {
+        result: "failed",
+        category: "TERMINAL",
+        errorCode: "AUTH_ERROR",
+        retryable: false,
+        autoRetryable: false,
+        metaStatus: err.status,
+        message: errorMessage,
+        preFrontier,
+      };
     }
-    // 400/404 — validation, certain failure, no retry
+    // 400/404 — validation, terminal, no retry
     if (err.status === 400 || err.status === 404) {
-      return { result: "failed", errorCode: "CLIENT_ERROR", retryable: false, metaStatus: err.status, message: errorMessage };
+      return {
+        result: "failed",
+        category: "TERMINAL",
+        errorCode: "CLIENT_ERROR",
+        retryable: false,
+        autoRetryable: false,
+        metaStatus: err.status,
+        message: errorMessage,
+        preFrontier,
+      };
     }
-    // 429 — rate limit: UNCERTAIN (Meta may have accepted the request)
+    // 429 — explicit Meta rate-limit rejection. Meta returned a structured
+    // error, so the request was rejected. AUTO_RETRY.
     if (err.status === 429) {
-      return { result: "uncertain", errorCode: "META_RATE_LIMIT", retryable: false, metaStatus: err.status, message: errorMessage };
+      return {
+        result: "failed",
+        category: "AUTO_RETRY",
+        errorCode: "META_RATE_LIMIT",
+        retryable: true,
+        autoRetryable: true,
+        metaStatus: err.status,
+        message: errorMessage,
+        retryAfterSeconds: err.retryAfterSeconds,
+        preFrontier,
+      };
     }
-    // 5xx — server error: UNCERTAIN
+    // 5xx — UNCERTAIN: Meta may have accepted before the failure.
     if (err.status >= 500) {
-      return { result: "uncertain", errorCode: "META_SERVER_ERROR", retryable: false, metaStatus: err.status, message: errorMessage };
+      return {
+        result: "uncertain",
+        category: "UNCERTAIN",
+        errorCode: "META_SERVER_ERROR",
+        retryable: false,
+        autoRetryable: false,
+        metaStatus: err.status,
+        message: errorMessage,
+        retryAfterSeconds: err.retryAfterSeconds,
+        preFrontier,
+      };
     }
-    // Other 4xx — treat as certain failure
-    return { result: "failed", errorCode: "CLIENT_ERROR", retryable: false, metaStatus: err.status, message: errorMessage };
+    // Other 4xx — terminal
+    return {
+      result: "failed",
+      category: "TERMINAL",
+      errorCode: "CLIENT_ERROR",
+      retryable: false,
+      autoRetryable: false,
+      metaStatus: err.status,
+      message: errorMessage,
+      preFrontier,
+    };
   }
 
   // Network-level timeout (fetch throws without a status)
   if (err instanceof Error && (err.name === "TimeoutError" || /timeout|ECONNREFUSED|ENOTFOUND/i.test(err.message))) {
-    return { result: "uncertain", errorCode: "TIMEOUT", retryable: false, message: errorMessage };
+    return {
+      result: "uncertain",
+      category: preFrontier ? "AUTO_RETRY" : "UNCERTAIN",
+      errorCode: "TIMEOUT",
+      retryable: preFrontier,
+      autoRetryable: preFrontier,
+      message: errorMessage,
+      preFrontier,
+    };
   }
 
-  // Anything else — parse / unexpected
-  return { result: "uncertain", errorCode: "PARSE_ERROR", retryable: false, message: errorMessage };
+  // Anything else — parse / unexpected. Pre-frontier is safe to retry.
+  return {
+    result: "uncertain",
+    category: preFrontier ? "AUTO_RETRY" : "UNCERTAIN",
+    errorCode: "PARSE_ERROR",
+    retryable: preFrontier,
+    autoRetryable: preFrontier,
+    message: errorMessage,
+    preFrontier,
+  };
 }
 
 async function recordFailure(
@@ -491,20 +617,133 @@ async function recordFailure(
   phoneNumberId: string,
   wabaAccountId: string,
   previousStatus: "PENDING" | "SENT" | "DELIVERED" | "READ" | "FAILED" | "RECEIVED",
+  preFrontier: boolean,
 ): Promise<OutboundSendFailed | OutboundSendUncertain> {
-  const cls = classifyError(err);
+  const cls = classifyError(err, preFrontier);
+
+  // WA-OUTRETRY-01: AUTO_RETRY path. The attempt stays RETRYABLE in the DB
+  // so the scheduler can pick it up. We also schedule a `nextEligibleRetryAt`
+  // wall-clock timestamp honouring Retry-After when present.
+  if (cls.category === "AUTO_RETRY") {
+    const nextRetry = attempt.autoRetryCount + 1;
+    const ladderIndex = Math.min(attempt.autoRetryCount, AUTO_RETRY_BACKOFF_SECONDS.length - 1);
+    const ladderSeconds = AUTO_RETRY_BACKOFF_SECONDS[ladderIndex];
+    const retryAfter = cls.retryAfterSeconds;
+    const waitSeconds = Math.max(
+      ladderSeconds,
+      typeof retryAfter === "number" ? retryAfter : 0,
+    );
+    const nextEligibleRetryAt = new Date(Date.now() + waitSeconds * 1000);
+
+    if (nextRetry > MAX_AUTO_RETRIES) {
+      // Ladder exhausted. Mark as FAILED (no further auto retries); the
+      // attempt row remains so an operator can see evidence.
+      const updated = await prisma.$transaction(async (tx) => {
+        const updatedMsg = await tx.message.update({
+          where: { id: messageId },
+          data: {
+            status: "FAILED",
+            errorJson: {
+              code: cls.errorCode,
+              message: cls.message,
+              metaStatus: cls.metaStatus,
+              autoRetriesExhausted: true,
+              autoRetryCount: attempt.autoRetryCount,
+            },
+          },
+        });
+        await markOutboundFailed(tx, {
+          attemptId: attempt.id,
+          errorCode: cls.errorCode,
+          errorMessage: cls.message,
+          retryable: false,
+          metaStatus: cls.metaStatus,
+        });
+        await addCanonicalEvent(tx, buildOutboundMessageStatusChangedEvent({
+          tenantId,
+          conversationId,
+          messageId,
+          phoneNumberId,
+          wabaAccountId,
+          previousStatus,
+          status: "FAILED",
+          occurredAt: new Date(),
+        }));
+        return updatedMsg;
+      });
+      publish(
+        { type: "message:new", payload: { conversationId, message: serializeMessage(updated) } },
+        tenantId,
+      );
+      return {
+        status: "failed",
+        messageId,
+        attemptId: attempt.id,
+        errorCode: cls.errorCode,
+        errorMessage: cls.message,
+        retryable: false,
+      };
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await markOutboundFailed(tx, {
+        attemptId: attempt.id,
+        errorCode: cls.errorCode,
+        errorMessage: cls.message,
+        retryable: true,
+        metaStatus: cls.metaStatus,
+      });
+      await markOutboundAutoRetryScheduled(tx, {
+        attemptId: attempt.id,
+        nextEligibleRetryAt,
+        retryAfterSeconds: typeof retryAfter === "number" ? retryAfter : null,
+        autoRetryCount: nextRetry,
+      });
+      // Message stays PENDING while we wait for the auto-retry scheduler.
+      const updatedMsg = await tx.message.update({
+        where: { id: messageId },
+        data: {
+          errorJson: {
+            code: cls.errorCode,
+            message: cls.message,
+            metaStatus: cls.metaStatus,
+            autoRetryCount: nextRetry,
+            nextEligibleRetryAt: nextEligibleRetryAt.toISOString(),
+            autoRetryScheduled: true,
+          },
+        },
+      });
+      return updatedMsg;
+    });
+    publish(
+      { type: "message:new", payload: { conversationId, message: serializeMessage(updated) } },
+      tenantId,
+    );
+    return {
+      status: "failed",
+      messageId,
+      attemptId: attempt.id,
+      errorCode: cls.errorCode,
+      errorMessage: cls.message,
+      retryable: true,
+    };
+  }
 
   if (cls.result === "failed") {
+    // TERMINAL — Message.status=FAILED, attempt.state=FAILED, no retry.
     const updated = await prisma.$transaction(async (tx) => {
       const updatedMsg = await tx.message.update({
         where: { id: messageId },
-        data: { status: "FAILED", errorJson: { code: cls.errorCode, message: cls.message, metaStatus: cls.metaStatus } },
+        data: {
+          status: "FAILED",
+          errorJson: { code: cls.errorCode, message: cls.message, metaStatus: cls.metaStatus },
+        },
       });
       await markOutboundFailed(tx, {
         attemptId: attempt.id,
         errorCode: cls.errorCode,
         errorMessage: cls.message,
-        retryable: cls.retryable,
+        retryable: false,
         metaStatus: cls.metaStatus,
       });
       await addCanonicalEvent(tx, buildOutboundMessageStatusChangedEvent({
@@ -523,7 +762,14 @@ async function recordFailure(
       { type: "message:new", payload: { conversationId, message: serializeMessage(updated) } },
       tenantId
     );
-    return { status: "failed", messageId, attemptId: attempt.id, errorCode: cls.errorCode, errorMessage: cls.message, retryable: cls.retryable };
+    return {
+      status: "failed",
+      messageId,
+      attemptId: attempt.id,
+      errorCode: cls.errorCode,
+      errorMessage: cls.message,
+      retryable: false,
+    };
   }
 
   // UNCERTAIN — the message stays PENDING and the attempt is locked as UNCERTAIN.
@@ -531,7 +777,15 @@ async function recordFailure(
   const updated = await prisma.$transaction(async (tx) => {
     const updatedMsg = await tx.message.update({
       where: { id: messageId },
-      data: { errorJson: { code: cls.errorCode, message: cls.message, uncertain: true, metaStatus: cls.metaStatus } },
+      data: {
+        errorJson: {
+          code: cls.errorCode,
+          message: cls.message,
+          uncertain: true,
+          metaStatus: cls.metaStatus,
+          retryAfterSeconds: cls.retryAfterSeconds,
+        },
+      },
     });
     await markOutboundUncertain(tx, {
       attemptId: attempt.id,
@@ -545,7 +799,13 @@ async function recordFailure(
     { type: "message:new", payload: { conversationId, message: serializeMessage(updated) } },
     tenantId
   );
-  return { status: "uncertain", messageId, attemptId: attempt.id, errorCode: cls.errorCode, errorMessage: cls.message };
+  return {
+    status: "uncertain",
+    messageId,
+    attemptId: attempt.id,
+    errorCode: cls.errorCode,
+    errorMessage: cls.message,
+  };
 }
 
 function terminalReasonForState(state: string | null): OutboundSendSkipped["reason"] {

@@ -63,8 +63,8 @@ export async function enqueueQueueJob(
 
   try {
     const job = await queue.add(contract.jobName, payload, {
-      ...options.jobOptions,
       jobId: identity.jobId,
+      ...options.jobOptions,
     });
 
     return {

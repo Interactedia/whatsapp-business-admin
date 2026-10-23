@@ -15,6 +15,12 @@ export class WhatsAppApiError extends Error {
     public userMessage?: string,
     public userTitle?: string,
     public subcode?: number,
+    /**
+     * WA-OUTRETRY-01: parsed Retry-After hint (seconds) when present in the
+     * Meta response. Only meaningful for retryable 429/5xx. Undefined for
+     * network-level errors (no response to read from).
+     */
+    public retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = "WhatsAppApiError";
@@ -41,13 +47,42 @@ export type GraphRequest = {
     jobId?: string | null;
     attemptNumber?: number | null;
   };
+  /**
+   * WA-OUTRETRY-01: invoked synchronously *before* `await fetch` so the
+   * caller can persist `metaRequestStartedAt` only when the request is
+   * about to cross the Meta send boundary. Throwing from this hook aborts
+   * the request with a deterministic pre-frontier error.
+   */
+  beforeMetaRequest?: () => void | Promise<void>;
 };
 
 /**
  * Central Graph API caller. EVERY outbound WhatsApp Cloud API request goes
  * through here so it is automatically persisted to ApiLog (request + response).
  * The access token is never written to the log.
+ *
+ * WA-OUTRETRY-01: a default 15s timeout is applied when the caller does not
+ * provide a signal, so a stalled TCP connection cannot hold a worker
+ * indefinitely. Callers that need a different budget can pass `signal`.
  */
+const DEFAULT_GRAPH_FETCH_TIMEOUT_MS = Number(
+  process.env["GRAPH_FETCH_TIMEOUT_MS"] ?? 15_000,
+);
+
+function parseRetryAfter(headers: Headers | Record<string, string> | undefined): number | undefined {
+  if (!headers) return undefined;
+  const value = (headers as Record<string, string>)["retry-after"] ?? (headers as Record<string, string>)["Retry-After"];
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.floor(seconds);
+  // HTTP-date form is rare for Meta 429/5xx but handle it defensively.
+  const date = Date.parse(value);
+  if (!Number.isNaN(date)) {
+    return Math.max(0, Math.floor((date - Date.now()) / 1000));
+  }
+  return undefined;
+}
+
 export async function graphFetch<T = unknown>(req: GraphRequest): Promise<T> {
   const config = req.config;
   if (!config.accessToken) {
@@ -69,8 +104,14 @@ export async function graphFetch<T = unknown>(req: GraphRequest): Promise<T> {
   let responseHeaders: Record<string, string> | undefined;
   let ok = false;
   let error: string | undefined;
+  let retryAfterSeconds: number | undefined;
+
+  const signal = req.signal ?? AbortSignal.timeout(DEFAULT_GRAPH_FETCH_TIMEOUT_MS);
 
   try {
+    if (req.beforeMetaRequest) {
+      await req.beforeMetaRequest();
+    }
     const multipart = req.body instanceof FormData;
     const res = await fetch(url, {
       method: req.method,
@@ -79,10 +120,11 @@ export async function graphFetch<T = unknown>(req: GraphRequest): Promise<T> {
         ...(req.body && !multipart ? { "Content-Type": "application/json" } : {}),
       },
       body: req.body ? (multipart ? (req.body as FormData) : JSON.stringify(req.body)) : undefined,
-      signal: req.signal,
+      signal,
     });
     responseStatus = res.status;
     responseHeaders = safeHeaders(res.headers);
+    retryAfterSeconds = parseRetryAfter(res.headers);
     const text = await res.text();
     responseBody = text ? safeJson(text) : null;
     ok = res.ok;
@@ -107,10 +149,18 @@ export async function graphFetch<T = unknown>(req: GraphRequest): Promise<T> {
         err?.error_user_msg,
         err?.error_user_title,
         err?.error_subcode,
+        retryAfterSeconds,
       );
     }
     return responseBody as T;
   } catch (e) {
+    if (e instanceof WhatsAppApiError) {
+      // Carry parsed Retry-After even when the error originated outside the
+      // !res.ok branch (defensive — keep the property populated).
+      if (e.retryAfterSeconds === undefined && retryAfterSeconds !== undefined) {
+        e.retryAfterSeconds = retryAfterSeconds;
+      }
+    }
     error = error ?? (e instanceof Error ? e.message : String(e));
     if (responseStatus === null) {
       // Network-level failure — record it too.

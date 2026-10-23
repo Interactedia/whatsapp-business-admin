@@ -41,6 +41,9 @@ const repoMock = vi.hoisted(() => {
     lastErrorMessage: string | null;
     lastMetaStatus: number | null;
     finishedAt: Date | null;
+    autoRetryCount: number;
+    nextEligibleRetryAt: Date | null;
+    lastRetryAfterSec: number | null;
   } | null = null;
 
   return {
@@ -60,6 +63,9 @@ const repoMock = vi.hoisted(() => {
           lastErrorMessage: null,
           lastMetaStatus: null,
           finishedAt: null,
+          autoRetryCount: 0,
+          nextEligibleRetryAt: null,
+          lastRetryAfterSec: null,
         };
       }
       return currentAttempt;
@@ -103,6 +109,9 @@ const repoMock = vi.hoisted(() => {
         lastErrorCode: null,
         lastErrorMessage: null,
         finishedAt: new Date(),
+        autoRetryCount: 0,
+        nextEligibleRetryAt: null,
+        lastRetryAfterSec: null,
       };
       return currentAttempt;
     }),
@@ -132,6 +141,21 @@ const repoMock = vi.hoisted(() => {
         lastErrorMessage: input.errorMessage,
         lastMetaStatus: input.metaStatus ?? null,
         finishedAt: new Date(),
+        autoRetryCount: 0,
+        nextEligibleRetryAt: null,
+        lastRetryAfterSec: null,
+      };
+      return currentAttempt;
+    }),
+    markOutboundAutoRetryScheduled: vi.fn(async (_tx, input) => {
+      if (!currentAttempt || currentAttempt.state !== "RETRYABLE") {
+        throw new Error("not in RETRYABLE");
+      }
+      currentAttempt = {
+        ...currentAttempt,
+        nextEligibleRetryAt: input.nextEligibleRetryAt,
+        lastRetryAfterSec: input.retryAfterSeconds,
+        autoRetryCount: input.autoRetryCount,
       };
       return currentAttempt;
     }),
@@ -203,6 +227,7 @@ function mockMessageRow(overrides: {
   type?: string;
   tenantId?: string;
   waMessageId?: string | null;
+  attemptState?: string;
 } = {}) {
   return {
     id: MSG,
@@ -222,6 +247,7 @@ function mockMessageRow(overrides: {
     errorJson: null,
     sentById: null,
     timestamp: new Date(),
+    attempts: overrides.attemptState ? [{ state: overrides.attemptState }] : [],
     conversation: {
       id: CONV,
       contactId: "contact_test",
@@ -307,6 +333,17 @@ describe("handleOutboundMessage", () => {
       expect((result as { reason: string }).reason).toBe("ALREADY_FAILED");
       expect(graphFetch).not.toHaveBeenCalled();
     });
+
+    it("retries when message is FAILED but its attempt is RETRYABLE", async () => {
+      prismaStub.message.findUnique.mockResolvedValue(
+        mockMessageRow({ status: "FAILED", attemptState: "RETRYABLE" })
+      );
+
+      const result = await handleOutboundMessage(makePayload());
+
+      expect(result.status).toBe("success");
+      expect(graphFetch).toHaveBeenCalledOnce();
+    });
   });
 
   describe("ownership verification", () => {
@@ -387,20 +424,6 @@ describe("handleOutboundMessage", () => {
   });
 
   describe("uncertain responses → message stays PENDING, attempt UNCERTAIN", () => {
-    it("leaves message PENDING on HTTP 429 rate limit", async () => {
-      graphFetch.mockRejectedValueOnce(new WhatsAppApiError(429, "Too many requests"));
-
-      const result = await handleOutboundMessage(makePayload());
-
-      expect(result.status).toBe("uncertain");
-      expect((result as { errorCode: string }).errorCode).toBe("META_RATE_LIMIT");
-      const updateCall = prismaStub.message.update.mock.calls[0]?.[0] as { data: { status?: string; errorJson?: object } };
-      expect(updateCall.data.status).toBeUndefined();
-      expect(updateCall.data.errorJson).toMatchObject({ uncertain: true });
-      expect(repoMock.markOutboundUncertain).toHaveBeenCalledOnce();
-      expect(repoMock.__state.get()?.state).toBe("UNCERTAIN");
-    });
-
     it("leaves message PENDING on HTTP 5xx server error", async () => {
       graphFetch.mockRejectedValueOnce(new WhatsAppApiError(500, "Internal server error"));
 
@@ -430,6 +453,24 @@ describe("handleOutboundMessage", () => {
     });
   });
 
+  describe("WA-OUTRETRY-01 — AUTO_RETRY responses (429 explicit reject)", () => {
+    it("schedules auto-retry on HTTP 429 with reject; message stays PENDING, attempt RETRYABLE", async () => {
+      const err = new WhatsAppApiError(429, "Too many requests", 4, undefined, undefined, undefined, undefined, 30);
+      graphFetch.mockRejectedValueOnce(err);
+
+      const result = await handleOutboundMessage(makePayload());
+
+      expect(result.status).toBe("failed");
+      expect((result as { retryable: boolean }).retryable).toBe(true);
+      expect((result as { errorCode: string }).errorCode).toBe("META_RATE_LIMIT");
+      // Message status must NOT be FAILED — the scheduler may still rescue it.
+      const updateCall = prismaStub.message.update.mock.calls[0]?.[0] as { data: { status?: string; errorJson?: object } };
+      expect(updateCall.data.status).toBeUndefined();
+      expect(updateCall.data.errorJson).toMatchObject({ autoRetryScheduled: true });
+      expect(repoMock.__state.get()?.state).toBe("RETRYABLE");
+    });
+  });
+
   describe("durable claim protection", () => {
     it("skips when the attempt is already CLAIMED (concurrent worker)", async () => {
       // Pre-seed an existing CLAIMED attempt.
@@ -447,6 +488,9 @@ describe("handleOutboundMessage", () => {
         lastErrorMessage: null,
         lastMetaStatus: null,
         finishedAt: null,
+        autoRetryCount: 0,
+        nextEligibleRetryAt: null,
+        lastRetryAfterSec: null,
       });
 
       const result = await handleOutboundMessage(makePayload());
@@ -471,6 +515,9 @@ describe("handleOutboundMessage", () => {
         lastErrorMessage: "previous timeout",
         lastMetaStatus: null,
         finishedAt: new Date(),
+        autoRetryCount: 0,
+        nextEligibleRetryAt: null,
+        lastRetryAfterSec: null,
       });
 
       const result = await handleOutboundMessage(makePayload());
@@ -495,6 +542,9 @@ describe("handleOutboundMessage", () => {
         lastErrorMessage: null,
         lastMetaStatus: null,
         finishedAt: null,
+        autoRetryCount: 0,
+        nextEligibleRetryAt: null,
+        lastRetryAfterSec: null,
       });
 
       const result = await handleOutboundMessage(makePayload());

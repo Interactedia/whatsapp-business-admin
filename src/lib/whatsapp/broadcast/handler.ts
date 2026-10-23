@@ -293,7 +293,7 @@ export async function handleBroadcastDispatch(
       waMessageId,
     };
   } catch (err) {
-    const classification = classifyError(err);
+    const classification = classifyError(err, false);
 
     if (classification.result === "uncertain") {
       await markBroadcastRecipientUncertain(db, {

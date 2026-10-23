@@ -21,6 +21,7 @@
     "db:studio": "prisma studio",
     "worker:outbox": "tsx scripts/outbox-dispatcher.ts",
     "worker:outbound": "tsx scripts/outbound-worker.ts",
+    "worker:outbound-retry-scheduler": "tsx scripts/outbound-retry-scheduler.ts",
     "worker:canonical-fanout": "tsx scripts/canonical-fanout-dispatcher.ts",
     "worker:canonical-delivery": "tsx scripts/canonical-delivery-worker.ts",
     "maintenance:diagnostics": "tsx scripts/diagnostic-retention.ts"
