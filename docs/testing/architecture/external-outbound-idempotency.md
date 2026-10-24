@@ -22,17 +22,20 @@ Idempotency-Key: <string>      (optional)
 
 ## Canonical request equivalence
 
-Two requests are equivalent for the same tenant when their material fields match:
+The legacy `to` mode and persisted `conversationId` mode share one canonical identity.
+Two requests are equivalent when these resolved material fields match:
 
-- channel / account (`phoneNumberId`),
-- recipient (`to`),
+- tenant,
+- effective phone route (`phoneNumberId`),
+- recipient,
 - conversation,
-- message type,
-- content (text, media, template name/language/parameters, header, buttons, Flow data).
+- normalized message payload (type, text/media, template name/language/parameters, header, buttons, Flow data).
 
-The fingerprint is a SHA-256 over the canonicalized fields. Transport/auth metadata
-(`apikey`) and server-generated values (Flow tokens) are excluded, so a replay across
-processes or restarts produces the same fingerprint.
+The fingerprint is a SHA-256 over those canonicalized fields after tenant-scoped
+destination resolution. Transport/auth metadata (`apikey`) and server-generated values
+(Flow tokens) are excluded, so equivalent `to` and `conversationId` requests replay
+across processes or restarts. The same recipient or conversation on a different effective
+phone route is not equivalent and conflicts when it reuses an idempotency key.
 
 ## Response semantics
 

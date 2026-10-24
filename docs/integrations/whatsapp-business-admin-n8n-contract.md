@@ -237,7 +237,8 @@ Content-Type: application/json
 
 | Campo | Tipo | Requerido | Descripción |
 |---|---|---|---|
-| `to` | string | Sí | Número destino (7-15 dígitos, sin +) |
+| `to` | string | Sí* | Número destino legacy (7-15 dígitos, sin +) |
+| `conversationId` | string | Sí* | Conversación persistida del tenant; exactamente uno de `to` o `conversationId` es obligatorio |
 | `type` | enum | No | `text`, `image`, `video`, `audio`, `document`, `template` |
 | `text` | string | Sí* | Contenido del mensaje (* para tipo text) |
 | `media` | object | Sí* | `{link?, id?, caption?, filename?}` (* para tipo media) |
@@ -247,6 +248,8 @@ Content-Type: application/json
 | `header_text` | string | No | Texto del header |
 | `header_media` | object | No | Media del header |
 | `buttons` | array | No | Botones del template |
+
+`contactId` no está soportado. En modo `conversationId`, WBA resuelve exclusivamente dentro del tenant autenticado el contacto y la ruta telefónica persistidos; una conversación ausente, ajena al tenant o sin ruta/contacto válido devuelve el mismo `404`. La resolución y autorización ocurren antes de descargar media, por lo que un rechazo no produce efectos laterales de media. Este modo conserva los tipos de mensaje y las reglas existentes de ventana de 24 horas y templates, y sus respuestas no exponen `to`.
 
 **Referencias:**
 - `src/app/api/v1/messages/route.ts` (líneas 35-53) — esquema Zod

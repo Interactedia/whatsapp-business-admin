@@ -107,10 +107,10 @@ async function main() {
       data: { id: `${runId}_key_${label}`, name: tenantId, keyHash: key.keyHash, keyPrefix: key.keyPrefix, tenantId },
     });
     const contact = await prisma.contact.create({ data: { tenantId, waId: recipient, name: label } });
-    await prisma.conversation.create({
+    const conversation = await prisma.conversation.create({
       data: { tenantId, contactId: contact.id, phoneNumberId: phoneId, lastInboundAt: new Date() },
     });
-    return { tenantId, apiKey: key.plaintext, phoneId };
+    return { tenantId, apiKey: key.plaintext, phoneId, conversationId: conversation.id, contactId: contact.id };
   }
 
   const countKey = (tenantId: string, key: string) =>
@@ -139,22 +139,48 @@ async function main() {
     check("equivalent duplicate creates no extra provider transmission", metaCalls === 1, `metaCalls=${metaCalls}`);
     check("equivalent duplicate creates no extra message", (await countKey(A.tenantId, "K1")) === 1);
 
+    // ---- 2b. Legacy `to` then equivalent conversationId ----
+    const crossKey = `cross-${runId}`;
+    const crossFirst = await post({ key: crossKey, apiKey: A.apiKey, body: { to: recipientA, type: "text", text: "Canonical" } });
+    const crossCalls = metaCalls;
+    const crossDuplicate = await post({ key: crossKey, apiKey: A.apiKey, body: { conversationId: A.conversationId, type: "text", text: "Canonical" } });
+    check("legacy `to` then equivalent conversationId returns duplicate",
+      crossFirst.status === 201 && crossDuplicate.status === 200 && crossDuplicate.json?.duplicate === true,
+      `status=${crossFirst.status}/${crossDuplicate.status}`);
+    check("canonical duplicate reuses one message and one Meta call",
+      crossDuplicate.json?.id === crossFirst.json?.id && (await countKey(A.tenantId, crossKey)) === 1 && metaCalls === crossCalls,
+      `metaCalls=${metaCalls}`);
+    const metaAfterCanonicalChecks = metaCalls;
+
+    // ---- 2c. Same key through a different business phone route ----
+    const alternateWabaId = `${runId}_waba_alt`;
+    const alternatePhoneId = `${runId}_phone_alt`;
+    await prisma.wabaAccount.create({ data: { id: alternateWabaId, tenantId: A.tenantId, metaWabaId: `${runId}_meta_alt`, accessTokenEnc: encrypt("test-token") } });
+    await prisma.phoneNumber.create({ data: { id: alternatePhoneId, wabaAccountId: alternateWabaId, metaPhoneNumberId: `${runId}_pn_alt` } });
+    const alternateConversation = await prisma.conversation.create({
+      data: { tenantId: A.tenantId, contactId: A.contactId, phoneNumberId: alternatePhoneId, lastInboundAt: new Date() },
+    });
+    const routeConflict = await post({ key: crossKey, apiKey: A.apiKey, body: { conversationId: alternateConversation.id, type: "text", text: "Canonical" } });
+    check("same key resolving a different business phone route → 409",
+      routeConflict.status === 409 && routeConflict.json?.code === "IDEMPOTENCY_KEY_CONFLICT", `status=${routeConflict.status}`);
+    check("different-route conflict does not send", metaCalls === crossCalls, `metaCalls=${metaCalls}`);
+
     // ---- 3. Conflicting payload (content) ----
     const r3 = await post({ key: "K1", apiKey: A.apiKey, body: { to: recipientA, type: "text", text: "Different" } });
     check("conflicting content → 409 IDEMPOTENCY_KEY_CONFLICT",
       r3.status === 409 && r3.json?.code === "IDEMPOTENCY_KEY_CONFLICT", `status=${r3.status} code=${r3.json?.code}`);
-    check("conflicting content does not send or create", metaCalls === 1 && (await countKey(A.tenantId, "K1")) === 1);
+    check("conflicting content does not send or create", metaCalls === metaAfterCanonicalChecks && (await countKey(A.tenantId, "K1")) === 1);
 
     // ---- 4. Conflicting payload (recipient) ----
     const r4 = await post({ key: "K1", apiKey: A.apiKey, body: { to: recipientA2, type: "text", text: "Hello" } });
     check("conflicting recipient → 409 (no cross-recipient reuse)",
       r4.status === 409 && r4.json?.code === "IDEMPOTENCY_KEY_CONFLICT", `status=${r4.status}`);
-    check("conflicting recipient does not send", metaCalls === 1, `metaCalls=${metaCalls}`);
+    check("conflicting recipient does not send", metaCalls === metaAfterCanonicalChecks, `metaCalls=${metaCalls}`);
 
     // ---- 5. Unauthenticated duplicate ----
     const r5 = await post({ key: "K1", apiKey: null, body: { to: recipientA, type: "text", text: "Hello" } });
     check("unauthenticated duplicate is rejected with 401", r5.status === 401, `status=${r5.status}`);
-    check("unauthenticated duplicate performs no provider transmission", metaCalls === 1);
+    check("unauthenticated duplicate performs no provider transmission", metaCalls === metaAfterCanonicalChecks);
 
     // ---- 6. Cross-tenant isolation with the same key ----
     const rB = await post({ key: "K1", apiKey: B.apiKey, body: { to: recipientB, type: "text", text: "Hello" } });
@@ -162,7 +188,7 @@ async function main() {
     check("different tenant never reuses another tenant's message identity", rB.json?.id !== r1.json?.id);
     check("each tenant owns exactly one message for the shared key",
       (await countKey(A.tenantId, "K1")) === 1 && (await countKey(B.tenantId, "K1")) === 1);
-    check("cross-tenant request performed its own provider transmission", metaCalls === 2, `metaCalls=${metaCalls}`);
+    check("cross-tenant request performed its own provider transmission", metaCalls === metaAfterCanonicalChecks + 1, `metaCalls=${metaCalls}`);
 
     // ---- 7. Concurrent identical requests ----
     const beforeConcurrent = metaCalls;

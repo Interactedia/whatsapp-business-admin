@@ -34,7 +34,8 @@ const buttonSchema = z.object({
 
 const schema = z.object({
   apikey: z.string().optional(),
-  to: z.string().regex(/^\d{7,15}$/, "`to` must be digits only, no + (e.g. 919812345678)"),
+  to: z.string().regex(/^\d{7,15}$/, "`to` must be digits only, no + (e.g. 919812345678)").optional(),
+  conversationId: z.string().trim().min(1).optional(),
   type: z.enum(["text", "image", "video", "audio", "document", "template"]).optional(),
   // text
   text: z.string().optional(),
@@ -50,6 +51,9 @@ const schema = z.object({
   buttons: z.array(buttonSchema).optional(),
   components: z.array(z.unknown()).optional(),
   flow_data: z.record(z.string(), z.unknown()).optional(),
+}).refine((value) => Boolean(value.to) !== Boolean(value.conversationId), {
+  message: "Exactly one of `to` or `conversationId` is required",
+  path: ["to"],
 });
 
 const MEDIA_TYPES = ["image", "video", "audio", "document"] as const;
@@ -81,31 +85,48 @@ export const POST = v1Handle(async (req) => {
   if (!principal.tenantId) throw new ApiError(403, "API key is not tenant-scoped");
 
   const context = await resolveApiKeyTenantContext(principal);
-  // Optional external idempotency key (Idempotency-Key header). Malformed keys are rejected early.
   const idempotencyKey = parseIdempotencyKey(req);
-  // Reuse the sender bound to an existing conversation; otherwise pick the
-  // tenant's first phone number deterministically.
-  const existingContact = await prisma.contact.findFirst({
-    where: { tenantId: context.tenantId, waId: body.to },
-    select: { conversations: { select: { phoneNumberId: true }, take: 1 } },
+  const requestedConversation = body.conversationId
+    ? await prisma.conversation.findFirst({
+        where: {
+          id: body.conversationId,
+          tenantId: context.tenantId,
+          contact: { tenantId: context.tenantId },
+          phoneNumber: { wabaAccount: { tenantId: context.tenantId } },
+        },
+        select: {
+          id: true,
+          contactId: true,
+          contact: { select: { waId: true } },
+          phoneNumber: { select: { id: true, metaPhoneNumberId: true } },
+        },
+      })
+    : null;
+  if (body.conversationId && !requestedConversation) throw new ApiError(404, "Recipient not found");
+
+  const to = requestedConversation?.contact.waId ?? body.to!;
+  const existingContact = requestedConversation ? null : await prisma.contact.findFirst({
+    where: { tenantId: context.tenantId, waId: to },
+    select: { conversations: { select: { id: true, phoneNumberId: true }, take: 1 } },
   });
   const boundPhoneId = existingContact?.conversations?.[0]?.phoneNumberId ?? null;
-  const phoneNumber = boundPhoneId
+  const phoneNumber = requestedConversation?.phoneNumber ?? (boundPhoneId
     ? await prisma.phoneNumber.findFirst({
         where: { id: boundPhoneId, wabaAccount: { tenantId: context.tenantId } },
       })
     : await prisma.phoneNumber.findFirst({
         where: { wabaAccount: { tenantId: context.tenantId } },
         orderBy: { id: "asc" },
-      });
+      }));
   if (!phoneNumber) throw new ApiError(403, "No authorized phone number for tenant");
 
   const type = body.type ?? (body.template ? "template" : body.media ? "image" : "text");
-  const conversation = await startTenantConversation({
+  const conversation = requestedConversation ?? await startTenantConversation({
     context,
-    waId: body.to,
+    waId: to,
     phoneNumberId: phoneNumber.id,
   });
+  const responseRecipient = body.conversationId ? {} : { to };
 
   // Deterministic canonical fingerprint over the material request fields
   // (channel/account, recipient, conversation, message content). Transport
@@ -115,7 +136,7 @@ export const POST = v1Handle(async (req) => {
         tenantId: context.tenantId,
         phoneNumberId: phoneNumber.id,
         conversationId: conversation.id,
-        to: body.to,
+        to,
         type,
         text: body.text,
         media: body.media,
@@ -158,23 +179,23 @@ export const POST = v1Handle(async (req) => {
       if (useAsync) {
         const msg = await enqueueOutboundMessage({
           conversationId: conversation.id,
-          to: body.to,
+          to,
           ...binding,
           content: { kind: "text", text: body.text },
         });
         return apiOk(
-          { id: msg.id, status: msg.status, to: body.to, accepted: true },
+          { id: msg.id, status: msg.status, ...responseRecipient, accepted: true },
           202,
         );
       }
 
       const msg = await sendMessage({
         conversationId: conversation.id,
-        to: body.to,
+        to,
         ...binding,
         content: { kind: "text", text: body.text },
       });
-      return apiOk({ message_id: msg.waMessageId, id: msg.id, to: body.to }, 201);
+      return apiOk({ message_id: msg.waMessageId, id: msg.id, ...responseRecipient }, 201);
     }
 
     // ---- Media (image / video / audio / document) ----
@@ -192,7 +213,7 @@ export const POST = v1Handle(async (req) => {
       if (useAsync) {
         const msg = await enqueueOutboundMessage({
           conversationId: conversation.id,
-          to: body.to,
+          to,
           ...binding,
           content: {
             kind: "media",
@@ -206,14 +227,14 @@ export const POST = v1Handle(async (req) => {
           },
         });
         return apiOk(
-          { id: msg.id, status: msg.status, to: body.to, accepted: true },
+          { id: msg.id, status: msg.status, ...responseRecipient, accepted: true },
           202,
         );
       }
 
       const msg = await sendMessage({
         conversationId: conversation.id,
-        to: body.to,
+        to,
         ...binding,
         content: {
           kind: "media",
@@ -226,7 +247,7 @@ export const POST = v1Handle(async (req) => {
           mediaMime: stored?.mime,
         },
       });
-      return apiOk({ message_id: msg.waMessageId, id: msg.id, to: body.to }, 201);
+      return apiOk({ message_id: msg.waMessageId, id: msg.id, ...responseRecipient }, 201);
     }
 
     // ---- Template ----
@@ -292,7 +313,7 @@ export const POST = v1Handle(async (req) => {
       if (useAsync) {
         const msg = await enqueueOutboundMessage({
           conversationId: conversation.id,
-          to: body.to,
+          to,
           ...binding,
           content: {
             kind: "template",
@@ -305,14 +326,14 @@ export const POST = v1Handle(async (req) => {
         });
         if (prepared) await finishPreparedFlowLaunch(prepared.launchId, msg.id);
         return apiOk(
-          { id: msg.id, status: msg.status, to: body.to, accepted: true, ...(prepared ? { flow_launch_id: prepared.launchId } : {}) },
+          { id: msg.id, status: msg.status, ...responseRecipient, accepted: true, ...(prepared ? { flow_launch_id: prepared.launchId } : {}) },
           202,
         );
       }
 
       const msg = await sendMessage({
         conversationId: conversation.id,
-        to: body.to,
+        to,
         ...binding,
         content: {
           kind: "template",
@@ -325,7 +346,7 @@ export const POST = v1Handle(async (req) => {
       });
       if (prepared) await finishPreparedFlowLaunch(prepared.launchId, msg.id);
       return apiOk(
-        { message_id: msg.waMessageId, id: msg.id, to: body.to, ...(prepared ? { flow_launch_id: prepared.launchId } : {}) },
+        { message_id: msg.waMessageId, id: msg.id, ...responseRecipient, ...(prepared ? { flow_launch_id: prepared.launchId } : {}) },
         201,
       );
     } catch (error) {
@@ -334,13 +355,17 @@ export const POST = v1Handle(async (req) => {
     }
   };
 
-  return runIdempotent(
+  const response = await runIdempotent(
     {
       tenantId: context.tenantId,
       key: idempotencyKey,
       fingerprint: idempotencyFingerprint,
-      to: body.to,
+      to,
     },
     execute,
   );
+  if (!body.conversationId) return response;
+  const payload = await response.json();
+  delete payload.to;
+  return apiOk(payload, response.status);
 });
