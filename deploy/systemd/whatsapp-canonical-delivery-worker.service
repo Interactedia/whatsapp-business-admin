@@ -1,0 +1,21 @@
+[Unit]
+Description=WhatsApp Business Admin Canonical Delivery Worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wa-admin
+Group=wa-admin
+WorkingDirectory=/opt/whatsapp-business-admin
+EnvironmentFile=/etc/whatsapp-business-admin/production.env
+ExecStart=/usr/bin/env npm exec -- tsx scripts/canonical-delivery-worker.ts
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
